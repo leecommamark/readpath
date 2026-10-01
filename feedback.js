@@ -29,8 +29,21 @@ export const toSend = store => reports(store).filter(r => !r.sent);
 export function deviceOf({nav = {}, win = {}, standalone = false, persisted = null,
                           storage = ''} = {}) {
   const s = win.screen || {};
-  return {ua: nav.userAgent || '', screen: s.width ? `${s.width}x${s.height}@${win.devicePixelRatio || 1}` : '',
+  const ua = nav.userAgent || '';
+  return {ua, browser: browserOf(ua),
+          screen: s.width ? `${s.width}x${s.height}@${win.devicePixelRatio || 1}` : '',
           standalone: !!standalone, persisted: persisted ?? null, storage};
+}
+
+// The browser and its version, from the user agent: iOS 26 freezes the
+// system version there ("iPhone OS 18_7"), so Safari's own Version/ is the
+// one that says which iOS (Mark's iPhone, 7B Phase 6).
+export function browserOf(ua) {
+  const m = ua.match(/(?:CriOS|Chrome)\/([\d.]+)/) ? ['Chrome', ua.match(/(?:CriOS|Chrome)\/([\d.]+)/)[1]]
+    : ua.match(/(?:FxiOS|Firefox)\/([\d.]+)/) ? ['Firefox', ua.match(/(?:FxiOS|Firefox)\/([\d.]+)/)[1]]
+    : ua.match(/Version\/([\d.]+).*Safari/) ? ['Safari', ua.match(/Version\/([\d.]+)/)[1]]
+    : null;
+  return m ? `${m[0]} ${m[1]}` : '';
 }
 
 // feedbackDoc({note, reports, build, content, device, day, at, random})
@@ -62,7 +75,7 @@ export function mailtoUrl(doc, max = MAILTO_MAX) {
   const reps = doc.reports || [];
   const more = n => (n ? `\n…and ${n} more: Export sends them all` : '');
   const facts = ['', `App ${doc.build} · Content ${doc.content}`,
-                 `${d.ua || ''} · ${d.screen || ''}${d.standalone ? ' · installed' : ''}`,
+                 `${d.browser || d.ua || ''} · ${d.screen || ''}${d.standalone ? ' · installed' : ''}`,
                  ...(reps.length ? ['', `Reports (${reps.length}):`] : [])].join('\n');
   // the note gives way first, so the versions and the count always fit,
   // and takes at most half the room when there are reports to list
