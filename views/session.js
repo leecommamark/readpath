@@ -17,7 +17,7 @@ export function showSession(el, content, run, cb) {
   const back = h('button', {type: 'button', class: 'link back-btn', disabled: true,
                             'aria-label': 'Back: take back the last answer',
                             onclick: () => { if (run.undo()) next(); }}, '‹ Back');
-  clear(el).append(
+  put(clear(el),
     h('div', {class: 'top session-top'},
       h('div', {class: 'top-left'},
         h('button', {type: 'button', class: 'icon-btn', 'aria-label': 'Leave the session',

@@ -4,7 +4,7 @@
 // and every credit in readpath/ATTRIBUTIONS.md, as export_about.py wrote it
 // into content/about.json. Reached from Your progress on Today.
 
-import {h, clear} from './dom.js';
+import {h, clear, put} from './dom.js';
 import {NAME} from './welcome.js';
 
 const CC4 = 'https://creativecommons.org/licenses/by-sa/4.0/';
@@ -27,7 +27,7 @@ export function renderAbout(el, m, cb) {
           h('span', {class: 'sm'}, '· ',
             r.licence.href ? link(r.licence.href, r.licence.name) : r.licence.name,
             ...(r.licence.notices || []).map(n => [' · ', link(n, 'notice')])))))));
-  clear(el).append(
+  put(clear(el),
     h('div', {class: 'top'},
       h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Today'),
       h('span', {})),
@@ -46,5 +46,5 @@ export function renderAbout(el, m, cb) {
         + 'They were changed (merged, cut and converted), and the merged tables, the files '
         + 'under content/ beside this page, are offered under ',
         link(CC4, 'CC BY-SA 4.0'), '.')),
-    ...[credits].flat());
+    credits);
 }

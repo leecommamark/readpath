@@ -3,7 +3,7 @@
 // A note, "Include my N reports" (on by default; absent with none), and
 // Send. What Send does (the share sheet, or an email) is the shell's.
 
-import {h, clear} from './dom.js';
+import {h, clear, put} from './dom.js';
 import {NOTE_MAX} from '../feedback.js';
 
 // renderFeedback(el, {reports, canShare}, {onSend(note, include), onCancel})
@@ -12,7 +12,7 @@ export function renderFeedback(el, m, cb) {
                               placeholder: 'What’s working, what isn’t, what you’d like',
                               'aria-label': 'Your note'});
   const include = m.reports > 0 && h('input', {type: 'checkbox', checked: true});
-  clear(el).append(
+  put(clear(el),
     h('h2', {}, 'Send feedback'),
     h('p', {class: 'note'},
       m.canShare

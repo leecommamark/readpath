@@ -1,7 +1,7 @@
 // report.js — the report sheet (patch plan 4, Phase 5). What was on screen
 // is captured already; the learner picks a kind and may add one line.
 
-import {h, clear} from './dom.js';
+import {h, clear, put} from './dom.js';
 import {KINDS, NOTE_MAX} from '../reports.js';
 
 const LABEL = {gloss: 'The meaning', reading: 'The reading', word: 'The example word',
@@ -18,7 +18,7 @@ export function renderReport(el, cb) {
     h('input', {type: 'radio', name: 'report-kind', value: k,
                 onchange: () => { kind = k; save.disabled = false; }}),
     ' ', LABEL[k]));
-  clear(el).append(
+  put(clear(el),
     h('h2', {}, 'What looks wrong?'),
     h('p', {class: 'note'}, 'What was on screen is saved with it. Reports go out with Export.'),
     h('fieldset', {class: 'radios'}, h('legend', {class: 'label'}, 'It’s about'), ...radios),

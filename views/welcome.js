@@ -5,7 +5,7 @@
 // welcome shows the Add to Home Screen steps in Start's place, with a quiet
 // way to carry on in Safari (Mark, 7B Phase 0).
 
-import {h, clear} from './dom.js';
+import {h, clear, put} from './dom.js';
 
 export const NAME = 'Read Path · 一路睇';
 const LINES = [
@@ -17,7 +17,7 @@ const LINES = [
 // renderWelcome(el, {ios, standalone}, cb)   cb: onStart, onImport
 export function renderWelcome(el, ctx, cb) {
   const gate = ctx.ios && !ctx.standalone;
-  clear(el).append(
+  put(clear(el),
     h('div', {class: 'top'}),
     h('h1', {id: 'welcome-h'}, NAME),
     h('section', {class: 'block first'},
@@ -39,7 +39,7 @@ export function renderWelcome(el, ctx, cb) {
 
 // renderOffer(el, cb)   cb: onCheck, onSkip
 export function renderOffer(el, cb) {
-  clear(el).append(
+  put(clear(el),
     h('div', {class: 'top'}),
     h('h1', {id: 'welcome-h'}, 'Already read some Chinese?'),
     h('section', {class: 'block first'},

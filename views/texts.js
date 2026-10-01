@@ -11,7 +11,7 @@
 // DOM. renderTexts() draws the screen; what happens on a tap is the shell's
 // (main.js), passed in as callbacks.
 
-import {h, han, clear} from './dom.js';
+import {h, han, clear, put} from './dom.js';
 import {bodyOfFile, importProblem, autoTitle} from '../core/import.js';
 import {normalizeText} from '../core/normalize.js';
 import {CJK_RUN_SOURCE} from '../core/segment.js';
@@ -99,7 +99,7 @@ export function renderTexts(el, m, ui, cb) {
       : h('p', {class: 'note'}, 'Make a text the focus, and Today teaches its characters first.'),
     h('ul', {class: 'text-list'}, ...m.rows.map(r => textRow(r, ui, cb))));
 
-  clear(el).append(
+  put(clear(el),
     h('div', {class: 'top'}, h('span', {}), h('span', {})),
     h('h1', {id: 'texts-h'}, 'Texts'),
     batch || '', list || '', add, picker,

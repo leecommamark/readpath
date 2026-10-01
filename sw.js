@@ -15,19 +15,54 @@
 // build_dist.py stamps BUILD; precache.json, beside this file, lists the
 // files to keep. Served from readpath/app/ (BUILD 'dev') it never registers.
 
-const BUILD = '8ad4f9cdbb251edd';
+const BUILD = 'f482c7c579616f6d';
 const PREFIX = 'rp-';
 const CACHE = PREFIX + BUILD;
 const SHARDS = /\/content\/dict\/(?!index\.json)[^/]+\.json$/;
 
+// A file that fails is fetched again, twice, after these waits: right
+// after a deploy GitHub Pages can fail a request or two, and one failure
+// used to sink the whole install until the next check (7B 6b; seen on the
+// live site, Phase 6).
+const WAITS_MS = [1500, 4000];
+
+async function fetchOk(url) {
+  let last = null;
+  for (let i = 0; i <= WAITS_MS.length; i++) {
+    if (i) await new Promise(r => setTimeout(r, WAITS_MS[i - 1]));
+    try {
+      const res = await fetch(new Request(url, {cache: 'reload'}));
+      if (res.ok) {
+        // read the body now: an unread response holds its connection, and
+        // with every file fetched before any is kept, a browser's few
+        // connections per host would all wait for nothing (7B 6b, caught in
+        // the browser pane); a body that breaks off is a failure, retried
+        const body = await res.blob();
+        return new Response(body, {status: res.status, statusText: res.statusText,
+                                   headers: res.headers});
+      }
+      last = new Error(`${url}: ${res.status}`);
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last;
+}
+
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
-    const res = await fetch('precache.json', {cache: 'reload'});
-    if (!res.ok) throw new Error(`precache.json: ${res.status}`);
-    const {files} = await res.json();
-    const cache = await caches.open(CACHE);
-    // all or nothing: a half-filled cache would open offline and then fail
-    await cache.addAll(['./', ...files].map(f => new Request(f, {cache: 'reload'})));
+    try {
+      const {files} = await (await fetchOk('precache.json')).json();
+      // all or nothing: every file is fetched before any is kept, and a
+      // half-filled cache would open offline and then fail
+      const urls = ['./', ...files];
+      const responses = await Promise.all(urls.map(fetchOk));
+      const cache = await caches.open(CACHE);
+      await Promise.all(urls.map((u, i) => cache.put(u, responses[i])));
+    } catch (e) {
+      await caches.delete(CACHE);          // nothing half-made is left behind
+      throw e;
+    }
     if (!self.registration.active) await self.skipWaiting();
   })());
 });

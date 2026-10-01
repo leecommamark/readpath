@@ -7,7 +7,7 @@
 // reading the focus text (step 5); the export and import controls live here until a
 // settings screen exists.
 
-import {h, han, clear} from './dom.js';
+import {h, han, clear, put} from './dom.js';
 import {isKnown} from '../core/state.js';
 import {glyphTile} from './glyph.js';
 
@@ -168,7 +168,7 @@ export function renderToday(el, m, opts) {
     trouble ? `Some progress could not be saved (${trouble.message}). ` +
               `${plural(trouble.pending, 'item')} still pending. Export your progress to keep a copy.` : '');
 
-  clear(el).append(
+  put(clear(el),
     h('div', {class: 'top'}, h('span', {}, opts.date || ''), h('span', {})),
     h('h1', {id: 'today-h'}, 'Today'),
     update || '', warn, session, reading || '', next || '', known, install || '', progress);
