@@ -1,0 +1,67 @@
+<!doctype html>
+<!-- lang="zh-Hant-HK" is load-bearing, not cosmetic (songpath plan 8): where
+     none of app.css's CJK faces exist, the document language picks the HK
+     glyph forms. English chrome carries lang="en" instead. -->
+<html lang="zh-Hant-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F3F5F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1613" media="(prefers-color-scheme: dark)">
+<title>Read Path · 一路睇</title>
+<!-- installing (patch plan 7B): the manifest, the home-screen icon iOS
+     reads, and the favicons; drawn by readpath/tools/make_icons.py -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+<meta name="apple-mobile-web-app-title" content="Read Path">
+<!-- the two bundled faces (fonts/, SIL OFL; patch plan 7.5): fetched with
+     the style sheet, so the first screen draws in them, not in a fallback -->
+<link rel="preload" href="fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app" lang="en">
+  <p class="loading" id="loading">Loading…</p>
+
+  <main class="screen" id="today" hidden aria-labelledby="today-h"></main>
+
+  <main class="screen" id="texts" hidden aria-labelledby="texts-h"></main>
+  <main class="screen reader" id="reader" hidden aria-labelledby="reader-h"></main>
+
+  <main class="screen" id="path" hidden aria-labelledby="path-h"></main>
+  <main class="screen" id="family" hidden aria-labelledby="family-h"></main>
+  <main class="screen session" id="check" hidden aria-label="Placement check"></main>
+  <main class="screen" id="parts" hidden aria-labelledby="parts-h"></main>
+  <main class="screen" id="done" hidden aria-labelledby="done-h"></main>
+
+  <main class="screen session" id="session" hidden aria-label="Session"></main>
+  <main class="screen" id="welcome" hidden aria-labelledby="welcome-h"></main>
+  <main class="screen" id="about" hidden aria-labelledby="about-h"></main>
+
+  <nav class="tabs" id="tabs" hidden aria-label="Screens">
+    <div class="in">
+      <button type="button" data-tab="today">Today</button>
+      <button type="button" data-tab="texts">Texts</button>
+      <button type="button" data-tab="path">Path</button>
+    </div>
+  </nav>
+
+  <div class="overlay" id="ref" hidden role="dialog" aria-modal="true" aria-label="Reference card">
+    <div class="sheet"></div>
+  </div>
+  <div class="overlay" id="report" hidden role="dialog" aria-modal="true" aria-label="Report a problem">
+    <div class="sheet"></div>
+  </div>
+  <div class="overlay" id="feedback" hidden role="dialog" aria-modal="true" aria-label="Send feedback">
+    <div class="sheet"></div>
+  </div>
+  <p class="toast" id="toast" hidden role="status"></p>
+
+  <input type="file" id="importFile" accept="application/json,.json" hidden>
+</div>
+<script type="module" src="main.js"></script>
+</body>
+</html>
