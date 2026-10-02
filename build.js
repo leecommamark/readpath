@@ -3,4 +3,4 @@
 // 'dev' as it is served from readpath/app/: no service worker registers.
 // readpath/tools/build_dist.py stamps a published build's 16 hex digits
 // here, and the same into sw.js.
-export const BUILD = '443f8342c7442523';
+export const BUILD = 'dc45a4afd5d265a8';
