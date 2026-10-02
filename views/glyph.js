@@ -30,6 +30,7 @@
 // never uses this.
 
 import {h} from './dom.js';
+import {soundId, meaningId} from '../core/content.js';
 
 export const SIZES = ['sm', 'md', 'lg', 'xl', 'xxl'];
 
@@ -58,6 +59,26 @@ export function progressOf(s, kind = 'reading') {
   if (s.rung === 'M') return {state: 'known', fill: 1};
   const steps = kind === 'reading' ? 5 : 3;
   return {state: 'learning', fill: (s.rung - 1) / steps};
+}
+
+// The item a lone glyph's state comes from: its own part item if it has
+// one (青 the sound part), else its main reading; null where it is neither
+// (off the path, a part's part). One rule for every tile that shows a state
+// (patch plan 7.7: the tree, Path; since Mark's ruling after 7.7, every
+// tile but a question's).
+export function stateItemOf(content, form) {
+  for (const [make, kind] of [[soundId, 'sound'], [meaningId, 'meaning']]) {
+    if (content.has(make(form))) return {id: make(form), kind};
+  }
+  const r = content.mainReading(form);
+  return r ? {id: r, kind: 'reading'} : null;
+}
+
+// tileProgress(content, states, form) -> progressOf()'s result, or null
+// (plain ink) where the form has no item
+export function tileProgress(content, states, form) {
+  const it = stateItemOf(content, form);
+  return it ? progressOf(states[it.id], it.kind) : null;
 }
 
 // tileModel(kind, {size, progress}) -> {classes, border, outer}

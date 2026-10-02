@@ -43,7 +43,7 @@ import {partsModel, renderParts} from './views/parts.js';
 import {treeModel, renderTree} from './views/tree.js';
 import {makeReport, addReport, unsent} from './reports.js';
 import {createOverlays, createCardStack} from './overlay.js';
-import {glyphKind} from './views/glyph.js';
+import {glyphKind, tileProgress} from './views/glyph.js';
 import {needsWelcome, installContext, starterFocus, finishWelcome} from './firstrun.js';
 import {renderWelcome, renderOffer} from './views/welcome.js';
 import {BUILD} from './build.js';
@@ -79,6 +79,9 @@ const app = {
 const offKnownSet = () => new Set(app.store.load(KEYS.offKnown, []));
 // a glyph's kind, for its tile (views/glyph.js; patch plan 7.5, Phase 3)
 const kindOf = form => glyphKind(app.content, form);
+// a tile's state, for its border (every tile but a question's: Mark, after
+// patch plan 7.7): progressFrom(states)(form)
+const progressFrom = states => form => tileProgress(app.content, states, form);
 
 
 function dateLabel() {
@@ -109,6 +112,7 @@ function showToday() {
     onImport: () => $('importFile').click(),
     onRef: openRef,
     kindOf,
+    progressOf: progressFrom(app.learner.states),
     unsent: unsent(app.store),
     build: BUILD,
     update: app.updateReady,
@@ -246,6 +250,7 @@ function drawRef() {
     closeLabel: app.run ? 'Back to the session' : 'Close',
     onRef: openRef,
     kindOf,
+    progressOf: progressFrom(learner.states),
     onMarkKnown: act(markKnown),
     onForgot: act(forgot),
     // Test me: a part's own test, now; not from inside a session
@@ -513,6 +518,7 @@ function drawReader() {
     onWord(key) { r.selected = key; drawReader(); },
     onRef: openRef,
     kindOf,
+    progressOf: progressFrom(liveLearner().states),
     onReport: word => openReport(shownOfReader(m, word), 'reader'),
   });
 }
@@ -622,7 +628,8 @@ function showPath() {
     onQuery(q, host) {
       app.pathQuery = q;
       renderFind(host, q, search(app.content, q, {states: app.store.load(KEYS.states, {}),
-                                                   offKnown: offKnownSet()}), form => showTree(form), kindOf);
+                                                   offKnown: offKnownSet()}), form => showTree(form), kindOf,
+                 progressFrom(app.store.load(KEYS.states, {})));
     },
     onParts: () => showParts(),
     onDone: () => showDone(),
@@ -652,6 +659,7 @@ function drawBrowse() {
     onMore: () => { b.shown = (b.shown || BROWSE_CHUNK) + BROWSE_CHUNK; drawBrowse(); },
     shown: b.shown,
     kindOf,
+    progressOf: progressFrom(app.store.load(KEYS.states, {})),
   });
 }
 
@@ -672,6 +680,7 @@ function drawDone() {
     onBack: () => (history.state && history.state.done ? history.back() : showTab('path')),
     onFamily: key => showFamily(key),
     kindOf,
+    progressOf: progressFrom(app.store.load(KEYS.states, {})),
   });
 }
 

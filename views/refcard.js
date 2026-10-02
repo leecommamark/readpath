@@ -223,10 +223,14 @@ export function shownOfRef(m) {
 // part's characters (Mark, step 6 iPhone check: Looks like was tappable
 // with nothing to say so). cb.kindOf is glyph.js glyphKind over the content.
 const kindOf = (cb, ch) => (cb.kindOf ? cb.kindOf(ch) : null);
-const charBtn = (ch, cb) => glyphTile(ch, kindOf(cb, ch), {size: 'sm', onTap: c => cb.onRef(c)});
+// its state in its border (after 7.7, Mark: every tile but a question's);
+// cb.progressOf is glyph.js tileProgress over the learner's states
+const progressOf = (cb, ch) => (cb.progressOf ? cb.progressOf(ch) : null);
+const charBtn = (ch, cb) => glyphTile(ch, kindOf(cb, ch),
+  {size: 'sm', progress: progressOf(cb, ch), onTap: c => cb.onRef(c)});
 // a tile with its jyutping over it (blank where known; brief 7.6 decided 5)
 const rubyBtn = ({ch, over}, cb) => glyphTile(ch, kindOf(cb, ch),
-  {size: 'sm', over: over || '', onTap: c => cb.onRef(c)});
+  {size: 'sm', over: over || '', progress: progressOf(cb, ch), onTap: c => cb.onRef(c)});
 
 // In your texts: each line a button to the Reader there (cb.onOpenText;
 // without it, as during a session, the lines are shown but not tappable).
@@ -300,7 +304,8 @@ export function renderRef(el, m, cb) {
                  m.statusReading ? `${m.statusReading} · ${m.status}` : m.status) : h('span'),
     h('button', {type: 'button', class: 'icon-btn close-btn', 'aria-label': 'Close',
                  onclick: cb.onClose}, '✕'));
-  const body = [head, glyphTile(m.glyph, kindOf(cb, m.glyph), {size: 'xxl', cls: 'ref-head-glyph'})];
+  const body = [head, glyphTile(m.glyph, kindOf(cb, m.glyph),
+    {size: 'xxl', progress: progressOf(cb, m.glyph), cls: 'ref-head-glyph'})];
 
   if (m.kind === 'char') {
     body.push(h('div', {class: 'ref-readings'},

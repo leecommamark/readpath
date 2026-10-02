@@ -177,7 +177,7 @@ export function familyCard(c, cb) {
                       'aria-label': `${titleOf(c)}: ${c.known} of ${c.total} known. Open`,
                       onclick: () => cb.onFamily(c.key)},
     c.type === 'family'
-      ? glyphTile(c.head, headKind(cb, c.head), {size: 'md'})
+      ? glyphTile(c.head, headKind(cb, c.head), {size: 'md', progress: cb.progressOf ? cb.progressOf(c.head) : null})
       // no head: how many, in a quiet square (a glyph would read as a head)
       : h('span', {class: 'fam-own', 'aria-hidden': 'true'}, String(c.total)),
     h('span', {class: 'fam-text'},
@@ -357,7 +357,7 @@ export function renderBrowse(el, m, cb) {
                                 'aria-label': `${r.head} family: ${textPct(figure(r))} of text, `
                                   + `${r.known} of ${r.total} known. Open`,
                                 onclick: () => cb.onFamily(r.key)},
-    glyphTile(r.head, headKind(cb, r.head), {size: 'md'}),
+    glyphTile(r.head, headKind(cb, r.head), {size: 'md', progress: cb.progressOf ? cb.progressOf(r.head) : null}),
     h('span', {class: 'browse-members', lang: 'zh-Hant-HK'},
       ...r.members.slice(0, BROWSE_PREVIEW).map(x => h('span', {class: `bm is-${x.state}`}, x.form)),
       r.total > BROWSE_PREVIEW && h('span', {class: 'bm-more', lang: 'en'}, `+${r.total - BROWSE_PREVIEW}`)),

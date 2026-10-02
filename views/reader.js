@@ -193,7 +193,8 @@ export function renderReader(el, m, cb) {
     h('p', {class: 'gloss-line'}, word.gloss || 'No meaning in the dictionary for this one.'),
     h('div', {class: 'links'},
       ...word.chars.map(c => glyphTile(c.char, cb.kindOf ? cb.kindOf(c.char) : null,
-                                        {size: 'sm', onTap: ch => cb.onRef(ch)}))),
+                                        {size: 'sm', progress: cb.progressOf ? cb.progressOf(c.char) : null,
+                                         onTap: ch => cb.onRef(ch)}))),
     // Report is the last thing on any card (Mark, 2026-09-29, 6b)
     h('button', {type: 'button', class: 'link', onclick: () => cb.onReport(word)},
       'Report a problem with this'));

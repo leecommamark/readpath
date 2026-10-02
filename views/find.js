@@ -23,10 +23,11 @@ export function typedNote(x) {
 // Phase 5), its gloss in full, since a shortened one can cut the very word
 export const viaSaid = via => (via ? ['via ', han(via.form), ` ${via.gloss}`] : null);
 
-function row(form, jp, gloss, tag, tagClass, onRef, note = null, id = null, kindOf = null, via = null) {
+function row(form, jp, gloss, tag, tagClass, onRef, note = null, id = null, kindOf = null, via = null,
+             progressOf = null) {
   return h('li', {},
     h('button', {type: 'button', class: 'find-row', onclick: () => onRef(form, id)},
-      glyphTile(form, kindOf ? kindOf(form) : null, {size: 'sm'}),
+      glyphTile(form, kindOf ? kindOf(form) : null, {size: 'sm', progress: progressOf ? progressOf(form) : null}),
       h('span', {class: 'find-text'},
         jp && h('span', {class: 'mono'}, jp),
         gloss && h('span', {class: 'sm'}, ` ${shortGloss(gloss)}`),
@@ -43,19 +44,20 @@ function group(label, rows, total) {
     total > rows.length && h('p', {class: 'note'}, `and ${total - rows.length} more: type more to narrow it`));
 }
 
-// renderFind(host, query, results, onRef, kindOf): kindOf is glyph.js
-// glyphKind over the content, for each row's tile
-export function renderFind(host, query, r, onRef, kindOf = null) {
+// renderFind(host, query, results, onRef, kindOf, progressOf): kindOf is
+// glyph.js glyphKind over the content, for each row's tile, and progressOf
+// its tileProgress over the learner's states, for the tile's border
+export function renderFind(host, query, r, onRef, kindOf = null, progressOf = null) {
   clear(host);
   if (!query.trim()) return host;
   const cls = s => (s === 'known' ? 'accent' : s === 'learning' ? 'learn' : '');
   // a reading's row opens the card on that reading (7A 6b)
   const path = r.path.map(x => row(x.char, x.jp, x.gloss, STATE[x.state], cls(x.state), onRef,
-    typedNote(x), x.id, kindOf, x.via || null));
+    typedNote(x), x.id, kindOf, x.via || null, progressOf));
   const parts = r.parts.map(x => row(x.form, x.reading, x.gloss,
-    `${x.kind} part · ${STATE[x.state]}`, cls(x.state), onRef, null, null, kindOf));
+    `${x.kind} part · ${STATE[x.state]}`, cls(x.state), onRef, null, null, kindOf, null, progressOf));
   const off = r.off.map(x => row(x.char, x.jp, x.gloss, x.known ? 'you know this' : 'not on the path',
-    x.known ? 'accent' : '', onRef, typedNote(x), null, kindOf));
+    x.known ? 'accent' : '', onRef, typedNote(x), null, kindOf, null, progressOf));
   if (!path.length && !parts.length && !off.length) {
     return put(host, h('p', {class: 'note'}, 'Nothing found. Try a character, a jyutping syllable, or an English word.'));
   }

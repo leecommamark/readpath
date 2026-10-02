@@ -105,6 +105,7 @@ export function renderToday(el, m, opts) {
     h('div', {class: 'next'},
       glyphTile(m.next.form, opts.kindOf ? opts.kindOf(m.next.form) : null,
                 {size: 'lg', over: m.next.jp || '',
+                 progress: opts.progressOf ? opts.progressOf(m.next.form) : null,
                  onTap: opts.onRef ? f => opts.onRef(f) : null}),
       h('span', {}, m.next.note)));
 

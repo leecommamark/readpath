@@ -11,23 +11,15 @@
 // Under it, the key and Learn this family next (the family study session).
 
 import {h, han, put, clear} from './dom.js';
-import {glyphTile, progressOf} from './glyph.js';
+import {glyphTile, progressOf, stateItemOf} from './glyph.js';
 import {treeLayout, soundLine} from '../core/tree.js';
 import {familiesOf} from '../core/family.js';
-import {soundId, meaningId} from '../core/content.js';
 import {stateOf} from './families.js';
 
 const STATE_SAID = {known: 'known', learning: 'learning', ahead: 'not met yet'};
 
-// the item a tile stands for: its own part item if it has one, else its
-// main reading; null where it is neither (off the path, a part's part)
-export function itemOfTile(content, form) {
-  for (const [make, kind] of [[soundId, 'sound'], [meaningId, 'meaning']]) {
-    if (content.has(make(form))) return {id: make(form), kind};
-  }
-  const r = content.mainReading(form);
-  return r ? {id: r, kind: 'reading'} : null;
-}
+// the item a tile stands for: glyph.js's one rule
+export const itemOfTile = stateItemOf;
 
 const firstSense = g => (g || '').split(/;\s*/)[0].trim();
 
