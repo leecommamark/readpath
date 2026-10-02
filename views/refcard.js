@@ -287,7 +287,8 @@ function roleSection(r, cb) {
 
 // renderRef(el, model, {onClose, onBack, backTo, closeLabel, onRef(form), kindOf(form),
 //                        onMarkKnown, onForgot, onReport, onOpenText(id, line),
-//                        onTestMe(id) (none during a session), onKnowOff(bool)})
+//                        onTestMe(id) (none during a session), onKnowOff(bool),
+//                        onTree(form) (its tree; none during a session)})
 // onBack/backTo: the card this one was opened from, when there is one.
 export function renderRef(el, m, cb) {
   const head = h('div', {class: 'top sheet-head'},
@@ -359,6 +360,15 @@ export function renderRef(el, m, cb) {
   } else {
     body.push(h('p', {class: 'note center'}, 'Not on your path.'));
     body.push(textsSection(m, cb));
+  }
+  // its tree (patch plan 7.7): what it is built from and what is built from
+  // it; not from inside a session
+  if (cb.onTree && (m.kind === 'char' || m.kind === 'part' || m.kind === 'offpath')) {
+    body.push(h('section', {class: 'block jumps'},
+      h('button', {type: 'button', class: 'jump', onclick: () => cb.onTree(m.glyph)},
+        h('span', {class: 'jump-text'}, h('b', {}, 'Its tree'),
+          h('span', {class: 'sm'}, 'What it’s built from, and what’s built from it')),
+        h('span', {class: 'jump-go', 'aria-hidden': 'true'}, '›'))));
   }
   body.push(h('div', {class: 'foot'},
     h('button', {type: 'button', class: 'btn wide', onclick: cb.onBack || cb.onClose},

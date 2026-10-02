@@ -12,7 +12,8 @@
 // table shape is a change to this file alone.
 
 export const TABLES = ['glyph', 'reading', 'part_role', 'sound_part',
-                       'meaning_part', 'tellapart', 'word', 'path', 'syllable'];
+                       'meaning_part', 'tellapart', 'word', 'path', 'syllable',
+                       'decomp'];
 // The Reader's (patch plan 5, Phase 1), loaded at boot too, but optional
 // here: a caller that only composes Today needs none of them. `lexicon` is a
 // flat array, `variants` one object (s2t), `char` rows as above. `offchar`
@@ -148,6 +149,26 @@ export function loadContent(tables) {
   }
   for (const [id, list] of members) if (id[0] === 'm') byRank(list);
 
+  // ---- decomp: parts in written order, as arrays of code points
+  const decomp = new Map(T.decomp.map(d => [d.char, [...d.parts]]));
+  const ordered = new Map(T.decomp.map(d => [d.char, !!d.ordered]));
+  // a part's role in a character, by the form the character shows (巷's
+  // 邑 is written 巳): the tree reads decomp's forms
+  const roleIn = new Map();                // `${char}|${form}` -> role
+  for (const r of T.part_role) roleIn.set(`${r.char}|${r.written || r.part}`, r.role);
+  // what is built from a part as its sound or meaning (the tree's right
+  // side): listed pairs only, sound uses first, then path order
+  const uses = new Map();                  // part -> [{char, role}]
+  for (const r of T.part_role) {
+    if ((r.role !== 'sound' && r.role !== 'meaning') || r.listed === 0) continue;
+    if (!uses.has(r.part)) uses.set(r.part, []);
+    uses.get(r.part).push({char: r.char, role: r.role});
+  }
+  const charRank = ch => (mainOf.has(ch) ? items.get(mainOf.get(ch)).rank : Infinity);
+  for (const list of uses.values()) {
+    list.sort((a, b) => (a.role !== 'sound') - (b.role !== 'sound') || charRank(a.char) - charRank(b.char));
+  }
+
   // ---- the lookups the learner model uses
   const item = id => {
     const it = items.get(id);
@@ -195,6 +216,18 @@ export function loadContent(tables) {
     // bare character (Phase 0 finding 2), so any entry is a real word.
     hasWord: id => (item(id).words || []).length > 0,
     glyph: new Map(T.glyph.map(g => [g.form, g])),
+    // every character build/chars.tsv decomposes, its parts in written
+    // order (patch plan 7.7): the tree's parts, down to the atomic pieces.
+    // [] for an atomic form. Roles are partsOf's.
+    partsInOrder: form => decomp.get(form) || [],
+    // whether that order is known (the IDS placed every part), or the
+    // sheet's kept
+    partsOrdered: form => ordered.get(form) ?? true,
+    // a part's role in a character: sound, meaning, form, or null where
+    // part_role has no row (a character off the path, a part's own parts)
+    roleIn: (char, form) => roleIn.get(`${char}|${form}`) || null,
+    // the characters built from a part as their sound or meaning part
+    usesOf: part => uses.get(part) || [],
     tellapart: T.tellapart,
     words: new Map(T.word.map(w => [`${w.form}|${w.jp}`, w])),
     // toneless syllable -> {syllable, key, uses, tones, near, sim}: every

@@ -39,6 +39,7 @@
   --accent: #0E6E58; --accent-soft: #D5E8E0; --on-accent: #FFFFFF;
   --known: #0E6E58; --known-soft: #D5E8E0;
   --learn: #C08A22; --learn-text: #876014; --learn-soft: #F4EAD4;
+  --learn-line: #A87818;
   --bad: #A83A32; --bad-soft: #F5E1DE;
 
   --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -67,6 +68,7 @@
     --accent: #4DBF9C; --accent-soft: #173A30; --on-accent: #0F1613;
     --known: #4DBF9C; --known-soft: #173A30;
     --learn: #E2B04F; --learn-text: #E2B04F; --learn-soft: #33291A;
+    --learn-line: #E2B04F;
     --bad: #E8877B; --bad-soft: #3A2220;
     color-scheme: dark;
   }
@@ -77,6 +79,7 @@
   --accent: #4DBF9C; --accent-soft: #173A30; --on-accent: #0F1613;
   --known: #4DBF9C; --known-soft: #173A30;
   --learn: #E2B04F; --learn-text: #E2B04F; --learn-soft: #33291A;
+  --learn-line: #E2B04F;
   --bad: #E8877B; --bad-soft: #3A2220;
   color-scheme: dark;
 }
@@ -414,10 +417,10 @@ p.in-text { cursor: default; }
             /* hundreds of cards: the browser skips laying out the ones off screen */
             content-visibility: auto; contain-intrinsic-size: auto 76px; }
 .fam-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.fam-card.is-current { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .fam-card.is-ahead .fam-text, .fam-card.is-ahead .fam-own { opacity: .6; }
 /* an ahead card's head fades as an ahead tile does */
-.fam-card.is-ahead .gt { border-color: var(--muted); }
+.fam-card.is-ahead .gt-ring path.gr-plain { stroke: var(--muted); }
+.fam-card.is-ahead .gt-ring circle.gr-plain { fill: var(--muted); }
 .fam-card.is-ahead .gt-form { opacity: .6; }
 .fam-own { flex: none; display: inline-grid; place-items: center; width: calc(var(--g-md) * 1.42);
            height: calc(var(--g-md) * 1.42); border-radius: 8px; font: 600 var(--t-lg)/1 var(--head);
@@ -425,7 +428,6 @@ p.in-text { cursor: default; }
 .fam-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .fam-title { font-size: var(--t-body); }
 .fam-title b { font-family: var(--head); font-weight: 600; }
-.fam-now { margin-left: var(--s2); }
 .fam-sub { font-size: var(--t-sm); color: var(--muted); overflow: hidden; text-overflow: ellipsis;
            white-space: nowrap; }
 .fam-sub .han { color: var(--ink); letter-spacing: .08em; }
@@ -492,46 +494,47 @@ p.in-text { cursor: default; }
   .screen { padding-top: var(--s6); }
 }
 
-/* ---- the glyph tiles (views/glyph.js; patch plan 7.6) ------------------
+/* ---- the glyph tiles (views/glyph.js; patch plans 7.6, 7.7) ------------
  * A tile says what it is by its border alone (brief 7.6; 3b, Mark): a
  * dotted square is a sound part of other characters, a dotted circle a
  * meaning part, a solid square neither. A bound form (氵 辶) is tinted
- * with muted ink, whatever its shape. Learning state is a bar along the
- * bottom (mustard by rung, full and jade once known); ahead fades the ink
- * and the border. The tile is never filled. */
+ * with muted ink, whatever its shape. The same border's colour says the
+ * learning state (brief 7.7 decided 7): grey while ahead (the ink faded),
+ * mustard as far as the rung over a grey track, jade all round once known,
+ * ink where there is none. The border is an SVG (.gt-ring) the size of the
+ * glyph's box at every size, so the glyph stays centred. The tile is never
+ * filled but for a bound form's tint. */
 .glyph-tile { display: inline-flex; flex-direction: column; align-items: center; gap: 3px;
               border: 0; background: none; padding: 2px; margin: 0; color: var(--ink);
-              font: inherit; vertical-align: middle;
-              --bar: 3px; --line: 1.5px; }
+              font: inherit; vertical-align: middle; }
 button.glyph-tile { cursor: pointer; min-width: var(--tap); min-height: var(--tap);
                     justify-content: center; border-radius: var(--r); }
 button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .gt { position: relative; display: inline-grid; place-items: center; box-sizing: border-box;
       width: 1.42em; height: 1.42em; border-radius: .16em; line-height: 1;
-      font-family: var(--han); font-weight: 500; color: var(--ink);
-      background: var(--surface); border: var(--line) solid var(--ink); }
-.gt-comp { border-style: dotted; border-width: calc(var(--line) + .5px); }
+      font-family: var(--han); font-weight: 500; color: var(--ink); }
 .gt-circle { border-radius: 50%; }
 .gt-bound { background: var(--tint); }
 .gt-bound .gt-form { color: var(--muted); }
-.is-ahead .gt { border-color: var(--muted); }
 .is-ahead .gt-form { opacity: .55; }
-/* the bar: as long as the rung, inside the square's foot on its surface */
-.gt-bar { position: absolute; left: .07em; bottom: .035em; height: var(--bar); border-radius: 99px;
-          width: calc((100% - .14em) * var(--fill)); background: var(--learn); }
-.gt-bar.is-known { background: var(--known); }
-/* under a circle (whose curve would cut it) and a bound form (whose tint is
- * too close to mustard): on a ring of the surface */
-.gt-circle .gt-bar, .gt-bound .gt-bar { left: 15%; bottom: calc(-1 * var(--bar) - 4px); width: calc(70% * var(--fill));
-                     box-shadow: 0 0 0 2px var(--surface); }
+/* the border: inset 0, so its box is the glyph's; strokes drawn in screen px */
+.gt-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible;
+           pointer-events: none; }
+/* each colour set on the shape itself, fill for a dot and stroke for a
+ * line: no currentColor step (2c; Safari showed dots with no colour) */
+.gt-ring path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.gt-ring circle { stroke: none; }
+.gt-ring path.gr-plain { stroke: var(--ink); }    .gt-ring circle.gr-plain { fill: var(--ink); }
+.gt-ring path.gr-ahead { stroke: var(--muted); }  .gt-ring circle.gr-ahead { fill: var(--muted); }
+.gt-ring path.gr-track { stroke: var(--muted); }  .gt-ring circle.gr-track { fill: var(--muted); }
+.gt-ring .gr-track { opacity: .35; }              /* --rule all but vanished, dark and dotted */
+.gt-ring path.gr-value { stroke: var(--learn-line); } .gt-ring circle.gr-value { fill: var(--learn-line); }
+.gt-ring path.gr-known { stroke: var(--known); }  .gt-ring circle.gr-known { fill: var(--known); }
 .gs-sm .gt { font-size: var(--g-sm); }
 .gs-md .gt { font-size: var(--g-md); }
 .gs-lg .gt { font-size: var(--g-lg); }
 .gs-xl .gt { font-size: var(--g-xl); }
 .gs-xxl .gt { font-size: var(--g-xxl); }
-.gs-sm { --line: 1px; }
-.gs-lg { --bar: 4px; }
-.gs-xl, .gs-xxl { --bar: 5px; --line: 2px; }
 /* the key: the two dotted borders, as the tile draws them */
 .glyph-key { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); }
 .gk-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -549,3 +552,105 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .built .part { display: inline-flex; align-items: center; gap: var(--s1); }
 .built-plus { color: var(--muted); }
 .answer-line .glyph-tile, .mark-head .glyph-tile { margin-right: var(--s1); }
+
+/* ---- a character's tree (views/tree.js; patch plan 7.7, Phase 3) -------
+ * Across: parts on the left, the character, what is built from it on the
+ * right, in a box of its own that scrolls sideways. The lines say the
+ * relationship and stay thin: the sound solid jade, the meaning dashed
+ * grey, the shape faint; a little heavier where they touch the character. */
+.tree-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--s1); }
+.tree-crumb { font-family: var(--han); font-size: var(--t-body); padding: 2px 4px; }
+.tree-crumb.here { color: var(--ink); }
+.tree-crumb-sep { color: var(--muted); }
+.tree-head { display: flex; align-items: center; gap: var(--s4); }
+.tree-head-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tree-gloss { font-size: var(--t-lg); margin: 0; }
+.tree-arrow { color: var(--muted); }
+.tree-figure { margin: 0; }
+.tree-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--surface);
+               border: 1px solid var(--rule); border-radius: var(--r); max-width: 100%; }
+.tree-canvas { position: relative; margin: 0 auto; }
+.tree-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.te { fill: none; stroke-linecap: round; }
+.te-sound { stroke: var(--known); stroke-width: 1.25; }
+.te-meaning { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.te-shape { stroke: var(--muted); stroke-width: 1; opacity: .45; }
+.te-sound.hot { stroke-width: 1.75; }
+.te-meaning.hot, .te-shape.hot { stroke-width: 1.5; }
+.tree-node { position: absolute; display: flex; flex-direction: column; align-items: center;
+             justify-content: center; gap: 0; box-sizing: border-box; }
+.tree-node.is-here::before { content: ""; position: absolute; inset: 4px 2px; border-radius: 12px;
+                             background: var(--known-soft); }
+.tree-node > * { position: relative; }
+.tree-tile-gloss { font-size: var(--t-xs); line-height: 1.2; color: var(--muted); max-width: 100%;
+                   padding: 0 2px; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis;
+                   white-space: nowrap; }
+.tree-more { position: absolute; min-height: 36px; border: 1px dashed var(--muted); border-radius: 99px;
+             background: var(--surface); color: var(--accent); font: inherit; font-size: var(--t-xs);
+             font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center;
+             justify-content: center; line-height: 1.15; padding: 2px 4px; }
+.tree-more-left { font-weight: 400; color: var(--muted); }
+.tree-key { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); }
+.tree-key-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.tree-key-line { display: inline-block; width: 22px; height: 0; border-top: 1.25px solid var(--known); }
+.tree-key-line.te-meaning { border-top: 1px dashed var(--muted); }
+.tree-key-line.te-shape { border-top: 1px solid var(--muted); opacity: .45; }
+.gk-solid { width: 14px; height: 14px; border: 1.5px solid var(--ink); border-radius: 3px; box-sizing: border-box; }
+
+/* ---- Path: where you are on the path (patch plan 7.7, Phase 4) ---------
+ * The whole path as one strip, the known share filled and a pin at Today's
+ * next item; then "You are here", a trail of stones on a rail: solid and
+ * jade behind, dashed ahead, the next one ringed. */
+.path-strip { position: relative; height: 10px; border-radius: 99px; background: var(--tint); }
+.path-strip-known { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: var(--known);
+                    min-width: 0; }
+.path-strip-pin { position: absolute; top: -4px; width: 3px; height: 18px; margin-left: -1.5px;
+                  border-radius: 2px; background: var(--ink); }
+.path-strip-scale { display: flex; justify-content: space-between; margin-top: var(--s1); color: var(--muted);
+                    font-variant-numeric: tabular-nums; }
+.trail { display: flex; flex-direction: column; }
+.trail-end { color: var(--muted); margin: var(--s1) 0 var(--s1) 40px; }
+.stone { display: grid; grid-template-columns: 28px auto minmax(0, 1fr); align-items: center; gap: var(--s3);
+         width: 100%; border: 0; background: none; padding: 2px var(--s1) 2px 0; margin: 0; font: inherit;
+         color: inherit; text-align: left; cursor: pointer; border-radius: var(--r); }
+.stone:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.stone.is-next { background: var(--known-soft); }
+.stone-rail { position: relative; align-self: stretch; }
+.stone-rail::before { content: ""; position: absolute; left: 13px; top: 0; bottom: 0; width: 2px;
+                      background: var(--known); }
+.stone.is-ahead .stone-rail::before, .stone.is-next .stone-rail::before { background: none; width: 0;
+                      border-left: 2px dashed var(--rule); }
+.stone.is-first .stone-rail::before { top: 50%; }
+.stone.is-last .stone-rail::before { bottom: 50%; }
+.stone-rail::after { content: ""; position: absolute; left: 9px; top: 50%; width: 10px; height: 10px;
+                     margin-top: -5px; border-radius: 50%; background: var(--known); box-sizing: border-box; }
+.stone.is-learning .stone-rail::after { background: var(--learn); }
+.stone.is-ahead .stone-rail::after { background: var(--page); border: 2px solid var(--muted); }
+.stone.is-next .stone-rail::after { left: 5px; width: 18px; height: 18px; margin-top: -9px;
+                                    background: var(--surface); border: 4px solid var(--accent); }
+.stone-text { min-width: 0; display: flex; flex-direction: column; }
+.stone-line { display: flex; align-items: baseline; gap: var(--s1); min-width: 0; }
+.stone-gloss { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.stone-meta { color: var(--muted); }
+
+/* ---- Browse families (7.7, Phase 4) */
+.chips { display: flex; flex-wrap: wrap; gap: var(--s1); }
+.chip { min-height: 36px; padding: 0 var(--s3); border-radius: 99px; border: 1px solid var(--rule);
+        background: var(--surface); color: var(--ink); font: inherit; font-size: var(--t-sm); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--page); border-color: var(--ink); }
+.browse-list { display: flex; flex-direction: column; margin-top: var(--s2); }
+.browse-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--s3); align-items: center;
+              width: 100%; border: 0; border-bottom: 1px solid var(--rule); background: none; margin: 0;
+              padding: var(--s2) 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.browse-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.browse-members { display: flex; flex-wrap: wrap; gap: 2px 6px; font-family: var(--han); font-size: 20px;
+                  line-height: 1.3; min-width: 0; }
+.bm.is-known { color: var(--known); }
+.bm.is-ahead { color: var(--muted); }
+.bm-more { font-family: var(--body); font-size: var(--t-sm); color: var(--muted); align-self: center; }
+.browse-figure { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.browse-figure b { font-family: var(--head); font-size: var(--t-lg); font-variant-numeric: tabular-nums; }
+.browse-figure .sm { color: var(--muted); }
+.browse-meter { display: block; width: 64px; height: 4px; margin-top: 4px; border-radius: 99px;
+                background: var(--tint); overflow: hidden; }
+.browse-meter span { display: block; height: 100%; background: var(--known); }

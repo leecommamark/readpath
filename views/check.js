@@ -120,16 +120,3 @@ export function renderResult(el, m, cb) {
           h('p', {class: 'note'}, `${got} Nothing you already knew has changed.`),
           h('button', {type: 'button', class: 'btn', onclick: cb.onNotNow}, 'Done')));
 }
-
-// The Path tab's block: the offer, or the last result.
-export function checkBlock(last, cb) {
-  return h('section', {class: 'block check-block'},
-    h('span', {class: 'label'}, 'Placement check'),
-    last
-      ? h('div', {class: 'row'},
-          h('span', {}, `Last check: about ${n0(last.n)}`),
-          h('button', {type: 'button', class: 'link', onclick: cb.onCheck}, 'Run again'))
-      : [h('p', {class: 'lead-note'}, 'Already read some Chinese?'),
-         h('p', {class: 'note'}, 'A few minutes’ check marks what you know. It’s optional, and you can run it again.'),
-         h('button', {type: 'button', class: 'btn', onclick: cb.onCheck}, 'Take the check')]);
-}

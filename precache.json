@@ -1,5 +1,5 @@
 {
- "build": "f482c7c579616f6d",
+ "build": "b5553dd1f061ac36",
  "files": [
   "actions.js",
   "app.css",
@@ -7,6 +7,7 @@
   "cache.js",
   "content/about.json",
   "content/char.json",
+  "content/decomp.json",
   "content/dict/index.json",
   "content/glyph.json",
   "content/lexicon.json",
@@ -39,6 +40,7 @@
   "core/state.js",
   "core/tasks.js",
   "core/today.js",
+  "core/tree.js",
   "core/unlock.js",
   "dict.js",
   "feedback.js",
@@ -84,6 +86,7 @@
   "views/task.js",
   "views/texts.js",
   "views/today.js",
+  "views/tree.js",
   "views/welcome.js"
  ]
 }

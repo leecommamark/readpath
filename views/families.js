@@ -13,8 +13,10 @@
 //
 // The cards come in the order Today will reach them: by the path rank of
 // each card's first member not yet known. A card with every member known
-// sinks into Done. "Current" is the card holding Today's next new item.
-// The ring counts members whose main reading is known (Maintain).
+// sinks into Done. The ring counts members whose main reading is known
+// (Maintain). Since 7.7 the families are listed on Browse families
+// (#path/families), sorted by the share of text they cover; Path itself
+// shows where you are on the path.
 //
 // The family page (#path/family/<key>) is the step 6 grid's successor: the
 // head's facts (its reading, "unlocks N", Test me), then every member as a
@@ -40,18 +42,6 @@ export const MODES = ['mark', 'look'];
 
 export const stateOf = s => (!s ? 'ahead' : isKnown(s) ? 'known' : 'learning');
 
-// The key of the card holding Today's next new item (compose()'s
-// summary.next_up), or null. A sound part is its own family's; any other
-// part is the card of its first member not yet known.
-export function currentKey(content, states, fam, nextUp) {
-  if (!nextUp || !content.has(nextUp)) return null;
-  const it = content.item(nextUp);
-  if (it.kind === 'reading') return fam.cardOf.get(it.char) || null;
-  if (it.kind === 'sound' && fam.byKey.has(`f:${it.part}`)) return `f:${it.part}`;
-  const first = content.membersOf(nextUp).find(id => !isKnown(states[id]));
-  return first ? fam.cardOf.get(content.item(first).char) || null : null;
-}
-
 const readingOf = (content, head) =>
   content.partReading(head)
   || (content.mainReading(head) && content.item(content.mainReading(head)).jp) || null;
@@ -63,22 +53,22 @@ export function permille(perMillion) {
   return v < 0.1 ? v.toPrecision(1) : v.toFixed(1).replace(/\.0$/, '');
 }
 
-// familyCards(content, states, nextUp) -> {open, done, current, total}
+// familyCards(content, states) -> {open, done, total}
 //   each card: {key, type, head, reading, members, preview, known, learning,
 //               total, value (per million), first (its first member not
-//               yet known: number), state: current | started | ahead | done,
+//               yet known: number), state: started | ahead | done,
 //               from, to (an own card's stretch, by character number)}
-export function familyCards(content, states, nextUp = null) {
+//   (7.7: the Current card went with Path's list; Done and Browse
+//   families read these)
+export function familyCards(content, states) {
   const fam = familiesOf(content);
-  const current = currentKey(content, states, fam, nextUp);
   const rows = fam.cards.map(card => {
     const st = card.members.map(c => stateOf(states[content.mainReading(c)]));
     const known = st.filter(s => s === 'known').length;
     const learning = st.filter(s => s === 'learning').length;
     const open = card.members.find((c, i) => st[i] !== 'known');
     const total = card.members.length;
-    const state = known === total ? 'done' : card.key === current ? 'current'
-      : known + learning > 0 ? 'started' : 'ahead';
+    const state = known === total ? 'done' : known + learning > 0 ? 'started' : 'ahead';
     return {key: card.key, type: card.type, head: card.head || null,
             reading: card.type === 'family' ? readingOf(content, card.head) : null,
             members: card.members, preview: card.members.slice(0, PREVIEW),
@@ -91,7 +81,7 @@ export function familyCards(content, states, nextUp = null) {
   const byFirst = (a, b) => a.first - b.first || a.from - b.from;
   return {open: rows.filter(r => r.state !== 'done').sort(byFirst),
           done: rows.filter(r => r.state === 'done').sort((a, b) => a.from - b.from),
-          current, total: rows.length};
+          total: rows.length};
 }
 
 // familyPage(content, states, key, mode) -> the page's model, or null
@@ -192,8 +182,7 @@ export function familyCard(c, cb) {
       : h('span', {class: 'fam-own', 'aria-hidden': 'true'}, String(c.total)),
     h('span', {class: 'fam-text'},
       h('span', {class: 'fam-title'}, h('b', {}, titleOf(c)),
-        c.reading && h('span', {class: 'mono'}, ` · ${c.reading}`),
-        c.state === 'current' && h('span', {class: 'tag accent fam-now'}, 'Current')),
+        c.reading && h('span', {class: 'mono'}, ` · ${c.reading}`)),
       h('span', {class: 'fam-sub'}, ...sub)),
     ring(c.known, c.total));
 }
@@ -313,4 +302,80 @@ export function renderFamily(el, m, cb) {
     h('div', {class: 'reader-controls'}, modes),
     h('p', {class: 'note mode-hint'}, FAMILY_HINT[m.mode]),
     h('div', {class: 'tiles fam-members', lang: 'zh-Hant-HK'}, ...m.cells.map(tileOf)));
+}
+
+// ---- Browse families (patch plan 7.7, Phase 4; brief 7.7 decided 2)
+//
+// Every sound-part family, by the share of written text it covers (its
+// members' `value`, summed), highest first; or by the share still to
+// unlock (its members not yet known: Mark, Phase 0, P2); or in path order.
+// Each row: the head, its members (known ones in jade), the share, "N/M
+// known" and a meter. A row opens the family's page (P6).
+
+export const SORTS = [
+  {key: 'text', label: 'Most of text', note: 'Share of written text the whole family covers.'},
+  {key: 'left', label: 'Most still to unlock', note: 'Share of written text in the members you don’t know yet.'},
+  {key: 'path', label: 'Path order', note: 'In the order the path reaches them.'},
+];
+export const BROWSE_CHUNK = 40;
+export const BROWSE_PREVIEW = 10;
+
+// "N%" of written text, from a share per million: whole above 10, one
+// decimal above 0.1, else "<0.1%"
+export function textPct(perMillion) {
+  const p = perMillion / 10_000;
+  if (p <= 0) return '0%';
+  return p >= 10 ? `${Math.round(p)}%` : p >= 0.1 ? `${p.toFixed(1)}%` : '<0.1%';
+}
+
+// browseModel(content, states, sort) -> {sort, rows: [{key, head, reading,
+// members: [{form, state}], known, total, value, left, from}]}
+export function browseModel(content, states, sort = 'text') {
+  const key = SORTS.some(x => x.key === sort) ? sort : 'text';
+  const fam = familiesOf(content);
+  const rows = fam.cards.filter(c => c.type === 'family').map(card => {
+    const members = card.members.map(c => ({form: c, state: stateOf(states[content.mainReading(c)])}));
+    const value = card.members.reduce((n, c) => n + content.valueOf(c), 0);
+    const left = members.filter(x => x.state !== 'known').reduce((n, x) => n + content.valueOf(x.form), 0);
+    return {key: card.key, head: card.head, reading: readingOf(content, card.head),
+            members, known: members.filter(x => x.state === 'known').length, total: members.length,
+            value, left, from: fam.number.get(card.members[0])};
+  });
+  const by = {text: (a, b) => b.value - a.value || a.from - b.from,
+              left: (a, b) => b.left - a.left || a.from - b.from,
+              path: (a, b) => a.from - b.from}[key];
+  return {sort: key, rows: rows.sort(by)};
+}
+
+// renderBrowse(el, m, cb)   cb: onBack, onSort(key), onFamily(key), kindOf,
+// shown (how many rows to draw), onMore
+export function renderBrowse(el, m, cb) {
+  const sort = SORTS.find(x => x.key === m.sort);
+  const shown = Math.min(m.rows.length, cb.shown || BROWSE_CHUNK);
+  const figure = r => (m.sort === 'left' ? r.left : r.value);
+  const row = r => h('button', {type: 'button', class: 'browse-row',
+                                'aria-label': `${r.head} family: ${textPct(figure(r))} of text, `
+                                  + `${r.known} of ${r.total} known. Open`,
+                                onclick: () => cb.onFamily(r.key)},
+    glyphTile(r.head, headKind(cb, r.head), {size: 'md'}),
+    h('span', {class: 'browse-members', lang: 'zh-Hant-HK'},
+      ...r.members.slice(0, BROWSE_PREVIEW).map(x => h('span', {class: `bm is-${x.state}`}, x.form)),
+      r.total > BROWSE_PREVIEW && h('span', {class: 'bm-more', lang: 'en'}, `+${r.total - BROWSE_PREVIEW}`)),
+    h('span', {class: 'browse-figure'},
+      h('b', {}, textPct(figure(r))),
+      h('span', {class: 'sm'}, `${r.known}/${r.total} known`),
+      h('span', {class: 'browse-meter', 'aria-hidden': 'true'},
+        h('span', {style: `width:${(100 * r.known / r.total).toFixed(1)}%`}))));
+  put(clear(el),
+    h('div', {class: 'top'},
+      h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Path'),
+      h('span', {})),
+    h('h1', {id: 'browse-h'}, 'Browse families'),
+    h('p', {class: 'note'}, sort.note),
+    h('div', {class: 'chips', role: 'group', 'aria-label': 'Sort'},
+      ...SORTS.map(x => h('button', {type: 'button', class: 'chip', 'aria-pressed': String(x.key === m.sort),
+                                     onclick: () => x.key !== m.sort && cb.onSort(x.key)}, x.label))),
+    h('div', {class: 'browse-list'}, ...m.rows.slice(0, shown).map(row)),
+    shown < m.rows.length && h('button', {type: 'button', class: 'btn quiet wide', onclick: cb.onMore},
+      `Show more · ${plural(m.rows.length - shown, 'family', 'families')} to go`));
 }

@@ -29,7 +29,8 @@ import {renderReport} from './views/report.js';
 import {markKnown, forgot, markInReader, undoMark, canKnowOff, knowOff, unknowOff,
         undoOff} from './actions.js';
 import {pathModel, renderPath} from './views/path.js';
-import {familyPage, familyTap, renderFamily, renderDone, familiesOf} from './views/families.js';
+import {familyCards, familyPage, familyTap, renderFamily, renderDone, familiesOf, browseModel, renderBrowse,
+        BROWSE_CHUNK} from './views/families.js';
 // the check's confirm, named so it never shadows window.confirm (7B: Import
 // progress called this one and broke)
 import {questionModel, finish, confirm as confirmPlacement, undoConfirm, resultModel,
@@ -39,6 +40,7 @@ import {makeRng} from './core/rng.js';
 import {search} from './core/search.js';
 import {renderFind} from './views/find.js';
 import {partsModel, renderParts} from './views/parts.js';
+import {treeModel, renderTree} from './views/tree.js';
 import {makeReport, addReport, unsent} from './reports.js';
 import {createOverlays, createCardStack} from './overlay.js';
 import {glyphKind} from './views/glyph.js';
@@ -53,7 +55,8 @@ import {renderAbout} from './views/about.js';
 
 const $ = id => document.getElementById(id);
 const TABS = ['today', 'texts', 'path'];
-const SCREENS = [...TABS, 'reader', 'family', 'check', 'parts', 'done', 'session', 'welcome', 'about'];
+const SCREENS = [...TABS, 'reader', 'family', 'check', 'parts', 'done', 'browse', 'tree', 'session',
+                 'welcome', 'about'];
 
 const app = {
   store: null, content: null, version: null, today: null,
@@ -61,7 +64,8 @@ const app = {
   dict: null, cache: null, loadedMs: null, library: null,
   reader: null,             // {id, lines, selected}: the text being read
   family: null,             // {key, mode}: the family page open (patch plan 7.5)
-  pathList: null,           // the family list drawn: how many cards, kept across redraws
+  tree: null,               // {trail, expanded}: the tree open (patch plan 7.7)
+  browse: {sort: 'text', shown: 0},  // Browse families' sort and rows drawn (7.7)
   check: null,              // {check, rng, record}: the placement check on
   pathQuery: '',            // Find a character's box, kept while the app is open
   firstRun: false,          // first run is on (patch plan 7B)
@@ -173,10 +177,12 @@ function route() {
   const hash = location.hash.slice(1);
   if (hash.startsWith('read/')) showReader(decodeURIComponent(hash.slice(5)), {push: false});
   else if (hash.startsWith('path/family/')) showFamily(decodeURIComponent(hash.slice(12)), {push: false});
+  else if (hash.startsWith('char/')) showTree(decodeURIComponent(hash.slice(5)), {push: false});
   else if (/^path\/block\/\d+$/.test(hash)) showTab('path');
   else if (hash === 'path/check') startPlacement({push: false});
   else if (hash === 'path/parts') showParts({push: false});
   else if (hash === 'path/done') showDone({push: false});
+  else if (hash === 'path/families') showBrowse({push: false});
   else if (hash === 'about') showAbout({push: false});
   else showTab(hash);
 }
@@ -187,9 +193,11 @@ function statesChanged() {
   if (!app.run) showToday();
   if (app.reader) drawReader();
   if (app.family) drawFamily();
+  if (app.tree) drawTree();
   if (!$('path').hidden) showPath();
   if (!$('parts').hidden) drawParts();
   if (!$('done').hidden) drawDone();
+  if (!$('browse').hidden) drawBrowse();
 }
 
 // The learner whose states an action changes: the session's while one is
@@ -257,6 +265,7 @@ function drawRef() {
         }});
     },
     onReport: () => openReport(shownOfRef(m), 'reference'),
+    onTree: app.run ? null : f => showTree(f),
     // In your texts opens the Reader at that line's section; not mid-session
     onOpenText: app.run ? null : (id, line) => {
       const lines = (app.library.heldLines().find(t => t.id === id) || {}).lines;
@@ -604,21 +613,45 @@ function startSession({keepGoing = false, practice = false} = {}) {
 function showPath() {
   const nextUp = app.composed && app.composed.summary.next_up;
   renderPath($('path'), pathModel(app.content, app.store.load(KEYS.states, {}), nextUp), {
-    onFamily: key => showFamily(key),
+    onTree: form => showTree(form),
+    onBrowse: () => showBrowse(),
     kindOf,
-    shown: app.pathList ? app.pathList.shown() : 0,
-    onShown: list => { app.pathList = list; },
     onCheck: () => startPlacement(),
     placement: app.store.load(KEYS.placement, null),
     query: app.pathQuery,
     onQuery(q, host) {
       app.pathQuery = q;
       renderFind(host, q, search(app.content, q, {states: app.store.load(KEYS.states, {}),
-                                                   offKnown: offKnownSet()}), openRef, kindOf);
+                                                   offKnown: offKnownSet()}), form => showTree(form), kindOf);
     },
     onParts: () => showParts(),
     onDone: () => showDone(),
     onFeedback: openFeedback,
+  });
+}
+
+// Browse families (7.7, Phase 4): every family by share of text, on a
+// screen of its own, #path/families; a row opens the family's page
+function showBrowse({push = true} = {}) {
+  if (push) history.pushState({browse: true}, '', '#path/families');
+  app.reader = null;
+  app.family = null;
+  app.tree = null;
+  showScreen('browse');
+  markTab('path');
+  drawBrowse();
+  window.scrollTo(0, 0);
+}
+
+function drawBrowse() {
+  const b = app.browse;
+  renderBrowse($('browse'), browseModel(app.content, app.store.load(KEYS.states, {}), b.sort), {
+    onBack: () => (history.state && history.state.browse ? history.back() : showTab('path')),
+    onSort: key => { b.sort = key; b.shown = 0; drawBrowse(); },
+    onFamily: key => showFamily(key),
+    onMore: () => { b.shown = (b.shown || BROWSE_CHUNK) + BROWSE_CHUNK; drawBrowse(); },
+    shown: b.shown,
+    kindOf,
   });
 }
 
@@ -627,6 +660,7 @@ function showDone({push = true} = {}) {
   if (push) history.pushState({done: true}, '', '#path/done');
   app.reader = null;
   app.family = null;
+  app.tree = null;
   showScreen('done');
   markTab('path');
   drawDone();
@@ -634,9 +668,7 @@ function showDone({push = true} = {}) {
 }
 
 function drawDone() {
-  const nextUp = app.composed && app.composed.summary.next_up;
-  const m = pathModel(app.content, app.store.load(KEYS.states, {}), nextUp);
-  renderDone($('done'), m.families.done, {
+  renderDone($('done'), familyCards(app.content, app.store.load(KEYS.states, {})).done, {
     onBack: () => (history.state && history.state.done ? history.back() : showTab('path')),
     onFamily: key => showFamily(key),
     kindOf,
@@ -649,6 +681,7 @@ function showParts({push = true} = {}) {
   if (push) history.pushState({parts: true}, '', '#path/parts');
   app.reader = null;
   app.family = null;
+  app.tree = null;
   showScreen('parts');
   markTab('path');
   drawParts();
@@ -658,7 +691,7 @@ function showParts({push = true} = {}) {
 function drawParts() {
   renderParts($('parts'), partsModel(app.content, app.store.load(KEYS.states, {})), {
     onBack: () => (history.state && history.state.parts ? history.back() : showTab('path')),
-    onRef: openRef,
+    onRef: form => showTree(form),       // on Path's screens a tile opens its tree (7.7)
     kindOf,
     onTestMe: id => testMe(id),
   });
@@ -793,6 +826,7 @@ function showFamily(key, {push = true} = {}) {
   const url = `#path/family/${encodeURIComponent(key)}`;
   if (push) history.pushState({family: key}, '', url);
   app.reader = null;
+  app.tree = null;
   app.family = {key, mode: (app.family && app.family.mode) || 'mark'};
   if (!familyPage(app.content, {}, key)) return showTab('path');
   showScreen('family');
@@ -807,7 +841,7 @@ function drawFamily() {
   renderFamily($('family'), m, {
     onBack: () => (history.state && history.state.family != null ? history.back() : showTab('path')),
     onMode(mode) { f.mode = mode; drawFamily(); },
-    onRef: openRef,
+    onRef: form => showTree(form),       // on Path's screens a tile opens its tree (7.7)
     kindOf,
     onTestMe: id => testMe(id),
     onStudy: key => studyFamily(key),
@@ -817,7 +851,7 @@ function drawFamily() {
       const learner = learnerFrom(app.store, app.library.learnerTexts());
       const r = familyTap(app.content, learner, c, f.mode, systemDay());
       if (!r) return;
-      if (r.open) return openRef(r.open);
+      if (r.open) return showTree(r.open);
       const done = r.mark;
       app.store.save(KEYS.states, learner.states);
       statesChanged();
@@ -830,6 +864,52 @@ function drawFamily() {
           statesChanged();
         }});
     },
+  });
+}
+
+// ---- a character's tree (patch plan 7.7, Phase 3)
+//
+// `#char/<form>`, an entry in the history like a family's page. Re-centring
+// on a tile pushes another, so back retraces the trail; the breadcrumb goes
+// back as many steps as it names.
+
+function showTree(form, {push = true} = {}) {
+  if (!form) return showTab('path');
+  // the trail lives in each history entry, so back and the breadcrumb
+  // always name the entries there are
+  const saved = !push && history.state && history.state.tree === form && history.state.trail;
+  const trail = app.tree ? app.tree.trail : [];
+  const next = saved || [...trail, form];
+  // from a card's "Its tree", the tree takes the card's history entry, so
+  // back from the tree lands where the card was opened
+  const fromCard = overlays.isOpen('ref');
+  if (fromCard) hideOverlay('ref', {fromPop: true});
+  if (push) {
+    history[fromCard ? 'replaceState' : 'pushState']({tree: form, trail: next}, '',
+                                                     `#char/${encodeURIComponent(form)}`);
+  }
+  app.reader = null;
+  app.family = null;
+  app.tree = {trail: next, expanded: {}};
+  showScreen('tree');
+  markTab('path');
+  drawTree();
+  window.scrollTo(0, 0);
+}
+
+function drawTree() {
+  const t = app.tree;
+  const form = t.trail[t.trail.length - 1];
+  const m = treeModel(app.content, app.store.load(KEYS.states, {}), form,
+                      {trail: t.trail, expanded: t.expanded});
+  renderTree($('tree'), m, {
+    onBack: () => (history.state && history.state.tree != null ? history.back() : showTab('path')),
+    onCrumb: i => history.go(i - (t.trail.length - 1)),
+    onTree: f => showTree(f),
+    onRef: openRef,
+    onMore: L => { t.expanded[L] = (t.expanded[L] || 0) + 1; drawTree(); },
+    onStudy: key => studyFamily(key),
+    kindOf,
   });
 }
 
@@ -876,6 +956,7 @@ function showTab(name) {
   if (!TABS.includes(name)) name = 'today';
   app.reader = null;
   app.family = null;
+  app.tree = null;
   app.check = null;
   if (name === 'texts') showTexts();
   if (name === 'path') showPath();

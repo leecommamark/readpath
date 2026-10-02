@@ -9,7 +9,11 @@
 //   * jyutping, one syllable, with or without its tone, compared as a
 //     merging speaker hears it (soundKey: n = l, ng = zero, gw/kw = g/k
 //     before -o), so nei finds 你 lei5; a typed tone must match too;
-//   * English: whole words, case-insensitive, in the meanings.
+//   * English: whole words, case-insensitive, in the meanings; and where a
+//     word is in no meaning at all, in the meanings of each path
+//     character's own example words (patch plan 7.7, Phase 5; Mark, P3:
+//     "sunny" finds 晴 through 天晴 "sunny day"), ranked below, each result
+//     carrying `via` {form, gloss}: the word that matched.
 // A Latin query is tried as jyutping where it is a syllable, and as English
 // unless it's a stop word or a syllable of two letters, so "fan" can find
 // both. Results are grouped: characters typed come in the order typed;
@@ -72,7 +76,18 @@ const firstSense = g => (g || '').split(/[;,/]/)[0].trim().replace(/^\([^)]*\)\s
 // How well a result matches, best first: its reading as typed, its reading as
 // heard (a merger), its meaning's first sense exactly, a first sense that
 // starts with the query, the query anywhere in the meaning.
-const SCORE = {spelled: 0, heard: 1, sense: 2, starts: 3, anywhere: 4};
+const SCORE = {spelled: 0, heard: 1, sense: 2, starts: 3, anywhere: 4, via: 5};
+
+// every word's gloss, by its form (the first the word table has)
+const WORD_GLOSS = new WeakMap();
+function wordGloss(content) {
+  if (!WORD_GLOSS.has(content)) {
+    const g = new Map();
+    for (const w of content.words.values()) if (!g.has(w.form) && w.gloss) g.set(w.form, w.gloss);
+    WORD_GLOSS.set(content, g);
+  }
+  return WORD_GLOSS.get(content);
+}
 
 // a character's reading items, the main reading first, then the others in
 // path order
@@ -176,16 +191,31 @@ export function search(content, query, {states = {}, offKnown = new Set()} = {})
       const score = g => (!re.test(g || '') ? null
         : firstSense(g) === lower ? SCORE.sense
         : firstSense(g).startsWith(lower) ? SCORE.starts : SCORE.anywhere);
+      let hits = 0;
       for (const id of content.path) {
         const it = content.item(id);
         const g = it.kind === 'reading' ? it.gloss
           : it.kind === 'meaning' ? `${it.gloss || ''}; ${it.meaning || ''}` : null;
         const sc = g ? score(g) : null;
-        if (sc !== null) addItem(id, sc);
+        if (sc !== null) { addItem(id, sc); hits++; }
       }
       for (const ch of content.offchars.keys()) {
         const sc = score((content.char(ch) || {}).gloss);
-        if (sc !== null) addOff(ch, sc);
+        if (sc !== null) { addOff(ch, sc); hits++; }
+      }
+      // no meaning has the word: try each reading's own example words, the
+      // most frequent first, and say which one matched
+      if (!hits) {
+        const glosses = wordGloss(content);
+        for (const id of content.path) {
+          const it = content.item(id);
+          if (it.kind !== 'reading') continue;
+          const w = (it.words || []).find(x => re.test(glosses.get(x) || ''));
+          if (!w) continue;
+          addItem(id, SCORE.via);
+          const r = found.get(id);
+          if (!r.via) r.via = {form: w, gloss: glosses.get(w)};
+        }
       }
     }
   }

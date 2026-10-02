@@ -12,13 +12,20 @@
 //   bound        a form never written alone (氵 辶 亻) follows the same rule
 //                and keeps a grey tint and muted ink, so it still looks "not
 //                a character"
-//   the bar      learning state, along the bottom: none while ahead (the
-//                ink and border faded), a mustard bar as long as the rung
-//                while learning, full and jade once known. The tile is never
-//                filled and the ink never takes a state's colour.
+//   its colour   learning state, said by the same border (brief 7.7
+//                decided 7; it replaced 7.6's bar): grey while ahead (the
+//                ink faded too), mustard from the top centre clockwise as
+//                far as the rung over a grey track while learning, jade all
+//                round once known, plain ink where there is no state. A
+//                dotted border stays dotted in every colour. The tile is
+//                never filled (a bound form's tint aside) and the ink never
+//                takes a state's colour.
 //
-// glyphKind(), progressOf() and tileModel() are pure, so a test reads them
-// without a DOM; glyphTile() draws tileModel(). Running text (the Reader's
+// The border is a small SVG the size of the glyph's box, because CSS can't
+// stop a dotted border part way: ringModel() says what it draws.
+//
+// glyphKind(), progressOf(), tileModel() and ringModel() are pure, so a
+// test reads them without a DOM; glyphTile() draws them. Running text (the Reader's
 // lines, words, In your texts, sentences) keeps its lighter treatment and
 // never uses this.
 
@@ -53,18 +60,129 @@ export function progressOf(s, kind = 'reading') {
   return {state: 'learning', fill: (s.rung - 1) / steps};
 }
 
-// tileModel(kind, {size, progress}) -> {classes, bar, outer}
-//   what glyphTile draws, without a DOM: the tile's classes, the bar
-//   ({state, fill}) or null, and the outer element's classes
+// tileModel(kind, {size, progress}) -> {classes, border, outer}
+//   what glyphTile draws, without a DOM: the tile's classes, the border
+//   ({shape, dotted, state, fill}: state 'plain' where no progress is given,
+//   fill the share drawn in the state's colour, 1 but while learning), and
+//   the outer element's classes
 export function tileModel(kind, {size = 'sm', progress = null} = {}) {
   const k = kind || PLAIN;
   const state = progress ? progress.state : null;
   const classes = ['gt', `gt-${k.shape}`, k.component ? 'gt-comp' : 'gt-solid', k.bound && 'gt-bound']
     .filter(Boolean);
-  const bar = progress && progress.state !== 'ahead'
-    ? {state: progress.state, fill: Math.max(0, Math.min(1, progress.fill))} : null;
-  return {classes, bar,
+  const border = {shape: k.shape, dotted: !!k.component, state: state || 'plain',
+                  fill: state === 'learning' ? Math.max(0, Math.min(1, progress.fill)) : 1};
+  return {classes, border,
           outer: ['glyph-tile', `gs-${size}`, state && `is-${state}`].filter(Boolean)};
+}
+
+// The ring per size: the glyph's font size in px (app.css's --g-*), and in
+// screen px the solid line, the dot's diameter and the distance between dots.
+export const RING = {
+  sm: {px: 24, line: 1.25, dot: 2.25, pitch: 4},
+  md: {px: 34, line: 1.5, dot: 2.6, pitch: 4.75},
+  lg: {px: 46, line: 1.75, dot: 3, pitch: 5.5},
+  xl: {px: 68, line: 2, dot: 3.4, pitch: 6.5},
+  xxl: {px: 84, line: 2.25, dot: 3.8, pitch: 7.5},
+};
+const EDGE = 1.42;                        // the tile's edge, in ems (app.css .gt)
+// The outline, in a 100 x 100 box: a rounded square (its corner the .16em
+// of the old CSS border) or a circle, read from the top centre clockwise.
+const INSET = 3, CORNER = 12, RADIUS = 47;
+const SIDE = 100 - 2 * INSET - 2 * CORNER;                  // a straight side
+const ARC = Math.PI * CORNER / 2;                           // a corner
+const PERIMETER = {square: 4 * SIDE + 4 * ARC, circle: 2 * Math.PI * RADIUS};
+const PATHS = {
+  square: `M50 ${INSET} H${100 - INSET - CORNER} A${CORNER} ${CORNER} 0 0 1 ${100 - INSET} ${INSET + CORNER} `
+        + `V${100 - INSET - CORNER} A${CORNER} ${CORNER} 0 0 1 ${100 - INSET - CORNER} ${100 - INSET} `
+        + `H${INSET + CORNER} A${CORNER} ${CORNER} 0 0 1 ${INSET} ${100 - INSET - CORNER} `
+        + `V${INSET + CORNER} A${CORNER} ${CORNER} 0 0 1 ${INSET + CORNER} ${INSET} Z`,
+  circle: `M50 ${50 - RADIUS} A${RADIUS} ${RADIUS} 0 1 1 50 ${50 + RADIUS} A${RADIUS} ${RADIUS} 0 1 1 50 ${50 - RADIUS} Z`,
+};
+const MIN_FILL = .04;                     // a just-met item still shows a stroke
+
+// the point `t` (0-1) of the way round the outline, from the top centre
+export function pointAt(shape, t) {
+  const u = ((t % 1) + 1) % 1;
+  if (shape === 'circle') {
+    const a = u * 2 * Math.PI;
+    return [50 + RADIUS * Math.sin(a), 50 - RADIUS * Math.cos(a)];
+  }
+  // the square from the top centre: half a side, then corner, side, ...
+  let d = u * PERIMETER.square;
+  const half = SIDE / 2;
+  const lo = INSET + CORNER, hi = 100 - INSET - CORNER;
+  const corner = (cx, cy, from, len) => {
+    const a = from + (len / ARC) * Math.PI / 2;
+    return [cx + CORNER * Math.sin(a), cy - CORNER * Math.cos(a)];
+  };
+  const legs = [
+    [half, l => [50 + l, INSET]],
+    [ARC, l => corner(hi, lo, 0, l)],
+    [SIDE, l => [100 - INSET, lo + l]],
+    [ARC, l => corner(hi, hi, Math.PI / 2, l)],
+    [SIDE, l => [hi - l, 100 - INSET]],
+    [ARC, l => corner(lo, hi, Math.PI, l)],
+    [SIDE, l => [INSET, hi - l]],
+    [ARC, l => corner(lo, lo, 3 * Math.PI / 2, l)],
+    [half, l => [lo + l, INSET]],
+  ];
+  for (const [len, at] of legs) {
+    if (d <= len) return at(d);
+    d -= len;
+  }
+  return [50, INSET];
+}
+
+const round = v => +v.toFixed(2);
+
+// ringModel(border, size) -> {d, width, line: [{cls, dash}]} | {r, dots: [{x, y, cls}]}
+//   what the border draws, in the 100 x 100 box, in that box's own units
+//   (no pathLength, no non-scaling stroke: Safari drew both differently).
+//   A solid border is the outline, whole or a dash as far as the rung over
+//   a whole track; a dotted one is round dots, evenly spaced from the top
+//   centre, the first ones the value's colour as far as the rung.
+export function ringModel(border, size = 'sm') {
+  const r = RING[size] || RING.sm;
+  const {shape, dotted, state, fill} = border;
+  const unit = 100 / (r.px * EDGE);                        // box units per screen px
+  const upto = state === 'learning' ? Math.max(MIN_FILL, fill) : 1;
+  if (!dotted) {
+    const total = PERIMETER[shape];
+    const line = state === 'learning'
+      ? [{cls: 'track', dash: null}, {cls: 'value', dash: `${round(upto * total)} ${round(total * 2)}`}]
+      : [{cls: state, dash: null}];
+    return {d: PATHS[shape], width: round(r.line * unit), line};
+  }
+  const n = Math.max(8, Math.round(PERIMETER[shape] / unit / r.pitch));
+  const lit = state === 'learning' ? Math.floor(upto * n + 1e-9) || 1 : n;
+  const dots = [];
+  for (let i = 0; i < n; i++) {
+    const [x, y] = pointAt(shape, i / n);
+    dots.push({x: round(x), y: round(y), cls: i < lit ? (state === 'learning' ? 'value' : state) : 'track'});
+  }
+  return {r: round(r.dot * unit / 2), dots};
+}
+
+const SVG = 'http://www.w3.org/2000/svg';
+function ring(border, size) {
+  const m = ringModel(border, size);
+  const el = (tag, attrs) => {
+    const e = document.createElementNS(SVG, tag);
+    for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, String(v));
+    return e;
+  };
+  const svg = el('svg', {class: 'gt-ring', viewBox: '0 0 100 100', 'aria-hidden': 'true',
+                         focusable: 'false'});
+  if (m.dots) {
+    for (const d of m.dots) svg.append(el('circle', {cx: d.x, cy: d.y, r: m.r, class: `gr-${d.cls}`}));
+  } else {
+    for (const l of m.line) {
+      svg.append(el('path', {d: m.d, class: `gr-${l.cls}`, 'stroke-width': m.width,
+                             'stroke-dasharray': l.dash}));
+    }
+  }
+  return svg;
 }
 
 // glyphTile(form, kind, opts) -> element
@@ -76,15 +194,13 @@ export function tileModel(kind, {size = 'sm', progress = null} = {}) {
 //   over      its jyutping, above the tile, never below it (brief 7.6
 //             decided 5): blank where it's known, and never on a question's
 //             glyph
-//   progress  progressOf()'s result: the bar, and ahead's fade
+//   progress  progressOf()'s result: the border's colour, and ahead's fade
 //   label     the aria-label; by default "清: open its reference card"
 export function glyphTile(form, kind, {size = 'sm', onTap = null, locked = false, over = null,
                                        progress = null, label = null, cls = ''} = {}) {
   const m = tileModel(kind, {size, progress});
   const tile = h('span', {class: m.classes.join(' '), lang: 'zh-Hant-HK'},
-    h('span', {class: 'gt-form'}, form),
-    m.bar && h('span', {class: `gt-bar is-${m.bar.state}`, 'aria-hidden': 'true',
-                        style: `--fill:${+m.bar.fill.toFixed(3)}`}));
+    ring(m.border, size), h('span', {class: 'gt-form'}, form));
   const parts = [over != null && h('span', {class: 'gt-over mono', lang: 'en'}, over || ' '), tile];
   const classes = [...m.outer, cls].filter(Boolean).join(' ');
   if (!onTap) return h('span', {class: classes}, ...parts);

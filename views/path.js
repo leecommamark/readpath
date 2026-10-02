@@ -1,11 +1,13 @@
-// path.js — the Path tab (patch plan 6, Phase 3; as families since patch
-// plan 7.5, Phase 4; DESIGN *Screens*: Path).
+// path.js — the Path tab (patch plan 6, Phase 3; as families since 7.5;
+// where you are on the path since 7.7, Phase 4; DESIGN *Screens*: Path).
 //
-// A compact header -- where you are, the placement check (views/check.js),
-// Find a character (views/find.js) -- then the path as family cards
-// (views/families.js). Done and the Meaning parts list (the sound parts are
-// the families now) are a row each above the list, since 7.6 3b. The step 6
-// map of 100-item blocks is gone.
+// Top to bottom (brief 7.7 decided 1): where you are; the whole path as
+// one strip, the known share filled and a pin at Today's next item; Find a
+// character; "You are here", a short trail of path items on a rail (the
+// last few met, Next, then what's ahead); then a row each for Browse
+// families, Done, Meaning parts, the placement check (Mark, 7.7 Phase 0: a
+// row now) and Send feedback. The family list moved to Browse families.
+// Every tile and stone here opens the character's tree.
 //
 // Where you are: known characters (main reading in Maintain), known parts,
 // readings learning (met, not yet known), and "about N% of the characters in
@@ -16,13 +18,13 @@
 
 import {h, clear, put} from './dom.js';
 import {isKnown} from '../core/state.js';
-import {checkBlock} from './check.js';
-import {familyCards, renderFamilyList} from './families.js';
-import {glyphKey} from './glyph.js';
+import {familyCards, stateOf} from './families.js';
+import {glyphTile, progressOf} from './glyph.js';
 
 export {stateOf} from './families.js';
 
 const plural = (n, one, many = `${one}s`) => `${n.toLocaleString('en-GB')} ${n === 1 ? one : many}`;
+const n0 = n => n.toLocaleString('en-GB');
 
 // "about N%": one decimal under 10, so a first few characters show at all
 export function sharePct(perMillion) {
@@ -48,8 +50,75 @@ export function whereYouAre(content, states) {
   return {characters, parts, learning, share: sharePct(share)};
 }
 
-// pathModel(content, states, nextUp) -> {where, families, meaning}
-//   nextUp: Today's summary.next_up, which marks the current family
+export const TRAIL_BEHIND = 4;
+export const TRAIL_AHEAD = 10;
+const KIND_SAID = {sound: 'Sound part', meaning: 'Meaning part'};
+const firstSense = g => (g || '').split(/;\s*/)[0].trim();
+
+// a sound part's own gloss: its character's, where it is one
+function glossOfForm(content, form) {
+  const r = content.mainReading(form);
+  const c = content.char ? content.char(form) : null;
+  return (r && content.item(r).gloss) || (c && c.gloss) || '';
+}
+
+// one stone: the item, its tile's state, and what the row says
+function stoneOf(content, states, id, next) {
+  const it = content.item(id);
+  const kind = it.kind === 'reading' ? 'reading' : it.kind;
+  const s = states[id];
+  return {id, form: it.form, kind, rank: it.rank, jp: it.jp || content.partReading(it.form) || '',
+          gloss: firstSense(it.gloss || content.partGloss(it.form) || glossOfForm(content, it.form)),
+          tag: KIND_SAID[kind] || null,
+          state: stateOf(s), progress: progressOf(s, kind), next};
+}
+
+// trailModel(content, states, nextUp) -> {stones, behind, ahead, next}
+//   the last TRAIL_BEHIND items met before Today's next item, the next item
+//   (tagged Next), then TRAIL_AHEAD items ahead not met yet, all in path
+//   order; behind: items met before Next that it leaves out; ahead: items
+//   not met after its last stone. With no next item (the path done), the
+//   trail ends at the last.
+export function trailModel(content, states, nextUp = null) {
+  const path = content.path;
+  let at = nextUp && content.has(nextUp) ? path.indexOf(nextUp) : -1;
+  if (at < 0) at = path.findIndex(id => !states[id]);
+  const next = at >= 0 ? path[at] : null;
+  const before = [], after = [];
+  for (let i = (at >= 0 ? at : path.length) - 1; i >= 0 && before.length < TRAIL_BEHIND; i--) {
+    if (states[path[i]]) before.unshift(path[i]);
+  }
+  if (at >= 0) {
+    for (let i = at + 1; i < path.length && after.length < TRAIL_AHEAD; i++) {
+      if (!states[path[i]]) after.push(path[i]);
+    }
+  }
+  // the ends: items met before Next that the trail leaves out, and items
+  // not met after its last stone (a focus text can pull items ahead of
+  // path order, so some are met beyond Next: they are neither)
+  const end = at >= 0 ? at : path.length;
+  const metBefore = path.slice(0, end).filter(id => states[id]).length;
+  const lastAt = after.length ? path.indexOf(after[after.length - 1]) : end;
+  const unmetAfter = path.slice(lastAt + 1).filter(id => !states[id]).length;
+  return {stones: [...before.map(id => stoneOf(content, states, id, false)),
+                   ...(next ? [stoneOf(content, states, next, true)] : []),
+                   ...after.map(id => stoneOf(content, states, id, false))],
+          behind: metBefore - before.length, ahead: unmetAfter, next};
+}
+
+// stripModel(content, states, next) -> {total, known, pin}: the whole path
+// as one bar, 1 to its last item; `known` the share of items known, `pin`
+// where Today's next item is (a fraction), or null
+export function stripModel(content, states, next) {
+  const total = content.path.length;
+  const known = content.path.filter(id => isKnown(states[id])).length;
+  const rank = next ? content.rank(next) : null;
+  return {total, known: known / total, knownN: known, nextRank: rank,
+          pin: rank == null ? null : (rank - 0.5) / total};
+}
+
+// pathModel(content, states, nextUp) -> {where, strip, trail, families,
+// meaning}: nextUp is Today's summary.next_up
 export function pathModel(content, states, nextUp = null) {
   const meaning = {total: 0, known: 0};
   for (const id of content.path) {
@@ -57,8 +126,12 @@ export function pathModel(content, states, nextUp = null) {
     meaning.total++;
     if (isKnown(states[id])) meaning.known++;
   }
-  return {where: whereYouAre(content, states), families: familyCards(content, states, nextUp),
-          meaning};
+  const trail = trailModel(content, states, nextUp);
+  const cards = familyCards(content, states);
+  return {where: whereYouAre(content, states), strip: stripModel(content, states, trail.next),
+          trail, meaning,
+          families: {total: cards.open.concat(cards.done).filter(c => c.type === 'family').length,
+                     done: cards.done.length}};
 }
 
 // ---- drawing
@@ -77,30 +150,67 @@ function findBlock(cb) {
     h('span', {class: 'label'}, 'Find a character'), input, host);
 }
 
-// Done and Meaning parts (7.6 3b, Mark): a row each near the top, since
-// the family list below them loads as it scrolls and never ends. Done shows
-// once a card is done.
-function jumpsBlock(m, cb) {
+function stripBlock(s) {
+  const pct = f => `${(100 * f).toFixed(2)}%`;
+  return h('section', {class: 'block path-strip-block'},
+    h('div', {class: 'path-strip', role: 'img',
+              'aria-label': `${n0(s.knownN)} of ${n0(s.total)} path items known`
+                + (s.nextRank ? `; next is item ${n0(s.nextRank)}` : '')},
+      h('span', {class: 'path-strip-known', style: `width:${pct(s.known)}`}),
+      s.pin != null && h('span', {class: 'path-strip-pin', style: `left:${pct(s.pin)}`})),
+    h('div', {class: 'path-strip-scale sm'},
+      h('span', {}, '1'),
+      s.nextRank ? h('span', {}, `next: item ${n0(s.nextRank)}`) : h('span', {}, 'all met'),
+      h('span', {}, n0(s.total))));
+}
+
+const STATE_SAID = {known: 'known', learning: 'learning', ahead: 'not met yet'};
+
+function trailBlock(t, cb) {
+  const kindOf = f => (cb.kindOf ? cb.kindOf(f) : null);
+  const stone = (st, i) => h('button', {
+    type: 'button',
+    class: ['stone', `is-${st.state}`, st.next && 'is-next', i === 0 && 'is-first',
+            i === t.stones.length - 1 && 'is-last'].filter(Boolean).join(' '),
+    'aria-label': `${st.next ? 'Next: ' : ''}${st.form} ${st.jp}, ${st.gloss}, item ${n0(st.rank)}, `
+      + `${STATE_SAID[st.state]}: its tree`,
+    onclick: () => cb.onTree(st.form)},
+    h('span', {class: 'stone-rail', 'aria-hidden': 'true'}),
+    glyphTile(st.form, kindOf(st.form), {size: 'sm', progress: st.progress}),
+    h('span', {class: 'stone-text'},
+      h('span', {class: 'stone-line'},
+        st.next && h('span', {class: 'tag accent'}, 'Next'),
+        st.tag && h('span', {class: 'tag'}, st.tag),
+        h('span', {class: 'stone-gloss'}, st.gloss || '—')),
+      h('span', {class: 'stone-meta sm'}, h('span', {class: 'mono'}, st.jp), st.jp ? ' · ' : '',
+        `#${n0(st.rank)}`, st.state !== 'ahead' ? ` · ${STATE_SAID[st.state]}` : '')));
+  return h('section', {class: 'block trail-block'},
+    h('span', {class: 'label'}, 'You are here'),
+    h('p', {class: 'trail-end sm'}, t.behind ? `↑ ${plural(t.behind, 'item')} behind you` : 'The start of the path'),
+    h('div', {class: 'trail'}, ...t.stones.map(stone)),
+    h('p', {class: 'trail-end sm'}, t.ahead ? `↓ ${n0(t.ahead)} more ahead` : 'The end of the path'));
+}
+
+// the rows: Browse families, Done, Meaning parts, the placement check and
+// Send feedback (7.7 decided 1; the check a row since Phase 0)
+function rowsBlock(m, cb) {
   const row = (title, sub, onclick) => h('button', {type: 'button', class: 'jump', onclick},
     h('span', {class: 'jump-text'}, h('b', {}, title), h('span', {class: 'sm'}, sub)),
     h('span', {class: 'jump-go', 'aria-hidden': 'true'}, '›'));
-  const done = m.families.done.length;
+  const last = cb.placement || null;
   return h('section', {class: 'block jumps'},
-    done > 0 && row('Done', plural(done, 'card'), cb.onDone),
+    row('Browse families', `${n0(m.families.total)} sound-part families`, cb.onBrowse),
+    m.families.done > 0 && row('Done', plural(m.families.done, 'card'), cb.onDone),
     row('Meaning parts', `${m.meaning.known} of ${m.meaning.total} known`, cb.onParts),
-    // a row, not a foot: nothing is drawn below the family list (7.6 3b),
-    // so Send feedback joins these (patch plan 7B, Phase 3)
+    row('Placement check', last ? `Last check: about ${n0(last.n)}` : 'Already read some Chinese?', cb.onCheck),
     cb.onFeedback && row('Send feedback', 'A note, and your reports, to Mark', cb.onFeedback));
 }
 
-// renderPath(el, model, cb)   cb: onFamily(key), onCheck, placement (the
-// last check's record, or null), query, onQuery(q, host), onParts, onDone,
-// kindOf, shown / onShown (how many family cards were drawn, kept across
-// redraws)
+// renderPath(el, model, cb)   cb: onTree(form), onBrowse, onDone, onParts,
+// onCheck, placement (the last check's record, or null), query,
+// onQuery(q, host), onFeedback, kindOf
 export function renderPath(el, m, cb) {
   const w = m.where;
-  const f = m.families;
-  const list = h('div', {class: 'fam-host'});
   put(clear(el),
     h('div', {class: 'top'}),
     h('h1', {id: 'path-h'}, 'Path'),
@@ -108,16 +218,8 @@ export function renderPath(el, m, cb) {
       h('p', {class: 'known'}, h('b', {}, plural(w.characters, 'character')), ' and ',
         h('b', {}, plural(w.parts, 'part')), ' known'),
       h('p', {class: 'note'}, `${plural(w.learning, 'reading')} learning · about ${w.share}% of the characters in written Chinese`)),
-    checkBlock(cb.placement || null, cb),
+    stripBlock(m.strip),
     findBlock(cb),
-    jumpsBlock(m, cb),
-    h('section', {class: 'block families'},
-      h('div', {class: 'row'},
-        h('span', {class: 'label'}, `Your path · ${plural(f.total, 'card')}`)),
-      h('p', {class: 'note'}, 'Characters grouped by the sound part they share, in the order Today '
-        + 'teaches them. Open one to see its characters and mark what you know.'),
-      glyphKey(),
-      list));
-  const drawn = renderFamilyList(list, f.open, cb, {shown: cb.shown});
-  if (cb.onShown) cb.onShown(drawn);
+    trailBlock(m.trail, cb),
+    rowsBlock(m, cb));
 }

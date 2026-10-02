@@ -5,7 +5,7 @@
 // opens its reference card. Only the results are drawn again as the learner
 // types, so the box keeps its focus.
 
-import {h, clear, put} from './dom.js';
+import {h, han, clear, put} from './dom.js';
 import {shortGloss} from './reader.js';
 import {glyphTile} from './glyph.js';
 
@@ -19,13 +19,18 @@ export function typedNote(x) {
     : `you typed ${x.typed}, another way of writing it`;
 }
 
-function row(form, jp, gloss, tag, tagClass, onRef, note = null, id = null, kindOf = null) {
+// "via 晴朗 sunny and cloudless": the word whose meaning matched (7.7,
+// Phase 5), its gloss in full, since a shortened one can cut the very word
+export const viaSaid = via => (via ? ['via ', han(via.form), ` ${via.gloss}`] : null);
+
+function row(form, jp, gloss, tag, tagClass, onRef, note = null, id = null, kindOf = null, via = null) {
   return h('li', {},
     h('button', {type: 'button', class: 'find-row', onclick: () => onRef(form, id)},
       glyphTile(form, kindOf ? kindOf(form) : null, {size: 'sm'}),
       h('span', {class: 'find-text'},
         jp && h('span', {class: 'mono'}, jp),
         gloss && h('span', {class: 'sm'}, ` ${shortGloss(gloss)}`),
+        via && h('span', {class: 'sm note find-typed'}, ...viaSaid(via)),
         note && h('span', {class: 'sm note find-typed'}, note)),
       tag && h('span', {class: `tag ${tagClass}`}, tag)));
 }
@@ -46,7 +51,7 @@ export function renderFind(host, query, r, onRef, kindOf = null) {
   const cls = s => (s === 'known' ? 'accent' : s === 'learning' ? 'learn' : '');
   // a reading's row opens the card on that reading (7A 6b)
   const path = r.path.map(x => row(x.char, x.jp, x.gloss, STATE[x.state], cls(x.state), onRef,
-    typedNote(x), x.id, kindOf));
+    typedNote(x), x.id, kindOf, x.via || null));
   const parts = r.parts.map(x => row(x.form, x.reading, x.gloss,
     `${x.kind} part · ${STATE[x.state]}`, cls(x.state), onRef, null, null, kindOf));
   const off = r.off.map(x => row(x.char, x.jp, x.gloss, x.known ? 'you know this' : 'not on the path',
