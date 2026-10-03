@@ -67,7 +67,11 @@ function partCard(content, task, base) {
                    met: base.met !== false},
             choices: readingChoices(content, m.char, m.jp, base.rng, base.pool).map(reading),
             answer: m.jp,
+            // the meaning and one word with the reading, as the inferred
+            // Meet shows them, so the answer teaches without a tap (brief
+            // 7.9, Mark)
             reveal: {glyph: m.char, jp: m.jp, gloss: m.gloss,
+                     words: wordsWithOver(content, base.states, task.target, 1),
                      pattern: pat ? PATTERN_TEXT[pat.split(':')[1]] || null : null}};
   }
   if (task.task === 'tell_apart' && task.target) {
@@ -83,6 +87,8 @@ function partCard(content, task, base) {
             // reading and meaning, then its meaning part and what that part
             // means (CO-049; Mark, 2026-09-29: 清 cing1 clear · 氵 water)
             reveal: {glyph: t.answer, jp: a.jp,
+                     // and one word for the answer under them (brief 7.9)
+                     words: wordsWithOver(content, base.states, content.mainReading(t.answer), 1),
                      head: {char: task.target, jp: content.partReading(task.target)},
                      marks: t.choices.map(ch => ({char: ch, part: row(ch).meaning_part,
                                                   gloss: row(ch).part_gloss, jp: row(ch).reading,
@@ -105,14 +111,18 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
   const base = {task: task.task, item: task.item, rung: task.rung, asked: task.asked,
                 fallback: task.fallback, role: task.role};
   if (content.kind(task.item) !== 'reading') {
-    const m = partCard(content, task, {...base, rng, pool, met: !!states[task.item]});
+    const m = partCard(content, task, {...base, rng, pool, met: !!states[task.item], states});
     delete m.rng;
     delete m.pool;
     delete m.met;
+    delete m.states;
     return m;
   }
   const it = content.item(task.item);
   const reveal = {glyph: it.char, jp: it.jp, gloss: it.gloss, words: wordsWithOver(content, states, task.item)};
+  // a question's answer teaches as a part test's does: the reading, its
+  // meaning and one word (brief 7.9, Mark: "all of the tests")
+  const asked = {...reveal, words: reveal.words.slice(0, 1)};
 
   if (task.task === 'meet') {
     const from = task.inferred_from;
@@ -147,7 +157,7 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
     return {...base, kind: 'question', lead: 'Which one means',
             text: it.gloss, hint: it.jp,
             choices: c.choices.map(ch => ({value: ch, label: ch, type: 'han'})),
-            answer: it.char, reveal: {...reveal, answerLabel: it.char, answerHan: true}};
+            answer: it.char, reveal: {...asked, answerLabel: it.char, answerHan: true}};
   }
 
   if (task.task === 'reading') {                    // rung 2
@@ -156,7 +166,7 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
     const choices = readingChoices(content, it.char, it.jp, rng, pool).map(reading);
     return {...base, kind: 'question', lead: 'How is it read?', glyph: it.char,
             hint: it.gloss, hintOnAsk: true,
-            choices, answer: it.jp, reveal: {...reveal, answerLabel: it.jp}};
+            choices, answer: it.jp, reveal: {...asked, answerLabel: it.jp}};
   }
   // rung 5: a sentence of the focus text, the character marked in the reading
   // its word gives, jyutping over the other characters not known in theirs
@@ -166,7 +176,7 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
     if (s) {
       const choices = readingChoices(content, it.char, it.jp, rng, pool, s.others).map(reading);
       return {...base, kind: 'question', lead: 'Read the marked character', sentence: s.sentence,
-              choices, answer: it.jp, reveal: {...reveal, answerLabel: it.jp}};
+              choices, answer: it.jp, reveal: {...asked, answerLabel: it.jp}};
     }
   }
   // rung 4 (and rung 5's fallback): the word, the target marked and without
@@ -185,9 +195,11 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
     .map((o, i) => (chars[i] === it.char ? null : o));
   const others = syl.filter((_, i) => chars[i] !== it.char);
   const choices = readingChoices(content, it.char, it.jp, rng, pool, others).map(reading);
+  // its word is the one just read: the answer shows it, with its meaning
+  const read = we ? [{...we, over: overOf(content, states, form, we.jp)}] : asked.words;
   return {...base, kind: 'question', lead: 'Read the marked character',
           word: {form, target, gloss: we && we.gloss, over},
-          choices, answer: it.jp, reveal: {...reveal, answerLabel: it.jp}};
+          choices, answer: it.jp, reveal: {...asked, words: read, answerLabel: it.jp}};
 }
 
 // The sentence for a rung-5 task: the sentence's parts (a line, or its
@@ -326,11 +338,17 @@ function revealBlock(m, ok, cb, given) {
     ? h('p', {class: `verdict ${ok ? 'good' : 'bad'}`}, ok ? 'Right' : 'Not quite')
     : h('p', {class: `verdict ${ok ? 'good' : 'learn'}`}, ok ? 'You inferred it' : 'Here it is');
   let main;
-  if (m.kind === 'question' && (m.task === 'meaning' || m.task === 'tell_apart')) {
-    main = h('p', {class: 'answer-line'}, glyphButton(r.glyph, cb, 'md'),
-             ' ', h('span', {class: 'mono'}, r.jp));
-  } else if (m.kind === 'question') {
-    main = h('p', {class: 'answer-line'}, h('span', {class: 'mono big-jp'}, r.jp));
+  // every answer teaches: the reading, its meaning and a word, as a guess
+  // always did (brief 7.9, Mark: "all of the tests"). A character question
+  // leads with the character; tell apart's lines carry the meanings, its
+  // word comes after them.
+  const answerLine = () => h('p', {class: 'answer-line'}, glyphButton(r.glyph, cb, 'md'),
+                             ' ', h('span', {class: 'mono'}, r.jp));
+  if (m.kind === 'question' && m.task === 'tell_apart') {
+    main = answerLine();
+  } else if (m.kind === 'question' && m.task === 'meaning') {
+    main = h('div', {class: 'answer-block'}, answerLine(),
+             h('p', {class: 'gloss-line'}, r.gloss), wordLines(r.words));
   } else {
     main = h('div', {class: 'answer-block'}, readingBlock(r.jp, r.gloss), wordLines(r.words));
   }
@@ -347,7 +365,8 @@ function revealBlock(m, ok, cb, given) {
         k.meaning ? ` ${k.meaning}` : '', ' · ',
         han(k.part || '', {class: 'muted'}), k.gloss ? ` ${k.gloss}` : '')));
   const pattern = r.pattern && h('p', {class: 'note'}, r.pattern);
-  return h('section', {class: 'feedback', role: 'status'}, verdict, main, marks, pattern);
+  const word = m.task === 'tell_apart' ? wordLines(r.words) : null;
+  return h('section', {class: 'feedback', role: 'status'}, verdict, main, marks, word, pattern);
 }
 
 // renderTask(el, model, {onAnswer(ok), onNext(), onRef(char), onReport(shown),

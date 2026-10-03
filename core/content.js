@@ -97,9 +97,12 @@ export function loadContent(tables) {
     // the taught one (稅 <- 兌 deoi3); cousins: members that carry the sound
     // where the part's reading is no clue (當 <- 尚: 黨 堂); listed: false for
     // a curated no-example pair (撚 under 扌), never shown among the part's
-    // characters (patch plan 6.5: CO-064, CO-016, CO-058)
+    // characters (patch plan 6.5: CO-064, CO-016, CO-058); written: the
+    // worn-down shape the character shows for it (巷 邑 as 巳, 有 又 as 𠂇),
+    // the form decomp and roleIn know it by (brief 7.9)
     partsOf.get(r.char).push({part: r.part, role: r.role, reading: r.reading || null,
-                              cousins: r.cousins || [], listed: r.listed !== 0});
+                              cousins: r.cousins || [], listed: r.listed !== 0,
+                              written: r.written || null});
   }
   // a component's main role: 'sound' or 'meaning', whichever it plays in
   // more characters, a tie to sound (patch plan 7.6 3b, Mark: 口 is a
@@ -202,7 +205,7 @@ export function loadContent(tables) {
     soundPartOf: ch => soundPartOf.get(ch) || null,
     meaningPartOf: ch => meaningPartOf.get(ch) || null,
     // every part of a character with its role (sound, meaning, form), in
-    // part_role's order: sound, then meaning, then form
+    // part_role's order: sound, then the rest as drawn
     partsOf: ch => partsOf.get(ch) || [],
     componentRole: form => mainRole.get(form) || null,
     partReading: part => partReading.get(part) || null,

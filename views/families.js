@@ -20,7 +20,9 @@
 //
 // The family page (#path/family/<key>) is the step 6 grid's successor: the
 // head's facts (its reading, "unlocks N", Test me), then every member as a
-// tile in path order, with Look / Mark (Mark first; Phase 0 decided 4).
+// tile in path order, with Read / Mark: Read first, as the Reader has it, and
+// every page opens in Read (brief 7.9, Mark: Look was renamed Read; Mark
+// came first since brief 6's Phase 0, decided 4).
 // Mark marks a character reading known, or offers I forgot this on a known
 // one, through transition() (actions.js), with an Undo.
 //
@@ -39,7 +41,7 @@ import {familiesOf, familyPlan, reviewLoad, MIN_MEMBERS, OWN_SIZE} from '../core
 export {familiesOf, MIN_MEMBERS, OWN_SIZE};
 export const PREVIEW = 6;
 
-export const MODES = ['mark', 'look'];
+export const MODES = ['read', 'mark'];
 
 export const stateOf = s => (!s ? 'ahead' : isKnown(s) ? 'known' : 'learning');
 
@@ -86,7 +88,7 @@ export function familyCards(content, states) {
 }
 
 // familyPage(content, states, key, mode) -> the page's model, or null
-export function familyPage(content, states, key, mode = 'mark') {
+export function familyPage(content, states, key, mode = 'read') {
   const fam = familiesOf(content);
   const card = fam.byKey.get(key);
   if (!card) return null;
@@ -114,13 +116,13 @@ export function familyPage(content, states, key, mode = 'mark') {
           from: fam.number.get(card.members[0]),
           to: fam.number.get(card.members[card.members.length - 1]),
           value: card.members.reduce((n, c) => n + content.valueOf(c), 0),
-          mode: MODES.includes(mode) ? mode : 'mark', cells, counts};
+          mode: MODES.includes(mode) ? mode : 'read', cells, counts};
 }
 
 // What a tap on a member does: {open: form} (its card), {mark: done} (as
 // markInReader returns it, with what Undo needs), or null.
 export function familyTap(content, learner, cell, mode, today) {
-  if (mode === 'look') return {open: cell.form};
+  if (mode === 'read') return {open: cell.form};
   const done = markInReader(content, learner, cell.id, today);
   return done ? {mark: done} : null;
 }
@@ -131,7 +133,7 @@ const plural = (n, one, many = `${one}s`) => `${n.toLocaleString('en-GB')} ${n =
 const STATE_SAID = {known: 'known', learning: 'learning', ahead: 'not met yet'};
 export const FAMILY_HINT = {
   mark: 'Tap a character you know to mark it known, or a known one if you’ve forgotten it.',
-  look: 'Tap a character to see its tree.',     // its tree since 7.7 (said so 7.8)
+  read: 'Tap a character to see its tree.',     // its tree since 7.7 (said so 7.8)
 };
 
 // known / total, as a ring (the mock-up's): its own colours, so a test of
@@ -271,12 +273,12 @@ export function renderFamily(el, m, cb) {
   const tileOf = x => glyphTile(x.form, cb.kindOf ? cb.kindOf(x.form) : null, {
     size: 'md', over: x.jp || '', progress: x.progress,
     label: `${x.form}${x.jp ? ` ${x.jp}` : ''}: ${STATE_SAID[x.state]}; `
-      + (m.mode === 'look' ? 'open its tree' : x.state === 'known' ? 'tap if you’ve forgotten it' : 'mark known'),
+      + (m.mode === 'read' ? 'open its tree' : x.state === 'known' ? 'tap if you’ve forgotten it' : 'mark known'),
     onTap: () => cb.onTap(x)});
   const modes = h('div', {class: 'modes', role: 'group', 'aria-label': 'Mode'},
     ...MODES.map(k => h('button', {
       type: 'button', class: `mode-btn${m.mode === k ? ' on' : ''}`, 'aria-pressed': String(m.mode === k),
-      onclick: () => m.mode !== k && cb.onMode(k)}, k === 'mark' ? 'Mark' : 'Look')));
+      onclick: () => m.mode !== k && cb.onMode(k)}, k === 'read' ? 'Read' : 'Mark')));
   const head = m.head && h('section', {class: 'block first fam-head'},
     h('div', {class: 'fam-head-row'},
       glyphTile(m.head, headKind(cb, m.head),
@@ -376,7 +378,7 @@ export function renderBrowse(el, m, cb) {
     h('h1', {id: 'browse-h'}, 'Pavers'),
     paversSwitch('families', cb.onSwitch),
     // a row opens the family; its tiles open trees (7.8)
-    h('p', {class: 'note'}, 'Open a family, then choose Look and tap a character to see its tree.'),
+    h('p', {class: 'note'}, 'Open a family and tap a character to see its tree.'),
     // a dropdown, not chips: four didn't fit a phone's line (Mark, 7.8)
     h('label', {class: 'sort-by'}, 'Sort by ',
       h('select', {class: 'sort-select', onchange: e => e.target.value !== m.sort && cb.onSort(e.target.value)},

@@ -43,8 +43,18 @@ export function firstWord(content, id) {
 // (稅: 兌 deoi3, though 兌 is taught jyut6), and where even that is no clue,
 // `cousins`: members that carry the sound, each with its jyutping unless
 // known (當 <- 尚 soeng6: like 黨 堂). Patch plan 6.5, CO-064 and CO-016.
+// In written order, as the tree has them (brief 7.9, Mark: 的 is 白 + 勺),
+// matched by the shape the character shows (`written`, as roleIn does); a
+// part the tree doesn't show keeps its place after the rest.
 export function builtFrom(content, ch, states = {}) {
-  return content.partsOf(ch).map(({part, role, reading, cousins}) => {
+  const order = content.partsInOrder(ch);
+  const at = p => {
+    const i = order.indexOf(p.written || p.part);
+    return i < 0 ? order.length : i;
+  };
+  const parts = content.partsOf(ch).map((p, i) => ({p, i}))
+    .sort((a, b) => at(a.p) - at(b.p) || a.i - b.i).map(x => x.p);
+  return parts.map(({part, role, reading, cousins}) => {
     let note = null;
     if (role === 'sound') note = reading || content.partReading(part);
     if (role === 'meaning') note = content.partGloss(part);

@@ -843,7 +843,8 @@ function showFamily(key, {push = true} = {}) {
   if (push) history.pushState({family: key}, '', url);
   app.reader = null;
   app.tree = null;
-  app.family = {key, mode: (app.family && app.family.mode) || 'mark'};
+  // every family page opens in Read (brief 7.9, Mark): Mark is a tap away
+  app.family = {key, mode: 'read'};
   if (!familyPage(app.content, {}, key)) return showTab(app.fromTab);
   showScreen('family');
   markTab(app.fromTab);
