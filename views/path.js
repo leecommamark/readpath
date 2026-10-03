@@ -4,9 +4,9 @@
 // Top to bottom (brief 7.7 decided 1): where you are; the whole path as
 // one strip, the known share filled and a pin at Today's next item; Find a
 // character; "You are here", a short trail of path items on a rail (the
-// last few met, Next, then what's ahead); then a row each for Browse
-// families, Done, Meaning parts, the placement check (Mark, 7.7 Phase 0: a
-// row now) and Send feedback. The family list moved to Browse families.
+// last few met, Next, then what's ahead); then a row each for Done, the
+// placement check (Mark, 7.7 Phase 0: a row now) and Send feedback. Browse
+// families and Meaning parts are the Pavers tab (brief 7.8 decided 2).
 // Every tile and stone here opens the character's tree.
 //
 // Where you are: known characters (main reading in Maintain), known parts,
@@ -20,6 +20,7 @@ import {h, clear, put} from './dom.js';
 import {isKnown} from '../core/state.js';
 import {familyCards, stateOf} from './families.js';
 import {glyphTile, progressOf} from './glyph.js';
+import {shortGloss} from '../core/gloss.js';
 
 export {stateOf} from './families.js';
 
@@ -53,7 +54,6 @@ export function whereYouAre(content, states) {
 export const TRAIL_BEHIND = 4;
 export const TRAIL_AHEAD = 10;
 const KIND_SAID = {sound: 'Sound part', meaning: 'Meaning part'};
-const firstSense = g => (g || '').split(/;\s*/)[0].trim();
 
 // a sound part's own gloss: its character's, where it is one
 function glossOfForm(content, form) {
@@ -68,7 +68,7 @@ function stoneOf(content, states, id, next) {
   const kind = it.kind === 'reading' ? 'reading' : it.kind;
   const s = states[id];
   return {id, form: it.form, kind, rank: it.rank, jp: it.jp || content.partReading(it.form) || '',
-          gloss: firstSense(it.gloss || content.partGloss(it.form) || glossOfForm(content, it.form)),
+          gloss: shortGloss(it.gloss || content.partGloss(it.form) || glossOfForm(content, it.form)),
           tag: KIND_SAID[kind] || null,
           state: stateOf(s), progress: progressOf(s, kind), next};
 }
@@ -117,21 +117,12 @@ export function stripModel(content, states, next) {
           pin: rank == null ? null : (rank - 0.5) / total};
 }
 
-// pathModel(content, states, nextUp) -> {where, strip, trail, families,
-// meaning}: nextUp is Today's summary.next_up
+// pathModel(content, states, nextUp) -> {where, strip, trail, families:
+// {done}}: nextUp is Today's summary.next_up
 export function pathModel(content, states, nextUp = null) {
-  const meaning = {total: 0, known: 0};
-  for (const id of content.path) {
-    if (content.kind(id) !== 'meaning') continue;
-    meaning.total++;
-    if (isKnown(states[id])) meaning.known++;
-  }
   const trail = trailModel(content, states, nextUp);
-  const cards = familyCards(content, states);
   return {where: whereYouAre(content, states), strip: stripModel(content, states, trail.next),
-          trail, meaning,
-          families: {total: cards.open.concat(cards.done).filter(c => c.type === 'family').length,
-                     done: cards.done.length}};
+          trail, families: {done: familyCards(content, states).done.length}};
 }
 
 // ---- drawing
@@ -191,29 +182,28 @@ function trailBlock(t, cb) {
     h('p', {class: 'trail-end sm'}, t.ahead ? `↓ ${n0(t.ahead)} more ahead` : 'The end of the path'));
 }
 
-// the rows: Browse families, Done, Meaning parts, the placement check and
-// Send feedback (7.7 decided 1; the check a row since Phase 0)
+// the rows: Done, the placement check and Send feedback (7.7 decided 1;
+// Browse families and Meaning parts moved to the Pavers tab in 7.8)
 function rowsBlock(m, cb) {
   const row = (title, sub, onclick) => h('button', {type: 'button', class: 'jump', onclick},
     h('span', {class: 'jump-text'}, h('b', {}, title), h('span', {class: 'sm'}, sub)),
     h('span', {class: 'jump-go', 'aria-hidden': 'true'}, '›'));
   const last = cb.placement || null;
   return h('section', {class: 'block jumps'},
-    row('Browse families', `${n0(m.families.total)} sound-part families`, cb.onBrowse),
     m.families.done > 0 && row('Done', plural(m.families.done, 'card'), cb.onDone),
-    row('Meaning parts', `${m.meaning.known} of ${m.meaning.total} known`, cb.onParts),
     row('Placement check', last ? `Last check: about ${n0(last.n)}` : 'Already read some Chinese?', cb.onCheck),
     cb.onFeedback && row('Send feedback', 'A note, and your reports, to Mark', cb.onFeedback));
 }
 
-// renderPath(el, model, cb)   cb: onTree(form), onBrowse, onDone, onParts,
-// onCheck, placement (the last check's record, or null), query,
+// renderPath(el, model, cb)   cb: onTree(form), onDone, onCheck, placement (the last check's record, or null), query,
 // onQuery(q, host), onFeedback, kindOf
 export function renderPath(el, m, cb) {
   const w = m.where;
   put(clear(el),
     h('div', {class: 'top'}),
     h('h1', {id: 'path-h'}, 'Path'),
+    // every tile and stone here opens a tree, and nothing said so (7.8)
+    h('p', {class: 'note'}, 'Tap a character to see its tree.'),
     h('section', {class: 'block first where'},
       h('p', {class: 'known'}, h('b', {}, plural(w.characters, 'character')), ' and ',
         h('b', {}, plural(w.parts, 'part')), ' known'),

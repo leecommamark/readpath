@@ -29,7 +29,7 @@ export function renderAbout(el, m, cb) {
             ...(r.licence.notices || []).map(n => [' · ', link(n, 'notice')])))))));
   put(clear(el),
     h('div', {class: 'top'},
-      h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Today'),
+      h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Back'),
       h('span', {})),
     h('h1', {id: 'about-h'}, NAME),
     h('section', {class: 'block first'},

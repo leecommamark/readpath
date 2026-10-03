@@ -16,7 +16,7 @@ import {compose} from './core/today.js';
 import {systemDay, isoOf} from './core/clock.js';
 import {deviceSeed, learnerFrom, composeRng, startRun, startPractice,
         practiceItems, startTestMe, startFamily} from './runner.js';
-import {todayModel, renderToday} from './views/today.js';
+import {todayModel, renderToday, placementOffered} from './views/today.js';
 import {libraryModel, previewOf, renderTexts} from './views/texts.js';
 import {h, clear} from './views/dom.js';
 import {bodyOfFile, autoTitle} from './core/import.js';
@@ -54,9 +54,11 @@ import {renderFeedback} from './views/feedback.js';
 import {renderAbout} from './views/about.js';
 
 const $ = id => document.getElementById(id);
-const TABS = ['today', 'texts', 'path'];
-const SCREENS = [...TABS, 'reader', 'family', 'check', 'parts', 'done', 'browse', 'tree', 'session',
-                 'welcome', 'about'];
+// Pavers (brief 7.8 decided 2) is a tab with two screens of its own,
+// Browse families (#pavers) and Meaning parts (#pavers/meaning)
+const TABS = ['today', 'texts', 'path', 'pavers'];
+const SCREENS = ['today', 'texts', 'path', 'reader', 'family', 'check', 'parts', 'done', 'browse', 'tree',
+                 'session', 'welcome', 'about'];
 
 const app = {
   store: null, content: null, version: null, today: null,
@@ -66,6 +68,8 @@ const app = {
   family: null,             // {key, mode}: the family page open (patch plan 7.5)
   tree: null,               // {trail, expanded}: the tree open (patch plan 7.7)
   browse: {sort: 'text', shown: 0},  // Browse families' sort and rows drawn (7.7)
+  pavers: 'families',       // the Pavers tab's side: 'families' | 'meaning' (7.8)
+  fromTab: 'path',          // the tab a family page or a tree was opened from (7.8)
   check: null,              // {check, rng, record}: the placement check on
   pathQuery: '',            // Find a character's box, kept while the app is open
   firstRun: false,          // first run is on (patch plan 7B)
@@ -129,6 +133,14 @@ function showToday() {
     exportDue: exportReminder(app.store.load(KEYS.meta, {}), app.learner.states, app.today),
     onFeedback: openFeedback,
     onAbout: () => showAbout(),
+    // the placement check's card (brief 7.8 decided 3)
+    placementOffer: placementOffered({placement: app.store.load(KEYS.placement, null),
+                                      meta: app.store.load(KEYS.meta, {}), firstRun: app.firstRun}),
+    onCheck: () => startPlacement(),
+    onNotNow: () => {
+      app.store.save(KEYS.meta, {...app.store.load(KEYS.meta, {}), placementOffer: 'dismissed'});
+      showToday();
+    },
   });
 }
 
@@ -175,8 +187,9 @@ window.addEventListener('popstate', () => {
 });
 
 // The screen the URL names: #read/<text id> is the Reader,
-// #path/family/<key> a family's page (an old #path/block/<i> is Path), else
-// a tab.
+// #path/family/<key> a family's page (an old #path/block/<i> is Path),
+// #pavers/meaning the Meaning parts side of Pavers (the old #path/parts and
+// #path/families are Pavers since 7.8), else a tab.
 function route() {
   const hash = location.hash.slice(1);
   if (hash.startsWith('read/')) showReader(decodeURIComponent(hash.slice(5)), {push: false});
@@ -184,9 +197,9 @@ function route() {
   else if (hash.startsWith('char/')) showTree(decodeURIComponent(hash.slice(5)), {push: false});
   else if (/^path\/block\/\d+$/.test(hash)) showTab('path');
   else if (hash === 'path/check') startPlacement({push: false});
-  else if (hash === 'path/parts') showParts({push: false});
+  else if (hash === 'pavers/meaning' || hash === 'path/parts') showPavers('meaning');
+  else if (hash === 'pavers' || hash === 'path/families') showPavers('families');
   else if (hash === 'path/done') showDone({push: false});
-  else if (hash === 'path/families') showBrowse({push: false});
   else if (hash === 'about') showAbout({push: false});
   else showTab(hash);
 }
@@ -620,7 +633,6 @@ function showPath() {
   const nextUp = app.composed && app.composed.summary.next_up;
   renderPath($('path'), pathModel(app.content, app.store.load(KEYS.states, {}), nextUp), {
     onTree: form => showTree(form),
-    onBrowse: () => showBrowse(),
     kindOf,
     onCheck: () => startPlacement(),
     placement: app.store.load(KEYS.placement, null),
@@ -631,29 +643,35 @@ function showPath() {
                                                    offKnown: offKnownSet()}), form => showTree(form), kindOf,
                  progressFrom(app.store.load(KEYS.states, {})));
     },
-    onParts: () => showParts(),
     onDone: () => showDone(),
     onFeedback: openFeedback,
   });
 }
 
-// Browse families (7.7, Phase 4): every family by share of text, on a
-// screen of its own, #path/families; a row opens the family's page
-function showBrowse({push = true} = {}) {
-  if (push) history.pushState({browse: true}, '', '#path/families');
+// ---- the Pavers tab (brief 7.8 decided 2): a switch between Browse
+// families (7.7, Phase 4: every family by share of text; a row opens the
+// family's page) and Meaning parts. Each side is the tab's own URL, so
+// reload and Back land on it; the switch replaces the entry, as a tab does.
+
+function showPavers(view = app.pavers) {
+  app.pavers = view === 'meaning' ? 'meaning' : 'families';
+  app.fromTab = 'pavers';
   app.reader = null;
   app.family = null;
   app.tree = null;
-  showScreen('browse');
-  markTab('path');
-  drawBrowse();
+  app.check = null;
+  const url = app.pavers === 'meaning' ? '#pavers/meaning' : '#pavers';
+  if (location.hash !== url) history.replaceState(null, '', url);
+  showScreen(app.pavers === 'meaning' ? 'parts' : 'browse');
+  markTab('pavers');
+  if (app.pavers === 'meaning') drawParts(); else drawBrowse();
   window.scrollTo(0, 0);
 }
 
 function drawBrowse() {
   const b = app.browse;
   renderBrowse($('browse'), browseModel(app.content, app.store.load(KEYS.states, {}), b.sort), {
-    onBack: () => (history.state && history.state.browse ? history.back() : showTab('path')),
+    onSwitch: view => showPavers(view),
     onSort: key => { b.sort = key; b.shown = 0; drawBrowse(); },
     onFamily: key => showFamily(key),
     onMore: () => { b.shown = (b.shown || BROWSE_CHUNK) + BROWSE_CHUNK; drawBrowse(); },
@@ -684,22 +702,11 @@ function drawDone() {
   });
 }
 
-// ---- the Parts list and Test me (patch plan 6, Phase 5)
-
-function showParts({push = true} = {}) {
-  if (push) history.pushState({parts: true}, '', '#path/parts');
-  app.reader = null;
-  app.family = null;
-  app.tree = null;
-  showScreen('parts');
-  markTab('path');
-  drawParts();
-  window.scrollTo(0, 0);
-}
+// ---- the Meaning parts list (patch plan 6, Phase 5; Pavers since 7.8) and Test me
 
 function drawParts() {
   renderParts($('parts'), partsModel(app.content, app.store.load(KEYS.states, {})), {
-    onBack: () => (history.state && history.state.parts ? history.back() : showTab('path')),
+    onSwitch: view => showPavers(view),
     onRef: form => showTree(form),       // on Path's screens a tile opens its tree (7.7)
     kindOf,
     onTestMe: id => testMe(id),
@@ -837,9 +844,9 @@ function showFamily(key, {push = true} = {}) {
   app.reader = null;
   app.tree = null;
   app.family = {key, mode: (app.family && app.family.mode) || 'mark'};
-  if (!familyPage(app.content, {}, key)) return showTab('path');
+  if (!familyPage(app.content, {}, key)) return showTab(app.fromTab);
   showScreen('family');
-  markTab('path');
+  markTab(app.fromTab);
   drawFamily();
   window.scrollTo(0, 0);
 }
@@ -848,7 +855,7 @@ function drawFamily() {
   const f = app.family;
   const m = familyPage(app.content, app.store.load(KEYS.states, {}), f.key, f.mode);
   renderFamily($('family'), m, {
-    onBack: () => (history.state && history.state.family != null ? history.back() : showTab('path')),
+    onBack: () => (history.state && history.state.family != null ? history.back() : showTab(app.fromTab)),
     onMode(mode) { f.mode = mode; drawFamily(); },
     onRef: form => showTree(form),       // on Path's screens a tile opens its tree (7.7)
     kindOf,
@@ -883,7 +890,7 @@ function drawFamily() {
 // back as many steps as it names.
 
 function showTree(form, {push = true} = {}) {
-  if (!form) return showTab('path');
+  if (!form) return showTab(app.fromTab);
   // the trail lives in each history entry, so back and the breadcrumb
   // always name the entries there are
   const saved = !push && history.state && history.state.tree === form && history.state.trail;
@@ -901,7 +908,7 @@ function showTree(form, {push = true} = {}) {
   app.family = null;
   app.tree = {trail: next, expanded: {}};
   showScreen('tree');
-  markTab('path');
+  markTab(app.fromTab);
   drawTree();
   window.scrollTo(0, 0);
 }
@@ -912,7 +919,7 @@ function drawTree() {
   const m = treeModel(app.content, app.store.load(KEYS.states, {}), form,
                       {trail: t.trail, expanded: t.expanded});
   renderTree($('tree'), m, {
-    onBack: () => (history.state && history.state.tree != null ? history.back() : showTab('path')),
+    onBack: () => (history.state && history.state.tree != null ? history.back() : showTab(app.fromTab)),
     onCrumb: i => history.go(i - (t.trail.length - 1)),
     onTree: f => showTree(f),
     onRef: openRef,
@@ -963,6 +970,8 @@ function markTab(name) {
 
 function showTab(name) {
   if (!TABS.includes(name)) name = 'today';
+  if (name === 'pavers') return showPavers();
+  app.fromTab = name;
   app.reader = null;
   app.family = null;
   app.tree = null;

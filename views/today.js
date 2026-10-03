@@ -67,11 +67,19 @@ export function todayModel(content, states, summary, reading = null) {
   };
 }
 
+// The placement check's card on Today (brief 7.8 decided 3): until a check
+// has been done (a placement record) or the card has been dismissed (Not
+// now: meta.placementOffer, a flag, not progress); never in first run,
+// which offers the check itself. Path's row offers it either way.
+export function placementOffered({placement = null, meta = {}, firstRun = false} = {}) {
+  return !firstRun && !placement && !meta.placementOffer;
+}
+
 // renderToday(el, model, {date, onStart, onExport, onImport, onRef, trouble,
 //                         version, loadedMs, unsent, practiceCount, onPractice,
 //                         onKeepGoing, onRead(textId),
 //                         build, update, onUpdate, install, onInstall, exportDue,
-//                         onFeedback, onAbout})
+//                         onFeedback, onAbout, placementOffer, onCheck, onNotNow})
 //   update: a new build is waiting ("Update ready · Reload", patch plan 7B);
 //   install: 'ios' (the Add to Home Screen steps) | 'prompt' (the browser's
 //   Install) | null; exportDue: pwa.js's exportReminder(), {days, never}
@@ -119,6 +127,13 @@ export function renderToday(el, m, opts) {
       h('span', {class: 'text-meta'}, `${r.pct}% readable` +
         (r.toLearn ? ` · ${plural(r.toLearn, 'reading')} to go` : ' · every reading known')),
       h('span', {class: 'bar', 'aria-hidden': 'true'}, h('i', {style: `width:${r.pct}%`}))));
+
+  const place = opts.placementOffer && h('section', {class: 'block', 'aria-labelledby': 'place-h'},
+    h('h2', {id: 'place-h'}, 'Already read some Chinese?'),
+    h('p', {class: 'note'}, 'Check what you know: a few minutes’ check marks the characters you can already read.'),
+    h('div', {class: 'btns'},
+      h('button', {type: 'button', class: 'btn', onclick: opts.onCheck}, 'Check'),
+      h('button', {type: 'button', class: 'btn quiet', onclick: opts.onNotNow}, 'Not now')));
 
   const known = h('section', {class: 'block'},
     h('span', {class: 'label'}, 'Known'),
@@ -172,5 +187,5 @@ export function renderToday(el, m, opts) {
   put(clear(el),
     h('div', {class: 'top'}, h('span', {}, opts.date || ''), h('span', {})),
     h('h1', {id: 'today-h'}, 'Today'),
-    update || '', warn, session, reading || '', next || '', known, install || '', progress);
+    update || '', warn, session, reading || '', next || '', place || '', known, install || '', progress);
 }

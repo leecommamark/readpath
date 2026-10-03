@@ -27,6 +27,7 @@
 import {kindOf, toneless} from './content.js';
 import {normalizeText} from './normalize.js';
 import {isKnown} from './state.js';
+import {firstPiece} from './gloss.js';
 
 export const LIMIT = 20;
 
@@ -70,8 +71,8 @@ function keysOf(content) {
 const STOP = new Set(['a', 'an', 'the', 'of', 'to', 'in', 'on', 'at', 'and', 'or', 'is',
                       'be', 'as', 'by', 'for', 'with', 'it', 'its', 'from', 'that', 'this']);
 
-// A meaning's first sense, without a leading "(noun)"-style tag
-const firstSense = g => (g || '').split(/[;,/]/)[0].trim().replace(/^\([^)]*\)\s*/, '').toLowerCase();
+// A meaning's first sense, without a leading "(noun)"-style tag (core/gloss.js)
+const firstSense = g => firstPiece(g).toLowerCase();
 
 // How well a result matches, best first: its reading as typed, its reading as
 // heard (a merger), its meaning's first sense exactly, a first sense that

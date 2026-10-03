@@ -15,13 +15,12 @@ import {glyphTile, progressOf, stateItemOf} from './glyph.js';
 import {treeLayout, soundLine} from '../core/tree.js';
 import {familiesOf} from '../core/family.js';
 import {stateOf} from './families.js';
+import {headSense, shortGloss} from '../core/gloss.js';
 
 const STATE_SAID = {known: 'known', learning: 'learning', ahead: 'not met yet'};
 
 // the item a tile stands for: glyph.js's one rule
 export const itemOfTile = stateItemOf;
-
-const firstSense = g => (g || '').split(/;\s*/)[0].trim();
 
 function jpOf(content, form) {
   const r = content.mainReading(form);
@@ -33,10 +32,12 @@ function jpOf(content, form) {
 function glossOf(content, form) {
   const r = content.mainReading(form);
   const c = content.char ? content.char(form) : null;
-  return firstSense((r && content.item(r).gloss) || content.partGloss(form) || (c && c.gloss) || '');
+  return (r && content.item(r).gloss) || content.partGloss(form) || (c && c.gloss) || '';
 }
 
-// tileOf(content, states, form) -> {form, jp, over, gloss, progress, state}
+// tileOf(content, states, form) -> {form, jp, over, gloss, sense, progress, state}
+//   gloss: the short gloss under a tile (core/gloss.js); sense: the whole
+//   first sense, for the header, which has the room (7.8 Phase 2)
 //   over: the jyutping above the tile, known or not: in the tree it shows
 //   the sound running through the parts (Mark, 7.7 3b), so it's the one
 //   place jyutping isn't taken off what the learner knows
@@ -44,7 +45,8 @@ export function tileOf(content, states, form) {
   const it = itemOfTile(content, form);
   const state = it ? stateOf(states[it.id]) : null;
   const jp = jpOf(content, form);
-  return {form, jp, over: jp, gloss: glossOf(content, form),
+  const full = glossOf(content, form);
+  return {form, jp, over: jp, gloss: shortGloss(full), sense: headSense(full),
           progress: it ? progressOf(states[it.id], it.kind) : null, state};
 }
 
@@ -91,7 +93,9 @@ export const KEY_BORDERS = [
 ];
 
 // the tree's geometry, in px: a column's width and a row's height
-const DX = 76, DY = 96, PAD = 12;
+// (DY: a two-line gloss under a tile is 95px tall, so rows keep the 13px
+// gap a one-line row had; 7.8 Phase 2)
+const DX = 76, DY = 108, PAD = 12;
 const SVG = 'http://www.w3.org/2000/svg';
 
 // renderTree(el, m, cb)   cb: onBack, onCrumb(i), onTree(form), onRef(form),
@@ -109,7 +113,7 @@ export function renderTree(el, m, cb) {
     glyphTile(m.form, kindOf(m.form), {size: 'lg', over: m.head.over, progress: m.head.progress,
                                        label: `${m.form}: open its card`, onTap: f => cb.onRef(f)}),
     h('div', {class: 'tree-head-text'},
-      h('h1', {id: 'tree-h', class: 'tree-gloss'}, m.head.gloss || han(m.form)),
+      h('h1', {id: 'tree-h', class: 'tree-gloss'}, m.head.sense || han(m.form)),
       h('p', {class: 'note'}, h('span', {class: 'mono'}, m.readings.join(' · ')),
         m.readings.length ? ' · ' : '', placeSaid(m)),
       m.written && h('p', {class: 'note'}, m.written.ordered ? 'Written: ' : 'Parts: ',

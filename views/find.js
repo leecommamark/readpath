@@ -6,7 +6,7 @@
 // types, so the box keeps its focus.
 
 import {h, han, clear, put} from './dom.js';
-import {shortGloss} from './reader.js';
+import {shortGloss} from '../core/gloss.js';
 import {glyphTile} from './glyph.js';
 
 const STATE = {known: 'known', learning: 'learning', ahead: 'ahead'};

@@ -32,6 +32,7 @@ import {soundId} from '../core/content.js';
 import {markInReader} from '../actions.js';
 import {canTestMe} from '../runner.js';
 import {glyphTile, progressOf} from './glyph.js';
+import {paversSwitch} from './parts.js';
 import {familiesOf, familyPlan, reviewLoad, MIN_MEMBERS, OWN_SIZE} from '../core/family.js';
 
 // the grouping is core/family.js's (the runner and the simulator use it too)
@@ -130,7 +131,7 @@ const plural = (n, one, many = `${one}s`) => `${n.toLocaleString('en-GB')} ${n =
 const STATE_SAID = {known: 'known', learning: 'learning', ahead: 'not met yet'};
 export const FAMILY_HINT = {
   mark: 'Tap a character you know to mark it known, or a known one if you’ve forgotten it.',
-  look: 'Tap a character for its card.',
+  look: 'Tap a character to see its tree.',     // its tree since 7.7 (said so 7.8)
 };
 
 // known / total, as a ring (the mock-up's): its own colours, so a test of
@@ -231,7 +232,7 @@ export function renderDone(el, cards, cb) {
   const list = h('div', {class: 'fam-host'});
   put(clear(el),
     h('div', {class: 'top'},
-      h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Path'),
+      h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Back'),
       h('span', {})),
     h('h1', {id: 'done-h'}, 'Done'),
     h('p', {class: 'note'}, cards.length
@@ -270,7 +271,7 @@ export function renderFamily(el, m, cb) {
   const tileOf = x => glyphTile(x.form, cb.kindOf ? cb.kindOf(x.form) : null, {
     size: 'md', over: x.jp || '', progress: x.progress,
     label: `${x.form}${x.jp ? ` ${x.jp}` : ''}: ${STATE_SAID[x.state]}; `
-      + (m.mode === 'look' ? 'open its card' : x.state === 'known' ? 'tap if you’ve forgotten it' : 'mark known'),
+      + (m.mode === 'look' ? 'open its tree' : x.state === 'known' ? 'tap if you’ve forgotten it' : 'mark known'),
     onTap: () => cb.onTap(x)});
   const modes = h('div', {class: 'modes', role: 'group', 'aria-label': 'Mode'},
     ...MODES.map(k => h('button', {
@@ -289,7 +290,7 @@ export function renderFamily(el, m, cb) {
       h('button', {type: 'button', class: 'btn', onclick: () => cb.onTestMe(m.part.id)}, 'Test me')));
   put(clear(el),
     h('div', {class: 'top'},
-      h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Path'),
+      h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Back'),
       h('span', {})),
     h('h1', {id: 'family-h'}, m.head ? `${m.head} family` : 'Characters on their own'),
     !m.head && h('p', {class: 'note'},
@@ -308,13 +309,16 @@ export function renderFamily(el, m, cb) {
 //
 // Every sound-part family, by the share of written text it covers (its
 // members' `value`, summed), highest first; or by the share still to
-// unlock (its members not yet known: Mark, Phase 0, P2); or in path order.
+// unlock (its members not yet known: Mark, Phase 0, P2); by its number of
+// members (Mark, 7.8 Phase 3 check), share of text breaking a tie; or in
+// path order.
 // Each row: the head, its members (known ones in jade), the share, "N/M
 // known" and a meter. A row opens the family's page (P6).
 
 export const SORTS = [
   {key: 'text', label: 'Most of text', note: 'Share of written text the whole family covers.'},
   {key: 'left', label: 'Most still to unlock', note: 'Share of written text in the members you don’t know yet.'},
+  {key: 'size', label: 'Largest', note: 'Families with the most characters first.'},
   {key: 'path', label: 'Path order', note: 'In the order the path reaches them.'},
 ];
 export const BROWSE_CHUNK = 40;
@@ -343,11 +347,12 @@ export function browseModel(content, states, sort = 'text') {
   });
   const by = {text: (a, b) => b.value - a.value || a.from - b.from,
               left: (a, b) => b.left - a.left || a.from - b.from,
+              size: (a, b) => b.total - a.total || b.value - a.value || a.from - b.from,
               path: (a, b) => a.from - b.from}[key];
   return {sort: key, rows: rows.sort(by)};
 }
 
-// renderBrowse(el, m, cb)   cb: onBack, onSort(key), onFamily(key), kindOf,
+// renderBrowse(el, m, cb)   cb: onSwitch(view) (the Pavers tab's switch), onSort(key), onFamily(key), kindOf,
 // shown (how many rows to draw), onMore
 export function renderBrowse(el, m, cb) {
   const sort = SORTS.find(x => x.key === m.sort);
@@ -367,14 +372,16 @@ export function renderBrowse(el, m, cb) {
       h('span', {class: 'browse-meter', 'aria-hidden': 'true'},
         h('span', {style: `width:${(100 * r.known / r.total).toFixed(1)}%`}))));
   put(clear(el),
-    h('div', {class: 'top'},
-      h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Path'),
-      h('span', {})),
-    h('h1', {id: 'browse-h'}, 'Browse families'),
+    h('div', {class: 'top'}),
+    h('h1', {id: 'browse-h'}, 'Pavers'),
+    paversSwitch('families', cb.onSwitch),
+    // a row opens the family; its tiles open trees (7.8)
+    h('p', {class: 'note'}, 'Open a family, then choose Look and tap a character to see its tree.'),
+    // a dropdown, not chips: four didn't fit a phone's line (Mark, 7.8)
+    h('label', {class: 'sort-by'}, 'Sort by ',
+      h('select', {class: 'sort-select', onchange: e => e.target.value !== m.sort && cb.onSort(e.target.value)},
+        ...SORTS.map(x => h('option', {value: x.key, selected: x.key === m.sort}, x.label)))),
     h('p', {class: 'note'}, sort.note),
-    h('div', {class: 'chips', role: 'group', 'aria-label': 'Sort'},
-      ...SORTS.map(x => h('button', {type: 'button', class: 'chip', 'aria-pressed': String(x.key === m.sort),
-                                     onclick: () => x.key !== m.sort && cb.onSort(x.key)}, x.label))),
     h('div', {class: 'browse-list'}, ...m.rows.slice(0, shown).map(row)),
     shown < m.rows.length && h('button', {type: 'button', class: 'btn quiet wide', onclick: cb.onMore},
       `Show more · ${plural(m.rows.length - shown, 'family', 'families')} to go`));

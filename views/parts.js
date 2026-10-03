@@ -1,6 +1,6 @@
 // parts.js — the Parts list (patch plan 6, Phase 5; DESIGN *Screens*: Path);
 // the Meaning parts list since patch plan 7.5 (the sound parts are Path's
-// families).
+// families); one side of the Pavers tab since 7.8, Browse families the other.
 //
 // Every part that is a study item, sound parts then meaning parts, in path
 // order. Each row: the glyph (its card), its sound or meaning, its state --
@@ -49,7 +49,7 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 function row(r, cb) {
   return h('li', {class: 'part-row'},
     glyphTile(r.form, cb.kindOf ? cb.kindOf(r.form) : null,
-              {size: 'md', progress: r.progress, label: `${r.form}: open its card`,
+              {size: 'md', progress: r.progress, label: `${r.form}: open its tree`,
                onTap: f => cb.onRef(f)}),
     h('div', {class: 'part-text'},
       h('p', {class: 'part-what'},
@@ -61,6 +61,18 @@ function row(r, cb) {
 }
 
 // renderParts(el, model, cb)   cb: onBack, onRef(form), onTestMe(id)
+// The Pavers tab's switch (brief 7.8 decided 2, P1): its two screens,
+// Sound families (Browse families) and Meaning parts. `view` is 'families'
+// or 'meaning'; onSwitch(view) shows the other.
+export const PAVERS_VIEWS = [{key: 'families', label: 'Sound families'}, {key: 'meaning', label: 'Meaning parts'}];
+export function paversSwitch(view, onSwitch) {
+  return h('div', {class: 'modes pavers-switch', role: 'group', 'aria-label': 'Show'},
+    ...PAVERS_VIEWS.map(v => h('button', {
+      type: 'button', class: `mode-btn${v.key === view ? ' on' : ''}`, 'aria-pressed': String(v.key === view),
+      onclick: () => v.key !== view && onSwitch(v.key)}, v.label)));
+}
+
+// renderParts(el, m, cb)   cb: onSwitch(view), onRef(form), kindOf, onTestMe(id)
 export function renderParts(el, m, cb) {
   const group = (kind, label, note) => h('section', {class: 'block'},
     h('div', {class: 'row'},
@@ -71,10 +83,10 @@ export function renderParts(el, m, cb) {
   // the sound parts are the families on Path now (patch plan 7.5): this
   // lists the meaning parts
   put(clear(el),
-    h('div', {class: 'top'},
-      h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Path'),
-      h('span', {})),
-    h('h1', {id: 'parts-h'}, 'Meaning parts'),
+    h('div', {class: 'top'}),
+    h('h1', {id: 'parts-h'}, 'Pavers'),
+    paversSwitch('meaning', cb.onSwitch),
+    h('p', {class: 'note'}, 'Tap a part to see its tree.'),
     h('p', {class: 'note'},
       'Each comes on the path just before the characters that need it. Once you’ve met it and '
       + 'passed its test, those characters unlock. Knowing characters doesn’t mark their parts known: '

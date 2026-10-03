@@ -241,7 +241,7 @@ mark.rb { background: none; color: inherit;
 .words { display: flex; flex-direction: column; gap: var(--s2); margin-top: var(--s2); }
 .links { display: flex; flex-wrap: wrap; gap: 0 var(--s4); align-items: center; }
 .tip { color: var(--accent); margin-top: calc(-1 * var(--s2)); }
-.top-left { display: flex; align-items: center; gap: var(--s2); }
+.top-right { display: flex; align-items: center; gap: var(--s2); }
 .link.back-btn { text-decoration: none; color: var(--ink); font-size: var(--t-body); }
 .link.back-btn:disabled { color: var(--rule); cursor: default; }
 .foot-report { padding-top: var(--s1); }
@@ -582,9 +582,12 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .tree-node.is-here::before { content: ""; position: absolute; inset: 4px 2px; border-radius: 12px;
                              background: var(--known-soft); }
 .tree-node > * { position: relative; }
+/* two lines at most (7.8): core/gloss.js cuts a gloss to fit them, and the
+   clamp is the backstop */
 .tree-tile-gloss { font-size: var(--t-xs); line-height: 1.2; color: var(--muted); max-width: 100%;
-                   padding: 0 2px; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis;
-                   white-space: nowrap; }
+                   padding: 0 2px; box-sizing: border-box; overflow: hidden; text-align: center;
+                   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+                   line-clamp: 2; overflow-wrap: break-word; }
 .tree-more { position: absolute; min-height: 36px; border: 1px dashed var(--muted); border-radius: 99px;
              background: var(--surface); color: var(--accent); font: inherit; font-size: var(--t-xs);
              font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center;
@@ -634,10 +637,14 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .stone-meta { color: var(--muted); }
 
 /* ---- Browse families (7.7, Phase 4) */
-.chips { display: flex; flex-wrap: wrap; gap: var(--s1); }
-.chip { min-height: 36px; padding: 0 var(--s3); border-radius: 99px; border: 1px solid var(--rule);
-        background: var(--surface); color: var(--ink); font: inherit; font-size: var(--t-sm); cursor: pointer; }
-.chip[aria-pressed="true"] { background: var(--ink); color: var(--page); border-color: var(--ink); }
+/* the Pavers tab's switch, Sound families | Meaning parts (7.8) */
+.pavers-switch { align-self: flex-start; margin: 0 0 var(--s2); }
+/* Browse families' sort: a native select, so a phone shows its own picker
+   (16px, or iOS zooms the page on focus) */
+.sort-by { display: flex; align-items: center; gap: var(--s2); color: var(--muted); font-size: var(--t-sm); }
+.sort-select { font: inherit; font-size: var(--t-body); color: var(--ink); min-height: var(--tap);
+               padding: 0 var(--s3); border: 1px solid var(--rule); border-radius: var(--r);
+               background: var(--surface); }
 .browse-list { display: flex; flex-direction: column; margin-top: var(--s2); }
 .browse-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--s3); align-items: center;
               width: 100%; border: 0; border-bottom: 1px solid var(--rule); background: none; margin: 0;

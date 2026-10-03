@@ -67,11 +67,13 @@ export function resultModel(content, states, record, today) {
 // ---- drawing
 
 function top(label, cb) {
+  // no Back in a check: its label and ✕ on the right (brief 7.8 decided 1)
   return h('div', {class: 'top session-top'},
-    h('div', {class: 'top-left'},
-      h('button', {type: 'button', class: 'icon-btn', 'aria-label': 'Leave the check',
-                   onclick: cb.onExit}, '✕')),
-    h('span', {class: 'count mono'}, label));
+    h('span', {}),
+    h('div', {class: 'top-right'},
+      h('span', {class: 'count mono'}, label),
+      h('button', {type: 'button', class: 'icon-btn close-btn', 'aria-label': 'Leave the check',
+                   onclick: cb.onExit}, '✕')));
 }
 
 // renderQuestion(el, model, cb)   cb: onExit, onAnswer(ok)

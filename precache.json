@@ -1,5 +1,5 @@
 {
- "build": "dc45a4afd5d265a8",
+ "build": "ef4be33e4e5e1f8f",
  "files": [
   "actions.js",
   "app.css",
@@ -27,6 +27,7 @@
   "core/coverage.js",
   "core/family.js",
   "core/focus.js",
+  "core/gloss.js",
   "core/import.js",
   "core/lines.js",
   "core/normalize.js",

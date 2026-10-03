@@ -23,16 +23,13 @@ import {coverage} from '../core/coverage.js';
 import {tokensOf} from '../core/lines.js';
 import {sectionsOf, entryLine, entryIndex} from '../core/sections.js';
 import {glyphTile} from './glyph.js';
+import {shortGloss as cutGloss} from '../core/gloss.js';
 
 const GLOSS_SHOWN = 18;                    // characters of a gloss under a word
 
-// A gloss cut to its first sense, short enough to sit under a word, without
-// a leading part-of-speech tag ("(noun) citizen" -> "citizen"): the panel
-// shows the whole meaning.
-export function shortGloss(g) {
-  const first = (g || '').split(/[;/]/)[0].trim().replace(/^\([^)]*\)\s*/, '');
-  return first.length > GLOSS_SHOWN ? `${first.slice(0, GLOSS_SHOWN - 1).trim()}…` : first;
-}
+// A gloss under a word: core/gloss.js's one rule, cut to fit under a word;
+// the panel shows the whole meaning.
+const shortGloss = g => cutGloss(g, GLOSS_SHOWN);
 
 // A word's meaning: the dictionary's for a word of 2+ characters; for one
 // character, its main reading's (the content's curated gloss), else the
@@ -201,7 +198,7 @@ export function renderReader(el, m, cb) {
 
   put(clear(el),
     h('div', {class: 'top'},
-      h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Texts'),
+      h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Back'),
       h('span', {})),
     h('h1', {id: 'reader-h', class: 'reader-title'}, han(m.title)),
     h('div', {class: 'reader-meta'},

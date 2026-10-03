@@ -19,14 +19,15 @@ export function showSession(el, content, run, cb) {
                             onclick: () => { if (run.undo()) next(); }}, '‹ Back');
   put(clear(el),
     h('div', {class: 'top session-top'},
-      h('div', {class: 'top-left'},
-        h('button', {type: 'button', class: 'icon-btn', 'aria-label': 'Leave the session',
-                     onclick: () => cb.onExit()}, '✕'),
-        back),
+      back,
       // a family session names its family (7.5, Phase 4b)
       run.family && h('span', {class: 'session-title'},
         run.family.head ? `${run.family.head} family` : 'On their own'),
-      count),
+      // ✕ top right, as on the card and the word panel (brief 7.8 decided 1)
+      h('div', {class: 'top-right'},
+        count,
+        h('button', {type: 'button', class: 'icon-btn close-btn', 'aria-label': 'Leave the session',
+                     onclick: () => cb.onExit()}, '✕'))),
     h('div', {class: 'bar'}, fill),
     card);
 
