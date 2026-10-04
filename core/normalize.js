@@ -23,6 +23,14 @@ import {CJK_RUN_SOURCE} from './segment.js';
 const MAX_PHRASE = 6;                      // longest key in the phrase table
 const CJK = new RegExp(`^${CJK_RUN_SOURCE}$`, 'u');
 
+// CJK compatibility ideographs (U+F900-FAFF, U+2F800-2FA1F): a pasted 說
+// U+F96F matches nothing in the content, so each takes its unified form
+// first (NFC, which maps every one of them to a single code point, so the
+// length still holds; patch plan 7.11)
+export const COMPAT_RE = /[\uF900-\uFAFF\u{2F800}-\u{2FA1F}]/u;
+const COMPAT_ALL = new RegExp(COMPAT_RE.source, 'gu');
+export const unifyCompat = s => s.replace(COMPAT_ALL, c => c.normalize('NFC'));
+
 // OpenCC's s2t over the whole text, as far as the shipped tables reproduce
 // it: greedy longest phrase first, else the character map. Same length as
 // the input's code points (the build refuses a length-changing phrase).
@@ -67,7 +75,8 @@ export function normalizeText(text, content) {
   const rd = c => (content.char(c) || {}).rd || 0;
   const isSimp = c => c in V.s2t;
 
-  const src = Array.from(text);
+  const given = Array.from(text);
+  const src = given.map(c => (COMPAT_RE.test(c) ? c.normalize('NFC') : c));
   const whole = s2tWhole(src, V);
   const subs = new Map();                  // src+dst -> {src, dst, count}
   let nSimp = 0, nTrad = 0;
@@ -78,18 +87,15 @@ export function normalizeText(text, content) {
     const forced = V.force && V.force[a];
     if (forced) {
       b = forced;
-      const e = subs.get(a + b);
-      if (e) e.count++;
-      else subs.set(a + b, {src: a, dst: b, count: 1});
     } else if (rd(a) < 2) {
       let cand = V.vmap[a] || whole[i];
       if (V.vmap[cand]) cand = V.vmap[cand];   // s2t may give a TW form (說 -> 説)
-      if (cand !== a && rd(cand) > rd(a)) {
-        b = cand;
-        const e = subs.get(a + b);
-        if (e) e.count++;
-        else subs.set(a + b, {src: a, dst: b, count: 1});
-      }
+      if (cand !== a && rd(cand) > rd(a)) b = cand;
+    }
+    if (b !== given[i]) {                      // as given, compatibility form included
+      const e = subs.get(given[i] + b);
+      if (e) e.count++;
+      else subs.set(given[i] + b, {src: given[i], dst: b, count: 1});
     }
     if (CJK.test(a)) {
       if (b !== a && isSimp(a)) nSimp++;

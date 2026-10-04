@@ -17,7 +17,7 @@
 //   section   where the Reader was left; asWritten, its toggle (view state:
 //             nothing about learning is stored per text, design rule 2)
 
-import {normalizeText} from './normalize.js';
+import {normalizeText, COMPAT_RE} from './normalize.js';
 import {CJK_RUN_SOURCE} from './segment.js';
 
 export const MAX_TEXT_CHARS = 20000;       // songpath's limit, UTF-16 units
@@ -123,6 +123,18 @@ export function makeText(raw, {title = '', texts, content, day}) {
                 section: 0, asWritten: false};
   if (n.text !== n.srcText) text.src = n.srcText;
   return {text};
+}
+
+// A saved text holding CJK compatibility ideographs (imported before patch
+// plan 7.11, when they passed through as no lookup's key): each takes the
+// form an import gives it now (說 U+F96F -> 説), and nothing else in the body
+// moves. The length holds, so the lines and the Reader's place do too; the
+// text as written is kept as `src`. null when there is nothing to change.
+export function unifySaved(t, content) {
+  if (!COMPAT_RE.test(t.body)) return null;
+  const body = Array.from(t.body)
+    .map(c => (COMPAT_RE.test(c) ? normalizeText(c, content).text : c)).join('');
+  return {...t, body, src: t.src || t.body};
 }
 
 // The sample (starter/jamcaa.txt): its first line is the title, the rest the

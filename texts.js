@@ -17,7 +17,7 @@
 
 import {KEYS} from './store.js';
 import {makeText, splitTitled, setFocus, rename, remove, update, bodyOfFile,
-        autoTitle} from './core/import.js';
+        autoTitle, unifySaved} from './core/import.js';
 import {linesOf, tokensOf, wordsOf} from './core/lines.js';
 import {coverage} from './core/coverage.js';
 import {fnv1aCp} from './dict.js';
@@ -32,6 +32,12 @@ export function createLibrary({store, content, dict, cache = null, version}) {
   const find = id => list().find(t => t.id === id) || null;
   // LINES_FORMAT moves when the cached shape does (Phase 5: tokens gained `sent`)
   const keyOf = t => `${version}:${LINES_FORMAT}:${t.id}:${fnv1aCp(t.body)}`;
+  // once, on load: a text saved with compatibility ideographs (7.11)
+  {
+    const texts = list();
+    const fixed = texts.map(t => unifySaved(t, content) || t);
+    if (fixed.some((t, i) => t !== texts[i])) save(fixed);
+  }
 
   async function linesFor(t) {
     const k = keyOf(t);

@@ -47,6 +47,20 @@ export function formJp(content, form) {
 // a gloss straight from the `char` table (the off-path card): muted when it
 // is CC-CEDICT's or kDefinition's
 export const charGlossWeak = c => !!c && !!c.gloss && WEAK_SRC.has(c.src);
+
+// charGloss(content, form, charOf) -> {text, weak}: one character where the
+// Reader or Find shows it (brief 7.11 decided 2, one rule across the app):
+// its main reading's gloss, muted only when filed under another reading,
+// else the `char` table's, muted as on the off-path card. A word of 2+
+// characters is never muted: CC-CEDICT's word glosses show normally (Mark,
+// 7.11 Phase 0), and review/word_gloss_diff.tsv is their fix.
+export function charGloss(content, form, charOf = content.char) {
+  const r = content.mainReading(form);
+  const it = r && content.item(r);
+  if (it && it.gloss) return {text: it.gloss, weak: it.src === 'other_reading'};
+  const c = charOf ? charOf(form) : null;
+  return {text: (c && c.gloss) || '', weak: charGlossWeak(c)};
+}
 // an off-path character's readings: muted when only kCantonese gives them
 export const offReadingsWeak = o => !!o && o.jp_src === 'kcantonese';
 // a part's gloss on its card: kDefinition's is muted

@@ -28,6 +28,7 @@ import {kindOf, toneless} from './content.js';
 import {normalizeText} from './normalize.js';
 import {isKnown} from './state.js';
 import {firstPiece} from './gloss.js';
+import {charGlossWeak, partGlossWeak} from './provenance.js';
 
 export const LIMIT = 20;
 
@@ -124,11 +125,13 @@ export function search(content, query, {states = {}, offKnown = new Set()} = {})
     if (had) { had.score = Math.min(had.score, score); return; }
     const it = content.item(id);
     found.set(id, kindOf(id) === 'reading'
-      ? {group: 'path', id, char: it.char, jp: it.jp, gloss: it.gloss || '', primary: it.primary,
+      ? {group: 'path', id, char: it.char, jp: it.jp, gloss: it.gloss || '',
+         weak: it.src === 'other_reading', primary: it.primary,
          state: stateOf(states[id]), score, order, ...typedAs(content, from)}
       : {group: 'parts', id, form: it.form, kind: it.kind,
          reading: it.kind === 'sound' ? it.taughtReading || content.partReading(it.form) : null,
          gloss: it.kind === 'meaning' ? it.gloss : content.partGloss(it.form) || '',
+         weak: partGlossWeak(content, it.form),
          state: stateOf(states[id]), score, order});
   };
   const addOff = (ch, score, jp = null, order = 0, from = null) => {
@@ -138,7 +141,8 @@ export function search(content, query, {states = {}, offKnown = new Set()} = {})
     if (had) { had.score = Math.min(had.score, score); return; }
     const c = content.char(ch) || {};
     found.set(ch, {group: 'off', char: ch, jp: jp || o.readings[0], readings: o.readings,
-                   gloss: c.gloss || '', known: offKnown.has(ch), rd: c.rd || 0, score, order,
+                   gloss: c.gloss || '', weak: charGlossWeak(c), known: offKnown.has(ch),
+                   rd: c.rd || 0, score, order,
                    ...typedAs(content, from)});
   };
 

@@ -24,6 +24,7 @@ import {tokensOf} from '../core/lines.js';
 import {sectionsOf, entryLine, entryIndex} from '../core/sections.js';
 import {glyphTile} from './glyph.js';
 import {shortGloss as cutGloss} from '../core/gloss.js';
+import {charGloss, DICTIONARY_SENSE} from '../core/provenance.js';
 
 const GLOSS_SHOWN = 18;                    // characters of a gloss under a word
 
@@ -34,12 +35,12 @@ const shortGloss = g => cutGloss(g, GLOSS_SHOWN);
 // A word's meaning: the dictionary's for a word of 2+ characters; for one
 // character, its main reading's (the content's curated gloss), else the
 // dictionary's.
-export function glossOf(content, form, {wordOf, charOf}) {
-  const chars = Array.from(form);
-  if (chars.length > 1) return ((wordOf && wordOf(form)) || {}).gloss || '';
-  const main = content.mainReading(form);
-  return (main && content.item(main).gloss) || ((charOf && charOf(form)) || {}).gloss || '';
+// -> {text, weak}: muted as core/provenance.js says (brief 7.11).
+export function wordGloss(content, form, {wordOf, charOf}) {
+  if (Array.from(form).length > 1) return {text: ((wordOf && wordOf(form)) || {}).gloss || '', weak: false};
+  return charGloss(content, form, charOf || null);
 }
+export const glossOf = (content, form, opts) => wordGloss(content, form, opts).text;
 
 // One word part -> its characters as the Reader shows them:
 //   {char, shown, over, id, known, off, offKnown}
@@ -79,8 +80,8 @@ export function readerModel(content, states, text, lines, opts = {}) {
       if (p.type !== 'word') return {type: 'text', text: p.text};
       words.push({form: p.form, jp: p.jp});
       const key = `${at}:${from + k}`;
-      const gloss = glossOf(content, p.form, opts);
-      return {type: 'word', key, form: p.form, gloss, short: showAll ? shortGloss(gloss) : '',
+      const {text: gloss, weak} = wordGloss(content, p.form, opts);
+      return {type: 'word', key, form: p.form, gloss, weak, short: showAll ? shortGloss(gloss) : '',
               selected: key === selected, chars: wordChars(content, states, p, {asWritten, charOf: opts.charOf,
                                                     offKnown: opts.offKnown})};
     })};
@@ -101,7 +102,7 @@ export function selectedWord(m) {
   for (const l of m.lines) {
     for (const p of l.parts || []) {
       if (p.selected) {
-        return {key: p.key, form: p.form, gloss: p.gloss, line: l.line, chars: p.chars};
+        return {key: p.key, form: p.form, gloss: p.gloss, weak: !!p.weak, line: l.line, chars: p.chars};
       }
     }
   }
@@ -169,12 +170,12 @@ export function renderReader(el, m, cb) {
                 'aria-label': c.off ? `${c.char}: not on the path` : c.known
                   ? `${c.char}: known; tap if you’ve forgotten it` : `${c.char}: mark known`,
                 onclick: () => cb.onMark(c)}, charCell(c)))),
-              p.short && h('span', {class: 'rgloss', lang: 'en'}, p.short))
+              p.short && h('span', {class: `rgloss${p.weak ? ' weak' : ''}`, lang: 'en'}, p.short))
           : h('button', {type: 'button', class: `rword${p.selected ? ' sel' : ''}`,
                          'aria-label': `${p.form}: its meaning`,
                          onclick: () => cb.onWord(p.selected ? null : p.key)},
               h('span', {class: 'rw'}, ...p.chars.map(charCell)),
-              p.short && h('span', {class: 'rgloss', lang: 'en'}, p.short))))))));
+              p.short && h('span', {class: `rgloss${p.weak ? ' weak' : ''}`, lang: 'en'}, p.short))))))));
 
   const modes = h('div', {class: 'modes', role: 'group', 'aria-label': 'Mode'},
     ...['read', 'mark'].map(k => h('button', {
@@ -187,7 +188,8 @@ export function renderReader(el, m, cb) {
       h('span', {class: 'rw big'}, ...word.chars.map(charCell)),
       h('button', {type: 'button', class: 'icon-btn close-btn', 'aria-label': 'Close',
                    onclick: () => cb.onWord(null)}, '✕')),
-    h('p', {class: 'gloss-line'}, word.gloss || 'No meaning in the dictionary for this one.'),
+    h('p', {class: `gloss-line${word.weak ? ' weak' : ''}`}, word.gloss || 'No meaning in the dictionary for this one.'),
+    word.weak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE),
     h('div', {class: 'links'},
       ...word.chars.map(c => glyphTile(c.char, cb.kindOf ? cb.kindOf(c.char) : null,
                                         {size: 'sm', progress: cb.progressOf ? cb.progressOf(c.char) : null,
