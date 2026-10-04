@@ -87,7 +87,7 @@ export function renderQuestion(el, m, cb) {
       // away, and its kind would say nothing the check asks (7.5)
       glyphTile(m.char, null, {size: 'xl', cls: 'task-glyph'}),
       h('div', {class: 'choices jp-choices'},
-        ...m.choices.map(jp => h('button', {type: 'button', class: 'choice mono', lang: 'en',
+        ...m.choices.map(jp => h('button', {type: 'button', class: 'choice jp', lang: 'en',
                                             onclick: () => cb.onAnswer(jp === m.answer)}, jp))),
       h('button', {type: 'button', class: 'btn quiet wide idk', onclick: () => cb.onAnswer(false)},
         'I don’t know'),

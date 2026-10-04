@@ -131,7 +131,7 @@ export function shownOfReader(m, word = null) {
 
 function charCell(c) {
   return h('span', {class: `rc${c.off ? ' off' : ''}`},
-    h('span', {class: 'rt mono', lang: 'en'}, c.over || ' '),
+    h('span', {class: 'rt jp', lang: 'en'}, c.over || ' '),
     h('span', {class: 'rb'}, c.shown));
 }
 

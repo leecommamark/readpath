@@ -224,7 +224,7 @@ export function glyphTile(form, kind, {size = 'sm', onTap = null, locked = false
   const m = tileModel(kind, {size, progress});
   const tile = h('span', {class: m.classes.join(' '), lang: 'zh-Hant-HK'},
     ring(m.border, size), h('span', {class: 'gt-form'}, form));
-  const parts = [over != null && h('span', {class: `gt-over mono${overWeak ? ' weak' : ''}`, lang: 'en'},
+  const parts = [over != null && h('span', {class: `gt-over jp${overWeak ? ' weak' : ''}`, lang: 'en'},
                                    over || ' '), tile];
   const classes = [...m.outer, cls].filter(Boolean).join(' ');
   if (!onTap) return h('span', {class: classes}, ...parts);

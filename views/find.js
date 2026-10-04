@@ -5,7 +5,7 @@
 // opens its reference card. Only the results are drawn again as the learner
 // types, so the box keeps its focus.
 
-import {h, han, clear, put} from './dom.js';
+import {h, han, clear, put, jpSpan} from './dom.js';
 import {shortGloss} from '../core/gloss.js';
 import {glyphTile} from './glyph.js';
 
@@ -29,7 +29,7 @@ function row(form, jp, gloss, tag, tagClass, onRef, note = null, id = null, kind
     h('button', {type: 'button', class: 'find-row', onclick: () => onRef(form, id)},
       glyphTile(form, kindOf ? kindOf(form) : null, {size: 'sm', progress: progressOf ? progressOf(form) : null}),
       h('span', {class: 'find-text'},
-        jp && h('span', {class: 'mono'}, jp),
+        jp && jpSpan(jp),
         gloss && h('span', {class: `sm${weak ? ' weak' : ''}`}, ` ${shortGloss(gloss)}`),
         via && h('span', {class: 'sm note find-typed'}, ...viaSaid(via)),
         note && h('span', {class: 'sm note find-typed'}, note)),

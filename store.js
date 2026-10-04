@@ -10,7 +10,7 @@
 // What is stored is plain JSON under these keys:
 //
 //   readpath.states    {item id: item_state}   (core/state.js makes them)
-//   readpath.settings  {new_per_day, ...}      overrides of the defaults
+//   readpath.settings  {new_per_day, jp, ...}  overrides of the defaults (jp.js)
 //   readpath.reports   [report]                content reports (Phase 5)
 //   readpath.meta      {seed, exported}        the session seed; last export day
 //   readpath.today     {day, missed, practised} today's misses and practice

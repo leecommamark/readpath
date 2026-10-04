@@ -18,7 +18,7 @@
 //             part) and Tell apart (a member of a family, from its meaning)
 //   standin   a part test with nothing to ask (no member left): passed
 
-import {h, han, clear, put, rubyWord} from './dom.js';
+import {h, han, clear, put, rubyWord, jpSpan} from './dom.js';
 import {cardWords, word as wordEntry, builtFrom, relationText, overOf, meaningWording} from './facts.js';
 import {kindOf} from '../core/content.js';
 import {readingChoices, characterChoices, meaningChoices,
@@ -268,7 +268,7 @@ function wordLines(ws) {
 // "the english gloss and reading appeared in the same line").
 function readingBlock(jp, gloss, cls = '') {
   return h('div', {class: `reading-block ${cls}`.trim()},
-    jp && h('p', {class: 'mono big-jp'}, jp),
+    jp && h('p', {class: 'jp big-jp'}, jp),
     gloss && h('p', {class: 'gloss-line'}, gloss));
 }
 
@@ -286,7 +286,9 @@ const tileKind = (cb, ch) => (cb.kindOf ? cb.kindOf(ch) : null);
 function builtLine(built, cb) {
   if (!built || !built.length) return null;
   const parts = built.map(b => h('span', {class: 'part'}, glyphButton(b.part, cb, 'sm'),
-    h('span', {class: 'muted'}, b.note ? `${b.note} (${b.role})` : `(${b.role})`)));
+    h('span', {class: 'muted'},
+        // a sound part's note is its reading, a meaning part's its gloss
+        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${b.role})`] : `(${b.role})`)));
   const joined = [];
   parts.forEach((p, i) => { if (i) joined.push(h('span', {class: 'built-plus'}, '+')); joined.push(p); });
   // where the sound part's reading is no clue, members that carry the sound
@@ -316,7 +318,7 @@ function sentencePrompt(s) {
       ? h('span', {class: 'rtext'}, p.text)
       : h('span', {class: 'rword'},
           h('span', {class: 'rw'}, ...p.chars.map(c => h('span', {class: `rc${c.off ? ' off' : ''}`},
-            h('span', {class: 'rt mono', lang: 'en'}, c.over || '\u00a0'),
+            h('span', {class: 'rt jp', lang: 'en'}, c.over || '\u00a0'),
             c.mark ? h('mark', {class: 'rb'}, c.shown) : h('span', {class: 'rb'}, c.shown)))))))));
 }
 
@@ -342,7 +344,7 @@ function revealBlock(m, ok, cb, given) {
   // leads with the character; tell apart's lines carry the meanings, its
   // word comes after them.
   const answerLine = () => h('p', {class: 'answer-line'}, glyphButton(r.glyph, cb, 'md'),
-                             ' ', h('span', {class: 'mono'}, r.jp));
+                             ' ', jpSpan(r.jp));
   if (m.kind === 'question' && m.task === 'tell_apart') {
     main = answerLine();
   } else if (m.kind === 'question' && m.task === 'meaning') {
@@ -356,11 +358,11 @@ function revealBlock(m, ok, cb, given) {
   // first (Mark, step 6 iPhone check; patch plan 6.5, CO-049)
   const head = r.head && h('p', {class: 'mark-head'}, 'They all have ',
     glyphButton(r.head.char, cb, 'sm'),
-    r.head.jp ? h('span', {class: 'mono'}, ` ${r.head.jp}`) : '');
+    r.head.jp ? [' ', jpSpan(r.head.jp)] : '');
   const marks = r.marks && h('div', {class: 'marks mark-lines'}, head,
     ...[...r.marks].sort((a, b) => (b.char === r.glyph) - (a.char === r.glyph))
       .map(k => h('p', {class: `mark-line${k.char === r.glyph ? ' is-answer' : ''}`},
-        han(k.char), k.jp ? h('span', {class: 'mono'}, ` ${k.jp}`) : '',
+        han(k.char), k.jp ? [' ', jpSpan(k.jp)] : '',
         k.meaning ? ` ${k.meaning}` : '', ' · ',
         han(k.part || '', {class: 'muted'}), k.gloss ? ` ${k.gloss}` : '')));
   const pattern = r.pattern && h('p', {class: 'note'}, r.pattern);
@@ -399,8 +401,8 @@ export function renderTask(el, m, cb) {
               : readingBlock(r.jp, r.gloss, 'center'),
       m.partNote && h('p', {class: 'note center'}, m.partNote),
       m.standsFor && h('p', {class: 'note center'}, 'It stands for ', han(m.standsFor)),
-      m.pattern && h('p', {class: 'note center'},
-        `Its main reading is ${m.pattern.main}; ${r.jp} is ${m.pattern.relation}.`),
+      m.pattern && h('p', {class: 'note center'}, 'Its main reading is ', jpSpan(m.pattern.main), '; ',
+        jpSpan(r.jp), ` is ${m.pattern.relation}.`),
       ...(m.facts || []).map(f => h('p', {class: 'note center'}, f)),
       wordLines(r.words),
       builtLine(m.built, cb),
@@ -411,7 +413,9 @@ export function renderTask(el, m, cb) {
   // guess and question: the prompt, the choices, then the feedback
   const prompt = [m.from
     ? h('p', {class: 'lead'}, m.from.met === false ? '' : 'You know ', han(m.from.part, {class: 'lead-part'}),
-        m.from.met === false ? ` is read ${m.from.note}. ` : ` ${m.from.note}. `,
+        // a sound part's note is its reading, a meaning part's its gloss
+        m.from.met === false ? ' is read ' : ' ',
+        m.from.kind === 'sound' ? jpSpan(m.from.note) : m.from.note, '. ',
         m.from.verb || (m.from.kind === 'sound' ? 'Guess:' : 'Which meaning fits?'))
     : h('p', {class: 'lead'}, m.lead)];
   // The reference card would give the answer away, so the glyph opens it only
@@ -428,14 +432,14 @@ export function renderTask(el, m, cb) {
         hint.textContent = m.hint;
       }}, 'Show the meaning'));
     prompt.push(hint);
-  } else if (m.hint) prompt.push(h('p', {class: 'hint'}, m.hint));
+  } else if (m.hint) prompt.push(h('p', {class: 'hint jp', lang: 'en'}, m.hint));
   const grid = h('div', {class: `choices ${m.choices[0].type}-choices`});
   const idk = m.kind === 'question'
     ? h('button', {type: 'button', class: 'btn quiet wide idk', onclick: () => pick(null)},
         'I don’t know')
     : null;
   const buttons = m.choices.map(c => h('button', {
-    type: 'button', class: `choice ${c.type === 'han' ? 'glyph' : c.type === 'jp' ? 'mono' : ''}`,
+    type: 'button', class: `choice ${c.type === 'han' ? 'glyph' : c.type === 'jp' ? 'jp' : ''}`,
     lang: c.type === 'han' ? 'zh-Hant-HK' : 'en', onclick: () => pick(c.value)}, c.label));
   grid.append(...buttons);
   const foot = h('div', {class: 'foot'});

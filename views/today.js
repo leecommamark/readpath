@@ -75,11 +75,27 @@ export function placementOffered({placement = null, meta = {}, firstRun = false}
   return !firstRun && !placement && !meta.placementOffer;
 }
 
+// The gear before Settings, drawn here (no icon set): a dashed ring is its
+// eight teeth, a ring inside them its body.
+const SVG = 'http://www.w3.org/2000/svg';
+function gear() {
+  const el = (tag, attrs) => {
+    const e = document.createElementNS(SVG, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+    return e;
+  };
+  const svg = el('svg', {class: 'gear', viewBox: '0 0 24 24', 'aria-hidden': 'true'});
+  svg.append(el('circle', {cx: 12, cy: 12, r: 8.5, fill: 'none', stroke: 'currentColor',
+                           'stroke-width': 3.5, 'stroke-dasharray': (2 * Math.PI * 8.5 / 16).toFixed(3)}),
+             el('circle', {cx: 12, cy: 12, r: 6, fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2}));
+  return svg;
+}
+
 // renderToday(el, model, {date, onStart, onExport, onImport, onRef, trouble,
 //                         version, loadedMs, unsent, practiceCount, onPractice,
 //                         onKeepGoing, onRead(textId),
 //                         build, update, onUpdate, install, onInstall, exportDue,
-//                         onFeedback, onAbout, placementOffer, onCheck, onNotNow})
+//                         onFeedback, onAbout, onSettings, placementOffer, onCheck, onNotNow})
 //   update: a new build is waiting ("Update ready · Reload", patch plan 7B);
 //   install: 'ios' (the Add to Home Screen steps) | 'prompt' (the browser's
 //   Install) | null; exportDue: pwa.js's exportReminder(), {days, never}
@@ -172,8 +188,12 @@ export function renderToday(el, m, opts) {
     // Send feedback, and About and licences (patch plan 7B, Phase 3)
     opts.onFeedback && h('div', {class: 'btns', style: 'margin-top:var(--s2)'},
       h('button', {type: 'button', class: 'btn quiet', onclick: opts.onFeedback}, 'Send feedback')),
-    opts.onAbout && h('button', {type: 'button', class: 'link', onclick: opts.onAbout},
-      'About and licences'),
+    // Settings, then About and licences, on one row (brief 7.12 decided 4)
+    (opts.onSettings || opts.onAbout) && h('div', {class: 'links settings-links'},
+      opts.onSettings && h('button', {type: 'button', class: 'link', onclick: opts.onSettings},
+        gear(), 'Settings'),
+      opts.onAbout && h('button', {type: 'button', class: 'link', onclick: opts.onAbout},
+        'About and licences')),
     opts.unsent > 0 && h('p', {class: 'note unsent'},
       `${plural(opts.unsent, 'report')} ${opts.unsent === 1 ? 'goes' : 'go'} out with your next export.`),
     opts.version && h('p', {class: 'sm', style: 'margin:var(--s2) 0 0'},

@@ -6,7 +6,7 @@
 // character; "You are here", a short trail of path items on a rail (the
 // last few met, Next, then what's ahead); then a row each for Done, the
 // placement check (Mark, 7.7 Phase 0: a row now) and Send feedback. Browse
-// families and Meaning parts are the Pavers tab (brief 7.8 decided 2).
+// families and Meaning parts are the Steps tab (Pavers, brief 7.8 decided 2; Steps since 7.12).
 // Every tile and stone here opens the character's tree.
 //
 // Where you are: known characters (main reading in Maintain), known parts,
@@ -16,7 +16,7 @@
 //
 // pathModel() is pure (a test reads it without a DOM); renderPath() draws it.
 
-import {h, clear, put} from './dom.js';
+import {h, clear, put, jpSpan} from './dom.js';
 import {isKnown} from '../core/state.js';
 import {familyCards, stateOf} from './families.js';
 import {glyphTile, progressOf} from './glyph.js';
@@ -185,7 +185,7 @@ function trailBlock(t, cb) {
         st.next && h('span', {class: 'tag accent'}, 'Next'),
         st.tag && h('span', {class: 'tag'}, st.tag),
         h('span', {class: `stone-gloss${st.weak ? ' weak' : ''}`}, st.gloss || '—')),
-      h('span', {class: 'stone-meta sm'}, h('span', {class: 'mono'}, st.jp), st.jp ? ' · ' : '',
+      h('span', {class: 'stone-meta sm'}, jpSpan(st.jp), st.jp ? ' · ' : '',
         `#${n0(st.rank)}`, st.state !== 'ahead' ? ` · ${STATE_SAID[st.state]}` : '')));
   return h('section', {class: 'block trail-block'},
     h('span', {class: 'label'}, 'You are here'),
@@ -195,7 +195,7 @@ function trailBlock(t, cb) {
 }
 
 // the rows: Done, the placement check and Send feedback (7.7 decided 1;
-// Browse families and Meaning parts moved to the Pavers tab in 7.8)
+// Browse families and Meaning parts moved to the Pavers (now Steps) tab in 7.8)
 function rowsBlock(m, cb) {
   const row = (title, sub, onclick) => h('button', {type: 'button', class: 'jump', onclick},
     h('span', {class: 'jump-text'}, h('b', {}, title), h('span', {class: 'sm'}, sub)),

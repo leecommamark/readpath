@@ -13,7 +13,7 @@
 //
 // refModel() is pure; renderRef() draws it into the overlay.
 
-import {h, han, clear, put, rubyWord} from './dom.js';
+import {h, han, clear, put, rubyWord, jpSpan} from './dom.js';
 import {builtFrom, relationText, word as wordEntry, overOf, overChar, meaningWording,
         cardWords, WORDS_SHOWN} from './facts.js';
 import {isKnown, MAINTAIN} from '../core/state.js';
@@ -264,7 +264,9 @@ function builtSection(built, cb) {
     ...built.flatMap((b, i) => [i ? h('span', {class: 'built-plus'}, '+') : '',
       // a part and its note wrap together, never apart (7.5)
       h('span', {class: 'part'}, charBtn(b.part, cb),
-        h('span', {class: 'muted'}, b.note ? `${b.note} (${b.role})` : `(${b.role})`))])),
+        h('span', {class: 'muted'},
+        // a sound part's note is its reading, a meaning part's its gloss
+        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${b.role})`] : `(${b.role})`))])),
     like && h('p', {class: 'ref-row like-line'}, h('span', {class: 'sm'}, 'Sounds like '),
       ...like.cousins.map(x => rubyBtn(x, cb))));
 }
@@ -279,7 +281,7 @@ function roleSection(r, cb) {
   return section(r.kind === 'sound' ? `Sound part · ${r.status}` : `Meaning part · ${r.status}`,
     r.wording && r.wording.lead && h('p', {class: 'note part-lead'}, r.wording.lead),
     h('p', {class: `answer-line${r.wording && r.wording.quiet ? ' muted' : ''}${!r.reading && r.glossWeak ? ' weak' : ''}`},
-      r.reading ? h('span', {class: 'mono big-jp'}, r.reading) : (r.wording ? r.wording.meaning : r.gloss)),
+      r.reading ? h('span', {class: 'jp big-jp'}, r.reading) : (r.wording ? r.wording.meaning : r.gloss)),
     !r.reading && r.glossWeak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE),
     r.wording && r.wording.note && h('p', {class: 'note'}, r.wording.note),
     r.standsFor && h('p', {class: 'note'}, 'It stands for ', han(r.standsFor)),
@@ -304,7 +306,7 @@ export function renderRef(el, m, cb) {
           '‹ ', han(cb.backTo))
       : h('span'),
     m.status ? h('span', {class: `tag ${m.known ? 'accent' : 'learn'}`},
-                 m.statusReading ? `${m.statusReading} · ${m.status}` : m.status) : h('span'),
+                 m.statusReading ? [jpSpan(m.statusReading), ` · ${m.status}`] : m.status) : h('span'),
     h('button', {type: 'button', class: 'icon-btn close-btn', 'aria-label': 'Close',
                  onclick: cb.onClose}, '✕'));
   const body = [head, glyphTile(m.glyph, kindOf(cb, m.glyph),
@@ -313,7 +315,7 @@ export function renderRef(el, m, cb) {
   if (m.kind === 'char') {
     body.push(h('div', {class: 'ref-readings'},
       ...m.readings.map(r => h('div', {class: 'reading-block center'},
-        h('p', {class: 'mono big-jp'}, r.jp),
+        h('p', {class: 'jp big-jp'}, r.jp),
         r.gloss && h('p', {class: 'gloss-line'}, r.gloss),
         !r.main && h('p', {class: 'sm'}, `${r.relation}; ${r.status}`)))));
     body.push(simplifiedLine(m));
@@ -335,16 +337,16 @@ export function renderRef(el, m, cb) {
     body.push(h('section', {class: 'block'}, h('div', {class: 'btns'},
       // they act on the main reading: say which, where there's more than one
       m.canMarkKnown && h('button', {type: 'button', class: 'btn', onclick: cb.onMarkKnown},
-        m.readings.length > 1 ? `Mark ${m.readings.find(r => r.main).jp} known` : 'Mark known'),
+        m.readings.length > 1 ? ['Mark ', jpSpan(m.readings.find(r => r.main).jp), ' known'] : 'Mark known'),
       m.canForget && h('button', {type: 'button', class: 'btn', onclick: cb.onForgot},
-        m.readings.length > 1 ? `I forgot ${m.readings.find(r => r.main).jp}` : 'I forgot this'))));
+        m.readings.length > 1 ? ['I forgot ', jpSpan(m.readings.find(r => r.main).jp)] : 'I forgot this'))));
   } else if (m.kind === 'part') {
     for (const r of m.roles) body.push(roleSection(r, cb));
     body.push(glyphKey());
   } else if (m.kind === 'offpath') {
     body.push(h('div', {class: 'ref-readings'},
       h('div', {class: 'reading-block center'},
-        h('p', {class: `mono big-jp${m.readingsWeak ? ' weak' : ''}`}, m.readings.join(' · ')),
+        h('p', {class: `jp big-jp${m.readingsWeak ? ' weak' : ''}`}, m.readings.join(' · ')),
         m.gloss && h('p', {class: `gloss-line${m.glossWeak ? ' weak' : ''}`}, m.gloss),
         m.gloss && m.glossWeak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE))));
     body.push(h('p', {class: 'note center'}, 'Not on the learning path: it’s never taught or quizzed.'));

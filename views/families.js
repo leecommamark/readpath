@@ -28,13 +28,13 @@
 //
 // Everything here but the drawing is pure, so a test reads it without a DOM.
 
-import {h, clear, put} from './dom.js';
+import {h, clear, put, jpSpan} from './dom.js';
 import {isKnown} from '../core/state.js';
 import {soundId} from '../core/content.js';
 import {markInReader} from '../actions.js';
 import {canTestMe} from '../runner.js';
 import {glyphTile, progressOf} from './glyph.js';
-import {paversSwitch} from './parts.js';
+import {stepsSwitch} from './parts.js';
 import {familiesOf, familyPlan, reviewLoad, MIN_MEMBERS, OWN_SIZE} from '../core/family.js';
 
 // the grouping is core/family.js's (the runner and the simulator use it too)
@@ -185,7 +185,7 @@ export function familyCard(c, cb) {
       : h('span', {class: 'fam-own', 'aria-hidden': 'true'}, String(c.total)),
     h('span', {class: 'fam-text'},
       h('span', {class: 'fam-title'}, h('b', {}, titleOf(c)),
-        c.reading && h('span', {class: 'mono'}, ` · ${c.reading}`)),
+        c.reading && [' · ', jpSpan(c.reading)]),
       h('span', {class: 'fam-sub'}, ...sub)),
     ring(c.known, c.total));
 }
@@ -284,7 +284,7 @@ export function renderFamily(el, m, cb) {
       glyphTile(m.head, headKind(cb, m.head),
                 {size: 'xl', progress: m.part ? m.part.progress : null, onTap: f => cb.onRef(f)}),
       h('div', {class: 'fam-head-text'},
-        m.reading && h('p', {class: 'mono big-jp'}, m.reading),
+        m.reading && h('p', {class: 'jp big-jp'}, m.reading),
         h('p', {class: 'note'}, `${permille(m.value)}‰ of text`),
         m.part && h('p', {class: 'note'},
           `Sound part · unlocks ${plural(m.part.unlocks, 'character')} · ${STATE_SAID[m.part.state]}`))),
@@ -354,7 +354,7 @@ export function browseModel(content, states, sort = 'text') {
   return {sort: key, rows: rows.sort(by)};
 }
 
-// renderBrowse(el, m, cb)   cb: onSwitch(view) (the Pavers tab's switch), onSort(key), onFamily(key), kindOf,
+// renderBrowse(el, m, cb)   cb: onSwitch(view) (the Steps tab's switch), onSort(key), onFamily(key), kindOf,
 // shown (how many rows to draw), onMore
 export function renderBrowse(el, m, cb) {
   const sort = SORTS.find(x => x.key === m.sort);
@@ -375,8 +375,8 @@ export function renderBrowse(el, m, cb) {
         h('span', {style: `width:${(100 * r.known / r.total).toFixed(1)}%`}))));
   put(clear(el),
     h('div', {class: 'top'}),
-    h('h1', {id: 'browse-h'}, 'Pavers'),
-    paversSwitch('families', cb.onSwitch),
+    h('h1', {id: 'browse-h'}, 'Steps'),
+    stepsSwitch('families', cb.onSwitch),
     // a row opens the family; its tiles open trees (7.8)
     h('p', {class: 'note'}, 'Open a family and tap a character to see its tree.'),
     // a dropdown, not chips: four didn't fit a phone's line (Mark, 7.8)

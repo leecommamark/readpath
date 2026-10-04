@@ -10,7 +10,7 @@
 // tap on any tile re-centres the tree there, and the breadcrumb goes back.
 // Under it, the key and Learn this family next (the family study session).
 
-import {h, han, put, clear} from './dom.js';
+import {h, han, put, clear, jpSpan} from './dom.js';
 import {glyphTile, progressOf, stateItemOf} from './glyph.js';
 import {treeLayout, soundLine} from '../core/tree.js';
 import {familiesOf} from '../core/family.js';
@@ -111,14 +111,14 @@ export function renderTree(el, m, cb) {
     h('div', {class: 'tree-head-text'},
       h('h1', {id: 'tree-h', class: `tree-gloss${m.head.weak ? ' weak' : ''}`}, m.head.sense || han(m.form)),
       m.head.weak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE),
-      h('p', {class: 'note'}, h('span', {class: 'mono'}, m.readings.join(' · ')),
+      h('p', {class: 'note'}, jpSpan(m.readings.join(' · ')),
         m.readings.length ? ' · ' : '', placeSaid(m)),
       // an order the IDS didn't give isn't claimed as written order (7.10)
       m.written && h('p', {class: 'note'}, m.written.ordered ? 'Written: ' : 'Parts (order not known): ',
         han(m.written.parts.join(' · '))),
       m.soundLine && h('p', {class: 'note tree-soundline'}, 'Sound line: ',
         ...m.soundLine.flatMap((s, i) => [i ? h('span', {class: 'tree-arrow', 'aria-hidden': 'true'}, ' ← ') : '',
-                                           han(s.form), s.jp ? h('span', {class: 'mono'}, ` ${s.jp}`) : ''])))));
+                                           han(s.form), s.jp ? [' ', jpSpan(s.jp)] : ''])))));
 
   // ---- the tree: columns of tiles, the lines in one SVG behind them
   const {columns, edges, more} = m.layout;

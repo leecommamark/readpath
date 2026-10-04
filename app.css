@@ -16,6 +16,14 @@
  * lang="zh-Hant-HK" picks HK glyph forms where no named face exists. Phone
  * first: ~390px, every tap target at least --tap, nothing scrolls sideways
  * at 360px.
+ *
+ * Jyutping (brief 7.12): every element whose text is jyutping, and only
+ * jyutping, is `.jp`, set in --jp. With <html data-jp="marks"> (the
+ * default; Settings can turn it off) that is Jyutping Clear, which draws the
+ * tone digit as a mark on the vowel: the text keeps its digits, so search,
+ * copy and export do too. It is never put on an input, or on an element
+ * that mixes jyutping with other text (the font would hide a digit there
+ * too: covid19). Without marks, --jp is the monospace jyutping had before.
  */
 
 @font-face {
@@ -32,6 +40,14 @@
                  U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
                  U+2212, U+2215, U+FEFF, U+FFFD;
 }
+@font-face {
+  font-family: "Jyutping Clear"; font-style: normal; font-weight: 400;
+  font-display: swap; src: url(fonts/JyutpingClear-Regular.woff2) format("woff2");
+}
+@font-face {
+  font-family: "Jyutping Clear"; font-style: normal; font-weight: 700;
+  font-display: swap; src: url(fonts/JyutpingClear-Bold.woff2) format("woff2");
+}
 
 :root {
   --page: #F3F5F2; --surface: #FFFFFF; --tint: #E3EAE5; --rule: #D8DED9;
@@ -45,6 +61,7 @@
   --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --head: "Bricolage Grotesque", var(--body);
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --jp: var(--mono);
   --han: "PingFang HK", "PingFang TC", "Noto Sans HK", "Noto Sans CJK HK",
          "HanaMinA", "HanaMinB", "Hanazono Mincho A", "Hanazono Mincho B",
          "BabelStone Han", sans-serif;
@@ -52,6 +69,7 @@
   /* one type scale; the glyph sizes are the glyph component's (Phase 3) */
   --t-xs: 11px; --t-sm: 13px; --t-body: 16px; --t-lg: 19px; --t-h: 24px; --t-xl: 30px;
   --t-han: 22px;
+  --t-jp-over: 14px;   /* jyutping over a character, tones as marks (7.12) */
   /* the glyph tiles (views/glyph.js), by size */
   --g-sm: 24px; --g-md: 34px; --g-lg: 46px; --g-xl: 68px; --g-xxl: 84px;
 
@@ -83,6 +101,8 @@
   --bad: #E8877B; --bad-soft: #3A2220;
   color-scheme: dark;
 }
+/* tone marks (brief 7.12): after the theme blocks, which don't touch --jp */
+:root[data-jp="marks"] { --jp: "Jyutping Clear", var(--body); }
 
 /* ---- base */
 *, *::before, *::after { box-sizing: border-box; }
@@ -96,6 +116,7 @@ button { font: inherit; color: inherit; }
 .han { font-family: var(--han); }
 .glyph { font-family: var(--han); font-weight: 500; line-height: 1; }
 .mono { font-family: var(--mono); }
+.jp { font-family: var(--jp); }
 .muted { color: var(--muted); }
 /* weak data, shown for what it is (patch plan 7.10): a dictionary's sense
    where no taught gloss is, a reading only Unihan gives */
@@ -210,8 +231,7 @@ mark.rb { background: none; color: inherit;
 .prompt-word { display: flex; justify-content: center; margin: var(--s4) 0 var(--s2); }
 .prompt-word mark { background: none; color: inherit;
                     text-decoration: underline 3px var(--accent); text-underline-offset: 10px; }
-.hint { text-align: center; color: var(--muted); margin: 0; font-family: var(--mono); }
-.hint:not(.mono) { font-family: var(--body); }
+.hint { text-align: center; color: var(--muted); margin: 0; }
 
 .choices { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); margin-top: var(--s4); }
 .choice {
@@ -219,7 +239,6 @@ mark.rb { background: none; color: inherit;
   border: 1px solid var(--rule); background: var(--surface); color: var(--ink);
   font-size: var(--t-lg); cursor: pointer; overflow-wrap: anywhere;
 }
-.choice.mono { font-family: var(--mono); }
 .han-choices .choice { font-size: 34px; min-height: 72px; }
 .text-choices .choice { font-size: var(--t-body); line-height: 1.3; }
 .choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -547,6 +566,13 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 /* its jyutping, above the tile (brief 7.6 decided 5) */
 .gt-over { font-size: var(--t-xs); line-height: 1.2; color: var(--muted); min-height: 1.2em; }
 .gs-lg .gt-over, .gs-xl .gt-over { font-size: var(--t-sm); }
+/* with tone marks on, the jyutping over characters and tiles is 14px: 11px
+   was too small to read a mark (7.12 P3, measured at 360 and 390px: a mark
+   clears the character and the line above as before, and line-height stays
+   1.2, since 1.7 lifted the Reader's punctuation off its baseline; Mark).
+   After .rw.big .rt, which this must beat at the same specificity. */
+:root[data-jp="marks"] .rt, :root[data-jp="marks"] .rw.big .rt,
+:root[data-jp="marks"] .gt-over { font-size: var(--t-jp-over); }
 /* where they stand */
 .task-glyph { align-self: center; margin: var(--s2) 0; }
 .ref-head-glyph { align-self: center; margin: var(--s3) 0 var(--s2); }
@@ -640,8 +666,8 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .stone-meta { color: var(--muted); }
 
 /* ---- Browse families (7.7, Phase 4) */
-/* the Pavers tab's switch, Sound families | Meaning parts (7.8) */
-.pavers-switch { align-self: flex-start; margin: 0 0 var(--s2); }
+/* the Steps tab's switch, Sound families | Meaning parts (7.8, as Pavers) */
+.steps-switch { align-self: flex-start; margin: 0 0 var(--s2); }
 /* Browse families' sort: a native select, so a phone shows its own picker
    (16px, or iOS zooms the page on focus) */
 .sort-by { display: flex; align-items: center; gap: var(--s2); color: var(--muted); font-size: var(--t-sm); }
@@ -664,3 +690,43 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .browse-meter { display: block; width: 64px; height: 4px; margin-top: 4px; border-radius: 99px;
                 background: var(--tint); overflow: hidden; }
 .browse-meter span { display: block; height: 100%; background: var(--known); }
+
+/* ---- Settings (brief 7.12): tones as marks or numbers */
+/* a sample drawn as its option would draw it, whatever is chosen */
+.jp.jp-marks { font-family: "Jyutping Clear", var(--body); }
+.jp.jp-numbers { font-family: var(--mono); }
+.opt-group { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.opt-group legend { padding: 0; }
+.opt-group .note { margin: 0; }
+.opt-cards { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+.opt-card {
+  display: flex; flex-direction: column; align-items: center; gap: var(--s1);
+  min-height: var(--tap); padding: var(--s3) var(--s2); cursor: pointer; position: relative;
+  border: 1px solid var(--rule); border-radius: var(--r); background: var(--surface);
+}
+.opt-card.on { border-color: var(--accent); background: var(--accent-soft); }
+.opt-card:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* the card is the control: the radio stays for keyboards and screen readers */
+.opt-card input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.opt-name { font-weight: 600; }
+.opt-card.on .opt-name { color: var(--accent); }
+.opt-sample { font-size: var(--t-xl); line-height: 1.3; }
+.opt-preview, .mark-key {
+  display: flex; flex-direction: column; gap: var(--s2); margin-top: var(--s2);
+  padding: var(--s3); border: 1px solid var(--rule); border-radius: var(--r); background: var(--surface);
+}
+.preview-line { margin: 0; }
+.mark-key .note { margin: 0; }
+.key-rows { display: grid; grid-template-columns: auto 1fr; gap: var(--s1) var(--s3); margin: 0;
+            align-items: baseline; }
+.key-rows dt { display: flex; gap: var(--s2); align-items: baseline; font-size: var(--t-lg); }
+.key-rows dd { margin: 0; color: var(--muted); }
+.key-n { font-size: var(--t-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+.settings-links .gear { width: 18px; height: 18px; margin-right: 6px; vertical-align: -3px; }
+/* first run's "Tones show as marks" (7.12 decided 6): si1 .. si6, each over its number */
+.marks-card .note { margin: 0; }
+.tone-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--s1);
+            padding: var(--s3) var(--s2); border-radius: var(--r); background: var(--surface);
+            border: 1px solid var(--rule); }
+.tone-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.tone-cell .jp { font-size: var(--t-lg); line-height: 1.4; }

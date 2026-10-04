@@ -1,6 +1,7 @@
 // parts.js — the Parts list (patch plan 6, Phase 5; DESIGN *Screens*: Path);
 // the Meaning parts list since patch plan 7.5 (the sound parts are Path's
-// families); one side of the Pavers tab since 7.8, Browse families the other.
+// families); one side of the Steps tab (Pavers in 7.8, Steps since 7.12),
+// Browse families the other.
 //
 // Every part that is a study item, sound parts then meaning parts, in path
 // order. Each row: the glyph (its card), its sound or meaning, its state --
@@ -10,7 +11,7 @@
 //
 // partsModel() is pure; renderParts() draws.
 
-import {h, clear, put} from './dom.js';
+import {h, clear, put, jpSpan} from './dom.js';
 import {isKnown} from '../core/state.js';
 import {canTestMe} from '../runner.js';
 import {glyphTile, progressOf} from './glyph.js';
@@ -53,23 +54,33 @@ function row(r, cb) {
                onTap: f => cb.onRef(f)}),
     h('div', {class: 'part-text'},
       h('p', {class: 'part-what'},
-        r.reading ? h('span', {class: 'mono'}, r.reading) : (r.gloss || ''),
+        r.reading ? jpSpan(r.reading) : (r.gloss || ''),
         h('span', {class: 'sm'}, ` · unlocks ${plural(r.unlocks, 'character')}`)),
       h('p', {class: `tag ${r.state === 'known' ? 'accent' : r.state === 'ahead' ? '' : 'learn'}`},
         PART_STATE[r.state])),
     r.canTest && h('button', {type: 'button', class: 'link', onclick: () => cb.onTestMe(r.id)}, 'Test me'));
 }
 
-// renderParts(el, model, cb)   cb: onBack, onRef(form), onTestMe(id)
-// The Pavers tab's switch (brief 7.8 decided 2, P1): its two screens,
-// Sound families (Browse families) and Meaning parts. `view` is 'families'
-// or 'meaning'; onSwitch(view) shows the other.
-export const PAVERS_VIEWS = [{key: 'families', label: 'Sound families'}, {key: 'meaning', label: 'Meaning parts'}];
-export function paversSwitch(view, onSwitch) {
-  return h('div', {class: 'modes pavers-switch', role: 'group', 'aria-label': 'Show'},
-    ...PAVERS_VIEWS.map(v => h('button', {
+// The Steps tab's switch (Pavers, brief 7.8 decided 2, P1; Steps since
+// 7.12): its two screens, Sound families (Browse families) and Meaning parts.
+// `view` is 'families' or 'meaning'; onSwitch(view) shows the other.
+export const STEPS_VIEWS = [{key: 'families', label: 'Sound families'}, {key: 'meaning', label: 'Meaning parts'}];
+export function stepsSwitch(view, onSwitch) {
+  return h('div', {class: 'modes steps-switch', role: 'group', 'aria-label': 'Show'},
+    ...STEPS_VIEWS.map(v => h('button', {
       type: 'button', class: `mode-btn${v.key === view ? ' on' : ''}`, 'aria-pressed': String(v.key === view),
       onclick: () => v.key !== view && onSwitch(v.key)}, v.label)));
+}
+
+// Each side's URL, and the side a URL names: #steps and #steps/meaning, and
+// the older names that land there (#pavers, #pavers/meaning since 7.12;
+// #path/families, #path/parts since 7.8). -> 'families' | 'meaning' | null
+export const stepsUrl = view => (view === 'meaning' ? '#steps/meaning' : '#steps');
+export function stepsView(hash) {
+  const at = hash.replace(/^#/, '');
+  if (['steps/meaning', 'pavers/meaning', 'path/parts'].includes(at)) return 'meaning';
+  if (['steps', 'pavers', 'path/families'].includes(at)) return 'families';
+  return null;
 }
 
 // renderParts(el, m, cb)   cb: onSwitch(view), onRef(form), kindOf, onTestMe(id)
@@ -84,8 +95,8 @@ export function renderParts(el, m, cb) {
   // lists the meaning parts
   put(clear(el),
     h('div', {class: 'top'}),
-    h('h1', {id: 'parts-h'}, 'Pavers'),
-    paversSwitch('meaning', cb.onSwitch),
+    h('h1', {id: 'parts-h'}, 'Steps'),
+    stepsSwitch('meaning', cb.onSwitch),
     h('p', {class: 'note'}, 'Tap a part to see its tree.'),
     h('p', {class: 'note'},
       'Each comes on the path just before the characters that need it. Once you’ve met it and '

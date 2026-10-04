@@ -18,7 +18,9 @@ import {deviceSeed, learnerFrom, composeRng, startRun, startPractice,
         practiceItems, startTestMe, startFamily} from './runner.js';
 import {todayModel, renderToday, placementOffered} from './views/today.js';
 import {libraryModel, previewOf, renderTexts} from './views/texts.js';
-import {h, clear} from './views/dom.js';
+import {h, clear, jpSpan} from './views/dom.js';
+import {applyJp, setJp} from './jp.js';
+import {settingsModel, renderSettings} from './views/settings.js';
 import {bodyOfFile, autoTitle} from './core/import.js';
 import {readerModel, renderReader, shownOfReader} from './views/reader.js';
 import {wordsOf} from './core/lines.js';
@@ -39,7 +41,7 @@ import {startCheck, answer as answerCheck} from './core/placement.js';
 import {makeRng} from './core/rng.js';
 import {search} from './core/search.js';
 import {renderFind} from './views/find.js';
-import {partsModel, renderParts} from './views/parts.js';
+import {partsModel, renderParts, stepsView, stepsUrl} from './views/parts.js';
 import {treeModel, renderTree} from './views/tree.js';
 import {makeReport, addReport, unsent} from './reports.js';
 import {createOverlays, createCardStack} from './overlay.js';
@@ -54,11 +56,11 @@ import {renderFeedback} from './views/feedback.js';
 import {renderAbout} from './views/about.js';
 
 const $ = id => document.getElementById(id);
-// Pavers (brief 7.8 decided 2) is a tab with two screens of its own,
-// Browse families (#pavers) and Meaning parts (#pavers/meaning)
-const TABS = ['today', 'texts', 'path', 'pavers'];
+// Steps (Pavers in brief 7.8 decided 2; Steps since 7.12) is a tab with two
+// screens of its own, Browse families (#steps) and Meaning parts (#steps/meaning)
+const TABS = ['today', 'texts', 'path', 'steps'];
 const SCREENS = ['today', 'texts', 'path', 'reader', 'family', 'check', 'parts', 'done', 'browse', 'tree',
-                 'session', 'welcome', 'about'];
+                 'session', 'welcome', 'about', 'settings'];
 
 const app = {
   store: null, content: null, version: null, today: null,
@@ -68,7 +70,7 @@ const app = {
   family: null,             // {key, mode}: the family page open (patch plan 7.5)
   tree: null,               // {trail, expanded}: the tree open (patch plan 7.7)
   browse: {sort: 'text', shown: 0},  // Browse families' sort and rows drawn (7.7)
-  pavers: 'families',       // the Pavers tab's side: 'families' | 'meaning' (7.8)
+  steps: 'families',        // the Steps tab's side: 'families' | 'meaning' (7.8)
   fromTab: 'path',          // the tab a family page or a tree was opened from (7.8)
   check: null,              // {check, rng, record}: the placement check on
   pathQuery: '',            // Find a character's box, kept while the app is open
@@ -133,6 +135,7 @@ function showToday() {
     exportDue: exportReminder(app.store.load(KEYS.meta, {}), app.learner.states, app.today),
     onFeedback: openFeedback,
     onAbout: () => showAbout(),
+    onSettings: () => showSettings(),
     // the placement check's card (brief 7.8 decided 3)
     placementOffer: placementOffered({placement: app.store.load(KEYS.placement, null),
                                       meta: app.store.load(KEYS.meta, {}), firstRun: app.firstRun}),
@@ -188,8 +191,9 @@ window.addEventListener('popstate', () => {
 
 // The screen the URL names: #read/<text id> is the Reader,
 // #path/family/<key> a family's page (an old #path/block/<i> is Path),
-// #pavers/meaning the Meaning parts side of Pavers (the old #path/parts and
-// #path/families are Pavers since 7.8), else a tab.
+// #steps/meaning the Meaning parts side of Steps (parts.js stepsView: the
+// old #pavers, #pavers/meaning, #path/families and #path/parts land on
+// Steps, which replaces them with its own), else a tab.
 function route() {
   const hash = location.hash.slice(1);
   if (hash.startsWith('read/')) showReader(decodeURIComponent(hash.slice(5)), {push: false});
@@ -197,10 +201,10 @@ function route() {
   else if (hash.startsWith('char/')) showTree(decodeURIComponent(hash.slice(5)), {push: false});
   else if (/^path\/block\/\d+$/.test(hash)) showTab('path');
   else if (hash === 'path/check') startPlacement({push: false});
-  else if (hash === 'pavers/meaning' || hash === 'path/parts') showPavers('meaning');
-  else if (hash === 'pavers' || hash === 'path/families') showPavers('families');
+  else if (stepsView(hash)) showSteps(stepsView(hash));
   else if (hash === 'path/done') showDone({push: false});
   else if (hash === 'about') showAbout({push: false});
+  else if (hash === 'settings') showSettings({push: false});
   else showTab(hash);
 }
 
@@ -370,6 +374,21 @@ function openFeedback() {
   });
 }
 
+// ---- Settings (brief 7.12): reached from Your progress, Back as About's
+function showSettings({push = true} = {}) {
+  if (push) history.pushState({settings: true}, '', '#settings');
+  app.reader = null;
+  app.family = null;
+  showScreen('settings');
+  markTab('today');
+  const draw = () => renderSettings($('settings'), settingsModel(app.store.load(KEYS.settings, {})), {
+    onBack: () => (history.state && history.state.settings ? history.back() : showTab('today')),
+    onJp: mode => { setJp(document.documentElement, app.store, mode); draw(); },
+  });
+  draw();
+  window.scrollTo(0, 0);
+}
+
 async function showAbout({push = true} = {}) {
   if (push) history.pushState({about: true}, '', '#about');
   app.reader = null;
@@ -512,7 +531,7 @@ function drawReader() {
       drawReader();
       showToday();
       const jp = app.content.item(c.id).jp;
-      toast(done.did === 'known' ? `${c.char} ${jp} marked known.` : `${c.char} ${jp}: back to learning.`,
+      toast([`${c.char} `, jpSpan(jp), done.did === 'known' ? ' marked known.' : ': back to learning.'],
         {action: 'Undo', onAction: () => {
           const now = learnerFrom(app.store, app.library.learnerTexts());
           undoMark(now, done);
@@ -648,30 +667,31 @@ function showPath() {
   });
 }
 
-// ---- the Pavers tab (brief 7.8 decided 2): a switch between Browse
-// families (7.7, Phase 4: every family by share of text; a row opens the
-// family's page) and Meaning parts. Each side is the tab's own URL, so
-// reload and Back land on it; the switch replaces the entry, as a tab does.
+// ---- the Steps tab (Pavers, brief 7.8 decided 2; Steps since 7.12): a
+// switch between Browse families (7.7, Phase 4: every family by share of
+// text; a row opens the family's page) and Meaning parts. Each side is the
+// tab's own URL, so reload and Back land on it; the switch replaces the
+// entry, as a tab does, and so does an old name for it.
 
-function showPavers(view = app.pavers) {
-  app.pavers = view === 'meaning' ? 'meaning' : 'families';
-  app.fromTab = 'pavers';
+function showSteps(view = app.steps) {
+  app.steps = view === 'meaning' ? 'meaning' : 'families';
+  app.fromTab = 'steps';
   app.reader = null;
   app.family = null;
   app.tree = null;
   app.check = null;
-  const url = app.pavers === 'meaning' ? '#pavers/meaning' : '#pavers';
+  const url = stepsUrl(app.steps);
   if (location.hash !== url) history.replaceState(null, '', url);
-  showScreen(app.pavers === 'meaning' ? 'parts' : 'browse');
-  markTab('pavers');
-  if (app.pavers === 'meaning') drawParts(); else drawBrowse();
+  showScreen(app.steps === 'meaning' ? 'parts' : 'browse');
+  markTab('steps');
+  if (app.steps === 'meaning') drawParts(); else drawBrowse();
   window.scrollTo(0, 0);
 }
 
 function drawBrowse() {
   const b = app.browse;
   renderBrowse($('browse'), browseModel(app.content, app.store.load(KEYS.states, {}), b.sort), {
-    onSwitch: view => showPavers(view),
+    onSwitch: view => showSteps(view),
     onSort: key => { b.sort = key; b.shown = 0; drawBrowse(); },
     onFamily: key => showFamily(key),
     onMore: () => { b.shown = (b.shown || BROWSE_CHUNK) + BROWSE_CHUNK; drawBrowse(); },
@@ -702,11 +722,11 @@ function drawDone() {
   });
 }
 
-// ---- the Meaning parts list (patch plan 6, Phase 5; Pavers since 7.8) and Test me
+// ---- the Meaning parts list (patch plan 6, Phase 5; Pavers since 7.8, now Steps) and Test me
 
 function drawParts() {
   renderParts($('parts'), partsModel(app.content, app.store.load(KEYS.states, {})), {
-    onSwitch: view => showPavers(view),
+    onSwitch: view => showSteps(view),
     onRef: form => showTree(form),       // on Path's screens a tile opens its tree (7.7)
     kindOf,
     onTestMe: id => testMe(id),
@@ -873,7 +893,7 @@ function drawFamily() {
       app.store.save(KEYS.states, learner.states);
       statesChanged();
       const jp = app.content.item(done.id).jp;
-      toast(done.did === 'known' ? `${c.form} ${jp} marked known.` : `${c.form} ${jp}: back to learning.`,
+      toast([`${c.form} `, jpSpan(jp), done.did === 'known' ? ' marked known.' : ': back to learning.'],
         {action: 'Undo', onAction: () => {
           const now = learnerFrom(app.store, app.library.learnerTexts());
           undoMark(now, done);
@@ -971,7 +991,7 @@ function markTab(name) {
 
 function showTab(name) {
   if (!TABS.includes(name)) name = 'today';
-  if (name === 'pavers') return showPavers();
+  if (name === 'steps') return showSteps();
   app.fromTab = name;
   app.reader = null;
   app.family = null;
@@ -1048,6 +1068,8 @@ async function boot() {
     $('loading').textContent = `Read Path couldn’t start: ${e.message}.`;
     return;
   }
+  // tones as marks or numbers (7.12): before any jyutping is drawn
+  applyJp(document.documentElement, app.store);
   $('loading').hidden = true;
   app.applyUpdate = watchWorker({build: BUILD, onReady: updateReady});
   if (installContext(navigator, globalThis.matchMedia).standalone) {

@@ -6,6 +6,7 @@
 // way to carry on in Safari (Mark, 7B Phase 0).
 
 import {h, clear, put} from './dom.js';
+import {KEY} from './settings.js';
 
 export const NAME = 'Read Path · 一路睇';
 const LINES = [
@@ -13,6 +14,18 @@ const LINES = [
   'Common characters first, and the parts that give away their sound.',
   'A few minutes a day. Everything stays on this phone.',
 ];
+
+// Tones show as marks (brief 7.12 decided 6): the default, said once, with
+// si1 .. si6 each over its number. Settings has the way back to numbers.
+function marksCard() {
+  return h('section', {class: 'block marks-card', 'aria-labelledby': 'marks-h'},
+    h('h2', {id: 'marks-h'}, 'Tones show as marks'),
+    h('div', {class: 'tone-row'}, ...KEY.map(([s]) => h('span', {class: 'tone-cell'},
+      h('span', {class: 'jp jp-marks', lang: 'en'}, s), h('span', {class: 'key-n'}, s.slice(-1))))),
+    h('p', {class: 'note'}, 'Above is high, below is low, and the stroke follows the pitch. '
+      + 'Tone 3 has no mark. Prefer tone numbers (',
+      h('span', {class: 'jp jp-numbers', lang: 'en'}, 'si1'), ')? Change it in Settings.'));
+}
 
 // renderWelcome(el, {ios, standalone}, cb)   cb: onStart, onImport
 export function renderWelcome(el, ctx, cb) {
@@ -22,6 +35,7 @@ export function renderWelcome(el, ctx, cb) {
     h('h1', {id: 'welcome-h'}, NAME),
     h('section', {class: 'block first'},
       ...LINES.map(l => h('p', {class: 'lead-note'}, l))),
+    marksCard(),
     gate
       ? h('section', {class: 'block', 'aria-labelledby': 'install-h'},
           h('h2', {id: 'install-h'}, 'Add it to your home screen first'),

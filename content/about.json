@@ -104,6 +104,14 @@
      }
     },
     {
+     "credit": "Jyutping Clear, from Atkinson Hyperlegible Next, copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors (github.com/googlefonts/atkinson-hyperlegible-next); Jyutping tone marks copyright 2026 Mark Lee",
+     "licence": {
+      "name": "SIL OFL 1.1",
+      "href": "fonts/OFL-JyutpingClear.txt",
+      "notices": []
+     }
+    },
+    {
      "credit": "The icon's 睇 is drawn from Noto Serif HK, copyright 2017-2024 Adobe (github.com/notofonts/noto-cjk)",
      "licence": {
       "name": "SIL OFL 1.1",

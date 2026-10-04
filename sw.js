@@ -15,7 +15,7 @@
 // build_dist.py stamps BUILD; precache.json, beside this file, lists the
 // files to keep. Served from readpath/app/ (BUILD 'dev') it never registers.
 
-const BUILD = 'a00113de6998ade2';
+const BUILD = '6184d42b4d48c3f0';
 const PREFIX = 'rp-';
 const CACHE = PREFIX + BUILD;
 const SHARDS = /\/content\/dict\/(?!index\.json)[^/]+\.json$/;

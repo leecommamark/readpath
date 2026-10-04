@@ -29,13 +29,17 @@ function append(el, children) {
 export const han = (text, attrs = {}) =>
   h('span', {lang: 'zh-Hant-HK', ...attrs, class: `han ${attrs.class || ''}`.trim()}, text);
 
+// A span of jyutping, alone (brief 7.12): its tones drawn as marks when the
+// learner has them on (app.css .jp). Never wrap other text in it.
+export const jpSpan = text => h('span', {class: 'jp', lang: 'en'}, text);
+
 // Characters each over their jyutping line (views/facts.js overOf: blank
 // where the learner knows it). `mark` underlines one (a word question's
 // target).
 export function rubyWord(form, over, {cls = '', mark = -1} = {}) {
   return h('span', {class: `rw ${cls}`.trim(), lang: 'zh-Hant-HK'},
     ...[...form].map((c, i) => h('span', {class: 'rc'},
-      h('span', {class: 'rt mono', lang: 'en'}, (over && over[i]) || '\u00a0'),
+      h('span', {class: 'rt jp', lang: 'en'}, (over && over[i]) || '\u00a0'),
       i === mark ? h('mark', {class: 'rb'}, c) : h('span', {class: 'rb'}, c))));
 }
 
