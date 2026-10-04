@@ -128,3 +128,11 @@ export function overChar(content, states, ch) {
 export function wordsWithOver(content, states, id, n = 3) {
   return wordsFor(content, id, n).map(w => ({...w, over: overOf(content, states, w.form, w.jp)}));
 }
+
+// The words a reading item's card shows, and so every answer and Meet that
+// teaches it (patch plan 7.10, Mark 2026-10-03: "the literal exact same
+// example words as the card"): one list, picked once, by the export.
+export const WORDS_SHOWN = 4;
+export function cardWords(content, states, id) {
+  return wordsWithOver(content, states, id, WORDS_SHOWN);
+}

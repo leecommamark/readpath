@@ -65,6 +65,8 @@ export function loadContent(tables) {
     if (!it) throw new Error(`reading item not on the path: ${r.char} ${r.jp}`);
     Object.assign(it, {
       char: r.char, primary: !!r.primary, gloss: r.gloss,
+      // where the gloss comes from (patch plan 7.10): core/provenance.js
+      src: r.src || null,
       words: r.words || [],
       unlockAfter: r.unlock_after ? readingId(r.char, r.unlock_after) : null,
       relation: r.relation, base: r.base,
@@ -120,6 +122,10 @@ export function loadContent(tables) {
   // from" line (step 4 6b: 的's 勺 is no item, and had no reading shown)
   const partReading = new Map(T.sound_part.map(s => [s.part, s.taught_reading || s.head_reading]));
   const partGloss = new Map(T.meaning_part.map(m => [m.part, m.gloss]));
+  // where they come from (patch plan 7.10): a part gloss curated or Unihan's
+  // kDefinition, a taught part reading a dictionary's, Mark's or kCantonese's
+  const partGlossSrc = new Map(T.meaning_part.map(m => [m.part, m.src || null]));
+  const partReadingSrc = new Map(T.sound_part.map(s => [s.part, s.jp_src || null]));
   // how far a meaning part can be trusted, and Mark's note on it (CO-059)
   const partTrust = new Map(T.meaning_part.map(m => [m.part, {reliability: m.reliability || null,
                                                              note: m.note || null}]));
@@ -210,6 +216,8 @@ export function loadContent(tables) {
     componentRole: form => mainRole.get(form) || null,
     partReading: part => partReading.get(part) || null,
     partGloss: part => partGloss.get(part) || null,
+    partGlossSrc: part => partGlossSrc.get(part) || null,
+    partReadingSrc: part => partReadingSrc.get(part) || null,
     partTrust: part => partTrust.get(part) || {reliability: null, note: null},
     onePart,
     soundItemOf, meaningItemOf,

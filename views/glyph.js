@@ -217,12 +217,15 @@ function ring(border, size) {
 //             glyph
 //   progress  progressOf()'s result: the border's colour, and ahead's fade
 //   label     the aria-label; by default "清: open its reference card"
+//   overWeak  the jyutping over it is weak data, shown muted (7.10)
 export function glyphTile(form, kind, {size = 'sm', onTap = null, locked = false, over = null,
-                                       progress = null, label = null, cls = ''} = {}) {
+                                       progress = null, label = null, cls = '',
+                                       overWeak = false} = {}) {
   const m = tileModel(kind, {size, progress});
   const tile = h('span', {class: m.classes.join(' '), lang: 'zh-Hant-HK'},
     ring(m.border, size), h('span', {class: 'gt-form'}, form));
-  const parts = [over != null && h('span', {class: 'gt-over mono', lang: 'en'}, over || ' '), tile];
+  const parts = [over != null && h('span', {class: `gt-over mono${overWeak ? ' weak' : ''}`, lang: 'en'},
+                                   over || ' '), tile];
   const classes = [...m.outer, cls].filter(Boolean).join(' ');
   if (!onTap) return h('span', {class: classes}, ...parts);
   return h('button', {type: 'button', class: classes,

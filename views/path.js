@@ -21,6 +21,7 @@ import {isKnown} from '../core/state.js';
 import {familyCards, stateOf} from './families.js';
 import {glyphTile, progressOf} from './glyph.js';
 import {shortGloss} from '../core/gloss.js';
+import {partGlossWeak} from '../core/provenance.js';
 
 export {stateOf} from './families.js';
 
@@ -55,11 +56,21 @@ export const TRAIL_BEHIND = 4;
 export const TRAIL_AHEAD = 10;
 const KIND_SAID = {sound: 'Sound part', meaning: 'Meaning part'};
 
-// a sound part's own gloss: its character's, where it is one
-function glossOfForm(content, form) {
-  const r = content.mainReading(form);
-  const c = content.char ? content.char(form) : null;
-  return (r && content.item(r).gloss) || (c && c.gloss) || '';
+// a stone's gloss and whether it is weak data, shown muted (7.10,
+// core/provenance.js): an item's own, else its part gloss, else (a sound
+// part) its character's, where it is one: its main reading's, or the
+// dictionary's, which on a part's stone is always muted (Mark, 7.10 Phase 4)
+function stoneGloss(content, it) {
+  if (it.gloss) {
+    return {text: it.gloss, weak: it.kind === 'reading' ? it.src === 'other_reading'
+                                  : partGlossWeak(content, it.form)};
+  }
+  const pg = content.partGloss(it.form);
+  if (pg) return {text: pg, weak: partGlossWeak(content, it.form)};
+  const r = content.mainReading(it.form);
+  if (r && content.item(r).gloss) return {text: content.item(r).gloss, weak: false};
+  const c = content.char ? content.char(it.form) : null;
+  return {text: (c && c.gloss) || '', weak: !!(c && c.gloss)};
 }
 
 // one stone: the item, its tile's state, and what the row says
@@ -67,8 +78,9 @@ function stoneOf(content, states, id, next) {
   const it = content.item(id);
   const kind = it.kind === 'reading' ? 'reading' : it.kind;
   const s = states[id];
+  const g = stoneGloss(content, it);
   return {id, form: it.form, kind, rank: it.rank, jp: it.jp || content.partReading(it.form) || '',
-          gloss: shortGloss(it.gloss || content.partGloss(it.form) || glossOfForm(content, it.form)),
+          gloss: shortGloss(g.text), weak: g.weak,
           tag: KIND_SAID[kind] || null,
           state: stateOf(s), progress: progressOf(s, kind), next};
 }
@@ -172,7 +184,7 @@ function trailBlock(t, cb) {
       h('span', {class: 'stone-line'},
         st.next && h('span', {class: 'tag accent'}, 'Next'),
         st.tag && h('span', {class: 'tag'}, st.tag),
-        h('span', {class: 'stone-gloss'}, st.gloss || '—')),
+        h('span', {class: `stone-gloss${st.weak ? ' weak' : ''}`}, st.gloss || '—')),
       h('span', {class: 'stone-meta sm'}, h('span', {class: 'mono'}, st.jp), st.jp ? ' · ' : '',
         `#${n0(st.rank)}`, st.state !== 'ahead' ? ` · ${STATE_SAID[st.state]}` : '')));
   return h('section', {class: 'block trail-block'},

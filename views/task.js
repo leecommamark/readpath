@@ -19,7 +19,7 @@
 //   standin   a part test with nothing to ask (no member left): passed
 
 import {h, han, clear, put, rubyWord} from './dom.js';
-import {wordsWithOver, word as wordEntry, builtFrom, relationText, overOf, meaningWording} from './facts.js';
+import {cardWords, word as wordEntry, builtFrom, relationText, overOf, meaningWording} from './facts.js';
 import {kindOf} from '../core/content.js';
 import {readingChoices, characterChoices, meaningChoices,
         tellApartChoices} from '../core/choices.js';
@@ -67,11 +67,11 @@ function partCard(content, task, base) {
                    met: base.met !== false},
             choices: readingChoices(content, m.char, m.jp, base.rng, base.pool).map(reading),
             answer: m.jp,
-            // the meaning and one word with the reading, as the inferred
-            // Meet shows them, so the answer teaches without a tap (brief
-            // 7.9, Mark)
+            // the meaning and the card's words with the reading, as the
+            // inferred Meet shows them, so the answer teaches without a tap
+            // (brief 7.9; the card's words since 7.10)
             reveal: {glyph: m.char, jp: m.jp, gloss: m.gloss,
-                     words: wordsWithOver(content, base.states, task.target, 1),
+                     words: cardWords(content, base.states, task.target),
                      pattern: pat ? PATTERN_TEXT[pat.split(':')[1]] || null : null}};
   }
   if (task.task === 'tell_apart' && task.target) {
@@ -87,8 +87,8 @@ function partCard(content, task, base) {
             // reading and meaning, then its meaning part and what that part
             // means (CO-049; Mark, 2026-09-29: 清 cing1 clear · 氵 water)
             reveal: {glyph: t.answer, jp: a.jp,
-                     // and one word for the answer under them (brief 7.9)
-                     words: wordsWithOver(content, base.states, content.mainReading(t.answer), 1),
+                     // and the answer's card words under them (7.9, 7.10)
+                     words: cardWords(content, base.states, content.mainReading(t.answer)),
                      head: {char: task.target, jp: content.partReading(task.target)},
                      marks: t.choices.map(ch => ({char: ch, part: row(ch).meaning_part,
                                                   gloss: row(ch).part_gloss, jp: row(ch).reading,
@@ -119,10 +119,11 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
     return m;
   }
   const it = content.item(task.item);
-  const reveal = {glyph: it.char, jp: it.jp, gloss: it.gloss, words: wordsWithOver(content, states, task.item)};
+  const reveal = {glyph: it.char, jp: it.jp, gloss: it.gloss, words: cardWords(content, states, task.item)};
   // a question's answer teaches as a part test's does: the reading, its
-  // meaning and one word (brief 7.9, Mark: "all of the tests")
-  const asked = {...reveal, words: reveal.words.slice(0, 1)};
+  // meaning and the card's words (brief 7.9, Mark: "all of the tests"; the
+  // card's words, all of them, since 7.10)
+  const asked = reveal;
 
   if (task.task === 'meet') {
     const from = task.inferred_from;
@@ -195,11 +196,9 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
     .map((o, i) => (chars[i] === it.char ? null : o));
   const others = syl.filter((_, i) => chars[i] !== it.char);
   const choices = readingChoices(content, it.char, it.jp, rng, pool, others).map(reading);
-  // its word is the one just read: the answer shows it, with its meaning
-  const read = we ? [{...we, over: overOf(content, states, form, we.jp)}] : asked.words;
   return {...base, kind: 'question', lead: 'Read the marked character',
           word: {form, target, gloss: we && we.gloss, over},
-          choices, answer: it.jp, reveal: {...asked, words: read, answerLabel: it.jp}};
+          choices, answer: it.jp, reveal: {...asked, answerLabel: it.jp}};
 }
 
 // The sentence for a rung-5 task: the sentence's parts (a line, or its

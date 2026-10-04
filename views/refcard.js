@@ -14,14 +14,16 @@
 // refModel() is pure; renderRef() draws it into the overlay.
 
 import {h, han, clear, put, rubyWord} from './dom.js';
-import {builtFrom, relationText, word as wordEntry, overOf, overChar, meaningWording} from './facts.js';
+import {builtFrom, relationText, word as wordEntry, overOf, overChar, meaningWording,
+        cardWords, WORDS_SHOWN} from './facts.js';
 import {isKnown, MAINTAIN} from '../core/state.js';
 import {canMarkKnown, canForget, canKnowOff} from '../actions.js';
 import {canTestMe} from '../runner.js';
 import {wordChars} from './reader.js';
 import {glyphTile, glyphKey} from './glyph.js';
+import {charGlossWeak, offReadingsWeak, partGlossWeak, DICTIONARY_SENSE} from '../core/provenance.js';
 
-export const WORDS_SHOWN = 4;
+export {WORDS_SHOWN};
 export const MEMBERS_SHOWN = 16;
 export const IN_TEXTS = 3;
 const EXCERPT = 24;                        // characters of a line shown
@@ -136,6 +138,8 @@ function partRoles(content, states, form, {itemsOnly = false} = {}) {
     const known = ch => isKnown(states[content.mainReading(ch)]);
     members = [...members.filter(known), ...members.filter(ch => !known(ch))];
     roles.push({kind, id, reading, gloss, standsFor, status,
+                // a meaning from Unihan's kDefinition, shown muted (7.10)
+                glossWeak: kind === 'meaning' && !!gloss && partGlossWeak(content, form),
                 wording: kind === 'meaning' ? meaningWording(content, form, gloss) : null,
                 canTest: canTestMe(content, states, id),
                 members: members.slice(0, MEMBERS_SHOWN)
@@ -161,12 +165,7 @@ export function refModel(content, states, form, texts = [], opts = {}) {
               relation: r.primary ? null : relationText(r.relation),
               status: statusOf(content, states[id], id)};
     });
-    const words = [];
-    for (const f of m.words || []) {
-      const w = wordEntry(content, f, form, m.jp);
-      if (w) words.push({...w, over: overOf(content, states, w.form, w.jp)});
-      if (words.length >= WORDS_SHOWN) break;
-    }
+    const words = cardWords(content, states, main);
     return {kind: 'char', glyph: form, main, readings, gloss: m.gloss,
             built: builtFrom(content, form, states),
             looksLike: familyOf(content, form).map(ch => ({ch, over: overChar(content, states, ch)})),
@@ -197,7 +196,10 @@ export function refModel(content, states, form, texts = [], opts = {}) {
       words.push({form: f, jp: w.jp, gloss: w.gloss, over});
       if (words.length >= WORDS_SHOWN) break;
     }
-    return {kind: 'offpath', glyph: form, readings: o.readings, gloss: (content.char(form) || {}).gloss || '',
+    const c = content.char(form) || {};
+    return {kind: 'offpath', glyph: form, readings: o.readings, gloss: c.gloss || '',
+            // CC-CEDICT's sense, a reading only kCantonese gives: muted (7.10)
+            glossWeak: charGlossWeak(c), readingsWeak: offReadingsWeak(o),
             words, wordForms: o.words, built: builtFrom(content, form, states), inTexts, simplified,
             status: known ? 'you know this' : 'not on the path', known};
   }
@@ -276,8 +278,9 @@ function section(label, ...body) {
 function roleSection(r, cb) {
   return section(r.kind === 'sound' ? `Sound part · ${r.status}` : `Meaning part · ${r.status}`,
     r.wording && r.wording.lead && h('p', {class: 'note part-lead'}, r.wording.lead),
-    h('p', {class: `answer-line${r.wording && r.wording.quiet ? ' muted' : ''}`},
+    h('p', {class: `answer-line${r.wording && r.wording.quiet ? ' muted' : ''}${!r.reading && r.glossWeak ? ' weak' : ''}`},
       r.reading ? h('span', {class: 'mono big-jp'}, r.reading) : (r.wording ? r.wording.meaning : r.gloss)),
+    !r.reading && r.glossWeak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE),
     r.wording && r.wording.note && h('p', {class: 'note'}, r.wording.note),
     r.standsFor && h('p', {class: 'note'}, 'It stands for ', han(r.standsFor)),
     h('p', {class: 'ref-row'}, ...r.members.map(x => rubyBtn(x, cb)),
@@ -341,8 +344,9 @@ export function renderRef(el, m, cb) {
   } else if (m.kind === 'offpath') {
     body.push(h('div', {class: 'ref-readings'},
       h('div', {class: 'reading-block center'},
-        h('p', {class: 'mono big-jp'}, m.readings.join(' · ')),
-        m.gloss && h('p', {class: 'gloss-line'}, m.gloss))));
+        h('p', {class: `mono big-jp${m.readingsWeak ? ' weak' : ''}`}, m.readings.join(' · ')),
+        m.gloss && h('p', {class: `gloss-line${m.glossWeak ? ' weak' : ''}`}, m.gloss),
+        m.gloss && m.glossWeak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE))));
     body.push(h('p', {class: 'note center'}, 'Not on the learning path: it’s never taught or quizzed.'));
     body.push(simplifiedLine(m));
     if (m.built.length) {

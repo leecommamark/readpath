@@ -97,6 +97,9 @@ button { font: inherit; color: inherit; }
 .glyph { font-family: var(--han); font-weight: 500; line-height: 1; }
 .mono { font-family: var(--mono); }
 .muted { color: var(--muted); }
+/* weak data, shown for what it is (patch plan 7.10): a dictionary's sense
+   where no taught gloss is, a reading only Unihan gives */
+.weak { color: var(--muted); font-style: italic; }
 .sm { font-size: var(--t-sm); color: var(--muted); }
 
 /* ---- the shell: one column, screens above, tabs at the foot */

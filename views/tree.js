@@ -16,37 +16,32 @@ import {treeLayout, soundLine} from '../core/tree.js';
 import {familiesOf} from '../core/family.js';
 import {stateOf} from './families.js';
 import {headSense, shortGloss} from '../core/gloss.js';
+import {formGloss, formJp, DICTIONARY_SENSE} from '../core/provenance.js';
 
 const STATE_SAID = {known: 'known', learning: 'learning', ahead: 'not met yet'};
 
 // the item a tile stands for: glyph.js's one rule
 export const itemOfTile = stateItemOf;
 
-function jpOf(content, form) {
-  const r = content.mainReading(form);
-  if (r) return content.item(r).jp;
-  const c = content.char ? content.char(form) : null;
-  return content.partReading(form) || (c && c.jp) || '';
-}
+// main reading > part > dictionary, with whether it is weak data (7.10:
+// core/provenance.js; a muted gloss or reading, never a hidden one)
+const jpOf = (content, form) => formJp(content, form).text;
 
-function glossOf(content, form) {
-  const r = content.mainReading(form);
-  const c = content.char ? content.char(form) : null;
-  return (r && content.item(r).gloss) || content.partGloss(form) || (c && c.gloss) || '';
-}
-
-// tileOf(content, states, form) -> {form, jp, over, gloss, sense, progress, state}
+// tileOf(content, states, form) -> {form, jp, over, gloss, sense, weak,
+//                                   jpWeak, progress, state}
 //   gloss: the short gloss under a tile (core/gloss.js); sense: the whole
 //   first sense, for the header, which has the room (7.8 Phase 2)
 //   over: the jyutping above the tile, known or not: in the tree it shows
 //   the sound running through the parts (Mark, 7.7 3b), so it's the one
 //   place jyutping isn't taken off what the learner knows
+//   weak, jpWeak: the gloss or the reading is weak data, shown muted (7.10)
 export function tileOf(content, states, form) {
   const it = itemOfTile(content, form);
   const state = it ? stateOf(states[it.id]) : null;
-  const jp = jpOf(content, form);
-  const full = glossOf(content, form);
-  return {form, jp, over: jp, gloss: shortGloss(full), sense: headSense(full),
+  const jp = formJp(content, form);
+  const g = formGloss(content, form);
+  return {form, jp: jp.text, over: jp.text, gloss: shortGloss(g.text), sense: headSense(g.text),
+          weak: g.weak && !!g.text, jpWeak: jp.weak,
           progress: it ? progressOf(states[it.id], it.kind) : null, state};
 }
 
@@ -111,12 +106,15 @@ export function renderTree(el, m, cb) {
                        onclick: () => cb.onCrumb(i)}, f)]));
   const head = h('section', {class: 'block first'}, h('div', {class: 'tree-head'},
     glyphTile(m.form, kindOf(m.form), {size: 'lg', over: m.head.over, progress: m.head.progress,
+                                       overWeak: m.head.jpWeak,
                                        label: `${m.form}: open its card`, onTap: f => cb.onRef(f)}),
     h('div', {class: 'tree-head-text'},
-      h('h1', {id: 'tree-h', class: 'tree-gloss'}, m.head.sense || han(m.form)),
+      h('h1', {id: 'tree-h', class: `tree-gloss${m.head.weak ? ' weak' : ''}`}, m.head.sense || han(m.form)),
+      m.head.weak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE),
       h('p', {class: 'note'}, h('span', {class: 'mono'}, m.readings.join(' · ')),
         m.readings.length ? ' · ' : '', placeSaid(m)),
-      m.written && h('p', {class: 'note'}, m.written.ordered ? 'Written: ' : 'Parts: ',
+      // an order the IDS didn't give isn't claimed as written order (7.10)
+      m.written && h('p', {class: 'note'}, m.written.ordered ? 'Written: ' : 'Parts (order not known): ',
         han(m.written.parts.join(' · '))),
       m.soundLine && h('p', {class: 'note tree-soundline'}, 'Sound line: ',
         ...m.soundLine.flatMap((s, i) => [i ? h('span', {class: 'tree-arrow', 'aria-hidden': 'true'}, ' ← ') : '',
@@ -143,11 +141,11 @@ export function renderTree(el, m, cb) {
       const node = h('div', {class: `tree-node${t.form === m.form ? ' is-here' : ''}`,
                              style: `left:${xOf(i) - DX / 2}px;top:${yOf(t.row) - DY / 2}px;width:${DX}px;height:${DY}px`},
         glyphTile(t.form, kindOf(t.form), {
-          size: 'md', over: x.over, progress: x.progress,
+          size: 'md', over: x.over, progress: x.progress, overWeak: x.jpWeak,
           label: `${t.form}${x.jp ? ` ${x.jp}` : ''}${x.gloss ? `, ${x.gloss}` : ''}`
             + (t.form === m.form ? ': this tree' : ': its tree'),
           onTap: f => (f === m.form ? cb.onRef(f) : cb.onTree(f))}),
-        h('span', {class: 'tree-tile-gloss'}, x.gloss || ' '));
+        h('span', {class: `tree-tile-gloss${x.weak ? ' weak' : ''}`}, x.gloss || ' '));
       nodes.set(t.form, node);
       canvas.append(node);
     }

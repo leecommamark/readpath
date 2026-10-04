@@ -1,5 +1,5 @@
 {
- "build": "590df2c1d36bfb38",
+ "build": "82a5062f60420b57",
  "files": [
   "actions.js",
   "app.css",
@@ -32,6 +32,7 @@
   "core/lines.js",
   "core/normalize.js",
   "core/placement.js",
+  "core/provenance.js",
   "core/rng.js",
   "core/search.js",
   "core/sections.js",

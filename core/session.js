@@ -10,12 +10,14 @@
 // A Meet is met whatever `ok` says (a Meet is not a test, DESIGN); anything
 // else passes or misses. After a missed part test the session is recomposed
 // with the same rng, which drops the part's payoff (DESIGN *Today composer*
-// 6). Every state change goes through state.js's transition(), and the new
+// 6). So is a miss that takes a main reading out of Maintain while a Meet of
+// its secondary is still queued (patch plan 7.10: 好 hou2 missed, then hou3
+// met), which drops that Meet. Every state change goes through state.js's transition(), and the new
 // state is written into `learner.states` and returned, so the caller can
 // save exactly the item that changed.
 
 import {compose} from './today.js';
-import {transition} from './state.js';
+import {transition, isKnown} from './state.js';
 
 const MEETS = new Set(['meet', 'part_meet']);
 export const isMeet = task => MEETS.has(task.task);
@@ -66,7 +68,9 @@ export function answer(content, learner, session, ok) {
   session.answered++;
   if (!meet && ok) session.passed++;
   let recomposed = null;
-  if (!meet && !ok && task.role === 'test') {
+  const lapsedPrereq = !meet && !ok && isKnown(before) && !isKnown(state)
+    && session.queue.some(t => isMeet(t) && content.prereqs(t.item).includes(task.item));
+  if (!meet && !ok && (task.role === 'test' || lapsedPrereq)) {
     recomposed = compose(content, learner, session.asOf ?? today, session.rng);
     session.queue = recomposed.tasks.slice();
     session.recomposed++;
