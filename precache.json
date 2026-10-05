@@ -1,5 +1,5 @@
 {
- "build": "6ea585c530a6c761",
+ "build": "9419c8f1b91c2c8a",
  "files": [
   "actions.js",
   "app.css",
@@ -21,6 +21,7 @@
   "content/tellapart.json",
   "content/variants.json",
   "content/word.json",
+  "core/bundle.js",
   "core/choices.js",
   "core/clock.js",
   "core/content.js",

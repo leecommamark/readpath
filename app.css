@@ -352,6 +352,13 @@ button.text-title { cursor: pointer; }
              display: flex; flex-direction: column; gap: 2px; }
 .batch-log .added { color: var(--ink); }
 .batch-log .failed { color: var(--bad); }
+/* a text set from a link (patch plan 7.14) */
+.bundle-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.bundle-row { display: flex; align-items: center; gap: var(--s2); min-height: var(--tap); cursor: pointer; }
+.bundle-row input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; flex: none; }
+.bundle-title { font-family: var(--han); font-size: var(--t-lg); min-width: 0; overflow-wrap: anywhere; }
+.bundle-row .note { margin-left: auto; flex: none; }
+.bundle-note { color: var(--ink); }
 .toast { display: flex; align-items: center; gap: var(--s3); }
 .toast-action { border: 0; background: none; color: var(--page); font: inherit; font-weight: 600;
                 text-decoration: underline; text-underline-offset: 3px; padding: 0;
@@ -725,6 +732,10 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .settings-links .gear { width: 18px; height: 18px; margin-right: 6px; vertical-align: -3px; }
 /* first run's "Tones show as marks" (7.12 decided 6): si1 .. si6, each over its number */
 .marks-card .note { margin: 0; }
+/* first run's install screen, in a browser on a phone (patch plan 7.14) */
+.install h2 { font-size: var(--t-h); }
+.install-steps { margin: 0; padding-left: var(--s5); font-family: var(--body);
+                 font-size: var(--t-lg); line-height: 1.4; display: flex; flex-direction: column; gap: var(--s2); }
 .tone-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--s1);
             padding: var(--s3) var(--s2); border-radius: var(--r); background: var(--surface);
             border: 1px solid var(--rule); }

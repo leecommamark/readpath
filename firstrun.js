@@ -5,7 +5,7 @@
 // no learner state, and never again once it has finished.
 //
 //   needsWelcome(store)           -> true on a device with nothing of a learner
-//   installContext(nav, matchMedia) -> {ios, standalone}
+//   installContext(nav, matchMedia) -> {ios, android, standalone}
 //   await starterFocus(library, fetchFn, day) -> the focus text
 //   finishWelcome(store, day)     records that first run is done
 
@@ -23,17 +23,19 @@ export function needsWelcome(store) {
   return true;
 }
 
-// iOS or iPadOS (which reports itself as a Mac with a touch screen), and
-// whether the app runs installed. In a Safari tab on iOS the welcome asks
+// iOS or iPadOS (which reports itself as a Mac with a touch screen), Android,
+// and whether the app runs installed. In a Safari tab on iOS the welcome asks
 // for Add to Home Screen first (Mark, 7B Phase 0): a tab's storage is not
-// the installed app's.
+// the installed app's. In a browser on Android it asks to install first too
+// (Mark, 7.14).
 export function installContext(nav = {}, matchMedia = null) {
   const ua = nav.userAgent || '';
   const ios = /iPad|iPhone|iPod/.test(ua) ||
               (/Macintosh/.test(ua) && nav.platform === 'MacIntel' && (nav.maxTouchPoints || 0) > 1);
   const standalone = nav.standalone === true ||
                      !!(matchMedia && matchMedia('(display-mode: standalone)').matches);
-  return {ios, standalone};
+  const android = /Android/.test(ua);
+  return {ios, android, standalone};
 }
 
 // The sample, through the normal import, made the focus. One already in

@@ -17,7 +17,8 @@ import {systemDay, isoOf} from './core/clock.js';
 import {deviceSeed, learnerFrom, composeRng, startRun, startPractice,
         practiceItems, startTestMe, startFamily} from './runner.js';
 import {todayModel, renderToday, placementOffered} from './views/today.js';
-import {libraryModel, previewOf, renderTexts} from './views/texts.js';
+import {libraryModel, previewOf, renderTexts, linkInput, NOT_A_SET} from './views/texts.js';
+import {fetchBundleIndex, fetchBundleTexts} from './core/bundle.js';
 import {h, clear, jpSpan} from './views/dom.js';
 import {applyJp, setJp} from './jp.js';
 import {settingsModel, renderSettings} from './views/settings.js';
@@ -49,7 +50,7 @@ import {makeReport, addReport, unsent} from './reports.js';
 import {createOverlays, createCardStack} from './overlay.js';
 import {glyphKind, tileProgress} from './views/glyph.js';
 import {needsWelcome, installContext, starterFocus, finishWelcome} from './firstrun.js';
-import {renderWelcome, renderOffer} from './views/welcome.js';
+import {renderWelcome, renderOffer, renderInstall, installFirst} from './views/welcome.js';
 import {BUILD} from './build.js';
 import {watchWorker, installOffer, exportReminder, askPersist} from './pwa.js';
 import {feedbackDoc, deviceOf, mailtoUrl, toSend, markSent, undoSent,
@@ -80,6 +81,9 @@ const app = {
   updateReady: false,       // a new build is waiting (7B Phase 2)
   applyUpdate: null,        // Reload: pwa.js's watchWorker()
   installEvent: null,       // the browser's deferred Install (Android)
+  installScreen: false,     // first run's install screen is showing (7.14)
+  pastInstall: false,       // Continue in the browser was tapped on it
+  installedHere: false,     // the browser's Install was accepted here
   storage: '',              // 'indexedDB' or 'localStorage': the device line
   about: null,              // content/about.json, once fetched (7B Phase 3)
 };
@@ -177,9 +181,12 @@ window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();               // offered on Today instead, as Install
   app.installEvent = e;
   if (app.store && !app.firstRun && !$('today').hidden) showToday();
+  if (app.firstRun && app.installScreen) showWelcome();   // its Install button
 });
 window.addEventListener('appinstalled', () => {
   app.installEvent = null;
+  app.installedHere = true;
+  if (app.firstRun && app.installScreen) showWelcome();
   if (app.store) askPersist(app.store).catch(() => {});
 });
 
@@ -454,7 +461,7 @@ function toast(text, {action = null, onAction = null} = {}) {
 // ---- the Texts screen (patch plan 5, Phase 3)
 
 const freshDraft = () => ({raw: '', title: '', titleAuto: true});
-const textsUi = {pasting: false, draft: freshDraft(), renaming: null, batch: null};
+const textsUi = {pasting: false, draft: freshDraft(), renaming: null, batch: null, bundle: null};
 let warming = false;
 
 function showTexts() {
@@ -471,6 +478,54 @@ function showTexts() {
       if (!$('texts').hidden && !$('texts').contains(document.activeElement)) showTexts();
     }, e => { warming = false; console.warn('readpath: texts', e); });
   }
+}
+
+// Files read, into the library one by one with a running count, then the
+// log: Import files and a text set from a link alike (importFiles as is)
+async function importBatch(read) {
+  const out = await app.library.importFiles(read, {day: systemDay(), onStep: (i, n, name) => {
+    textsUi.batch.status = `Importing ${i} of ${n} — ${name}`;
+    showTexts();
+  }});
+  textsUi.batch = {done: true, log: out.log,
+                   status: `${out.added} added, ${out.skipped} skipped, ${out.failed} failed.`};
+  libraryChanged();
+}
+
+// A text set's preview (patch plan 7.14): its index fetched, every text
+// ticked. Nothing is saved until Add. A Cancel or a new request while it
+// loads wins: a late answer for an old one is dropped.
+let bundleAsk = 0;
+async function openBundle(id, input = id) {
+  const ask = ++bundleAsk;
+  const ctx = installContext(navigator, globalThis.matchMedia);
+  const note = ctx.standalone ? null : ctx.ios ? 'ios' : ctx.android ? 'android' : null;
+  Object.assign(textsUi, {pasting: false, batch: null, bundle: {stage: 'loading'}});
+  showTexts();
+  window.scrollTo(0, 0);
+  let bundle;
+  try {
+    const index = await fetchBundleIndex(id, fetch);
+    bundle = {stage: 'preview', index, chosen: new Set(index.texts.map(t => t.file)), note};
+  } catch (e) {
+    bundle = {stage: 'ask', input, error: e.message, retry: true};
+  }
+  if (ask !== bundleAsk || !textsUi.bundle || textsUi.bundle.stage !== 'loading') return;
+  textsUi.bundle = bundle;
+  showTexts();
+}
+
+// ?texts=<set> (patch plan 7.14): read once at boot and taken out of the
+// address, so a reload or a tab doesn't offer the set again. null: no link;
+// else {raw, id}, id null for a link that names no set (nothing is fetched).
+function takeTextsLink() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has('texts')) return null;
+  const raw = params.get('texts');
+  params.delete('texts');
+  const rest = params.toString();
+  history.replaceState(history.state, '', location.pathname + (rest ? `?${rest}` : '') + location.hash);
+  return {raw, id: linkInput(raw).id || null};
 }
 
 // Anything that moves the focus or the library changes Today too.
@@ -600,15 +655,50 @@ const textsActions = {
     }
     textsUi.pasting = false;
     textsUi.batch = {status: '', log: [], done: false};
-    const out = await app.library.importFiles(read, {day: systemDay(), onStep: (i, n, name) => {
-      textsUi.batch.status = `Importing ${i} of ${n} — ${name}`;
-      showTexts();
-    }});
-    textsUi.batch = {done: true, log: out.log,
-                     status: `${out.added} added, ${out.skipped} skipped, ${out.failed} failed.`};
-    libraryChanged();
+    await importBatch(read);
   },
   onCloseBatch() { textsUi.batch = null; showTexts(); },
+  // Get texts from a link (patch plan 7.14)
+  onLink() {
+    Object.assign(textsUi, {pasting: false, batch: null, bundle: {stage: 'ask', input: '', error: ''}});
+    showTexts();
+  },
+  onLinkGet(raw) {
+    const r = linkInput(raw);
+    if (r.error) {
+      textsUi.bundle = {stage: 'ask', input: raw, error: r.error};
+      return showTexts();
+    }
+    openBundle(r.id, raw);
+  },
+  // only where the clipboard can be read (a secure context): iOS asks with
+  // its own Paste button
+  onLinkPaste: globalThis.navigator && navigator.clipboard && navigator.clipboard.readText
+    ? async () => {
+      let raw;
+      try { raw = await navigator.clipboard.readText(); } catch (e) {
+        textsUi.bundle = {stage: 'ask', input: '', error: 'Couldn’t paste. Paste into the box instead.'};
+        return showTexts();
+      }
+      textsActions.onLinkGet(raw);
+    }
+    : null,
+  onBundleTick(file, on) {
+    const b = textsUi.bundle;
+    if (!b || b.stage !== 'preview') return;
+    if (on) b.chosen.add(file); else b.chosen.delete(file);
+  },
+  onBundleCancel() { textsUi.bundle = null; showTexts(); },
+  async onBundleAdd() {
+    const b = textsUi.bundle;
+    if (!b || b.stage !== 'preview' || !b.chosen.size) return;
+    Object.assign(textsUi, {bundle: null, pasting: false, batch: {status: '', log: [], done: false}});
+    const read = await fetchBundleTexts(b.index, [...b.chosen], fetch, (i, n, title) => {
+      textsUi.batch.status = `Getting ${i} of ${n} — ${title}`;
+      showTexts();
+    });
+    await importBatch(read);
+  },
   async onSample() {
     try {
       const r = await app.library.addSample(fetch, systemDay());
@@ -1134,10 +1224,28 @@ function showWelcome() {
   app.firstRun = true;
   history.replaceState(null, '', location.pathname + location.search);
   showScreen('welcome');
-  renderWelcome($('welcome'), installContext(navigator, globalThis.matchMedia), {
-    onStart: showOffer,
-    onImport: () => $('importFile').click(),
-  });
+  const ctx = installContext(navigator, globalThis.matchMedia);
+  // in a browser on a phone, installing comes first and is all there is
+  // (7.14); Continue goes on to the welcome in the browser
+  app.installScreen = installFirst(ctx) && !app.pastInstall;
+  if (app.installScreen) {
+    renderInstall($('welcome'), {...ctx, canPrompt: !!app.installEvent, installed: !!app.installedHere}, {
+      onInstall: async () => {
+        const e = app.installEvent;
+        app.installEvent = null;
+        if (!e) return;
+        e.prompt();
+        try { app.installedHere = (await e.userChoice).outcome === 'accepted'; } catch { /* dismissed */ }
+        if (app.installScreen) showWelcome();
+      },
+      onContinue: () => { app.pastInstall = true; showWelcome(); },
+    });
+  } else {
+    renderWelcome($('welcome'), {
+      onStart: showOffer,
+      onImport: () => $('importFile').click(),
+    });
+  }
   window.scrollTo(0, 0);
 }
 
@@ -1193,6 +1301,7 @@ async function boot() {
   if (installContext(navigator, globalThis.matchMedia).standalone) {
     askPersist(app.store).catch(e => console.warn('readpath: persist', e));
   }
+  const link = takeTextsLink();
   const welcome = needsWelcome(app.store);
   $('tabs').hidden = welcome;
   for (const b of document.querySelectorAll('#tabs button')) {
@@ -1217,10 +1326,16 @@ async function boot() {
   // the focus text pulls in Today's first composition (usually from the
   // device cache; the dictionary only when its content version is new)
   window.readpath = app;          // for poking at from the console
+  // a text set's link where first run is due is dropped: testers are sent
+  // links once Read Path is on their home screen (Mark, 7.14 P2)
   if (welcome) return showWelcome();
   try { await app.library.warmFocus(); } catch (e) { console.warn('readpath: focus text', e); }
   showToday();
-  route();
+  if (!link) return route();
+  showTab('texts');
+  if (link.id) return openBundle(link.id);
+  textsUi.bundle = {stage: 'ask', input: link.raw, error: NOT_A_SET};
+  showTexts();
 }
 
 boot();
