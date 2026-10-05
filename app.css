@@ -730,3 +730,21 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
             border: 1px solid var(--rule); }
 .tone-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .tone-cell .jp { font-size: var(--t-lg); line-height: 1.4; }
+
+/* ---- the placement review pages (views/check.js renderReview; 7.13 decided 9)
+ * One screenful of plain tiles per page, no scrolling inside it: the cell is
+ * 56px and the gap 8px, which views/check.js tilesPerPage() counts with.
+ * An unmarked tile is faded with a strike through its glyph. */
+.review { display: flex; flex-direction: column; gap: var(--s3); }
+.review-prompt { margin: var(--s3) 0 0; font-size: var(--t-h); }
+.review-note { margin: 0; }
+.review-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+               gap: var(--s2); justify-items: center; }
+.review-tile { width: 56px; height: 56px; box-sizing: border-box; padding: 2px;
+               justify-content: center; }
+.review-tile .gt-form { position: relative; }
+.review-off { opacity: .4; }
+.review-off .gt-form::after { content: ""; position: absolute; left: -8%; right: -8%; top: 50%;
+                              border-top: 2px solid var(--bad); transform: rotate(-20deg); }
+.review-summary { margin: 0; }
+.review-btns { margin-top: var(--s2); }

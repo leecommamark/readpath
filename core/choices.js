@@ -11,6 +11,8 @@
 //   tellApartChoices   a family member for its meaning (Tell apart)
 //   meaningChoices     a meaning for a character (the Meet inferred from its
 //                      meaning part)
+//   placementMeaningChoices   a meaning for a character in the placement
+//                      check (7.13), where the meaning part is no clue
 //
 // Reading choices (Mark, 2026-09-29, from the iPhone check; replacing brief
 // 4's decision 2): sound-alike choices clustered round the answer, so the
@@ -60,7 +62,15 @@ function index(content) {
       withPart.get(part).push(ch);
     }
   }
-  X = {family, familyOf, mains, mainAt, withPart};
+  const withSound = new Map();         // sound part -> [char] with a main reading
+  for (const id of mains) {
+    const ch = content.item(id).char;
+    const sp = content.soundPartOf && content.soundPartOf(ch);
+    if (!sp) continue;
+    if (!withSound.has(sp)) withSound.set(sp, []);
+    withSound.get(sp).push(ch);
+  }
+  X = {family, familyOf, mains, mainAt, withPart, withSound};
   INDEX.set(content, X);
   return X;
 }
@@ -72,12 +82,16 @@ const glossOf = (content, ch) => {
 
 // ---- readings
 
-// readingChoices(content, char, answer, rng, pool, exclude) -> [jp], CHOICES
-// long, shuffled, the answer among them once. `answer` is the toned reading
-// asked for; `pool` the toned readings of the session's other items
+// readingChoices(content, char, answer, rng, pool, exclude, opts) -> [jp],
+// CHOICES long, shuffled, the answer among them once. `answer` is the toned
+// reading asked for; `pool` the toned readings of the session's other items
 // (runner.js); `exclude` readings never to offer -- a word question's other
-// syllables, which sit on screen above the other characters.
-export function readingChoices(content, char, answer, rng, pool = [], exclude = []) {
+// syllables, which sit on screen above the other characters, or the
+// placement check's earlier answers (7.13). opts.soundRival (the placement
+// check, brief 7.13 decided 4): where another character with the same sound
+// part reads differently, one wrong choice is its reading, so knowing the
+// sound part doesn't single out the answer (青 doesn't give away 晴).
+export function readingChoices(content, char, answer, rng, pool = [], exclude = [], opts = {}) {
   const syl = content.syllables;
   const own = syl.get(toneless(answer));
   if (!own) throw new Error(`no syllable row for ${answer}`);
@@ -101,6 +115,19 @@ export function readingChoices(content, char, answer, rng, pool = [], exclude = 
       wrong.push(jp);
     }
   };
+  if (opts.soundRival) {
+    const sp = content.soundPartOf && content.soundPartOf(char);
+    const members = (sp && index(content).withSound.get(sp)) || [];
+    const rivals = members.filter(ch => ch !== char)
+      .map(ch => content.item(content.mainReading(ch)).jp);
+    for (const jp of rng.shuffle([...new Set(rivals)])) {
+      const k = keyOf(jp);
+      if (!k || banned.has(k)) continue;
+      banned.add(k);
+      wrong.push(jp);
+      break;
+    }
+  }
   take(pool);
   // then main readings near the character on the path, the window widening
   // until three are found (a test checks every reading item with no pool)
@@ -226,6 +253,41 @@ export function meaningChoices(content, id, rng) {
     wrong = takeByGloss(content, [byRank(content, it.char, width).filter(other)],
                         [it.char], CHOICES - 1, rng);
     if (width > index(content).mains.length) break;
+  }
+  return {answer, choices: rng.shuffle([answer, ...wrong.map(ch => glossOf(content, ch))])};
+}
+
+// placementMeaningChoices(content, id, rng, exclude) -> {answer, choices}: the
+// placement check's meaning question (brief 7.13 decided 5, Phase 0 Q6).
+// Unlike meaningChoices, the meaning part is no clue: the wrong meanings
+// come from characters with the SAME meaning part first (another shape of
+// it counts: 心 and 忄), then from main readings near it in written rank,
+// the window widening. No two choices share a gloss, none is a gloss the
+// character has under another reading, and none belongs to `exclude` (the
+// check's earlier characters).
+export function placementMeaningChoices(content, id, rng, exclude = []) {
+  const it = content.item(id);
+  const answer = it.gloss;
+  const one = content.onePart || (x => x);
+  const part = content.meaningPartOf(it.char);
+  const pool = content.placementPool();
+  const at = pool.findIndex(p => p.char === it.char);
+  const sameTier = part
+    ? pool.filter(p => p.char !== it.char && one(content.meaningPartOf(p.char)) === one(part))
+        .map(p => p.char)
+    : [];
+  const near = width => {
+    const out = [];
+    for (let d = 1; d <= width; d++) {
+      for (const i of [at - d, at + d]) if (i >= 0 && i < pool.length) out.push(pool[i].char);
+    }
+    return out;
+  };
+  const taken = [it.char, ...exclude.filter(ch => ch !== it.char)];
+  let wrong = [];
+  for (let width = WINDOW; wrong.length < CHOICES - 1; width *= 2) {
+    wrong = takeByGloss(content, [sameTier, near(width)], taken, CHOICES - 1, rng);
+    if (width > pool.length) break;
   }
   return {answer, choices: rng.shuffle([answer, ...wrong.map(ch => glossOf(content, ch))])};
 }

@@ -14,6 +14,11 @@
 //   due, met, last, unlocked   day numbers (clock.js); `unlocked` is a
 //             part's first test pass, and never goes back to null
 //   source    "learned" | "placed" | "marked"
+//   placed    (brief 7.13 decided 11; absent on states made before it, and
+//             on every state not placed since) true while a placed reading
+//             waits for its first review; that review leaves "passed" or
+//             "missed" for good, which is how Today counts how placement did
+//             (decided 12). A first miss is quiet: back to rung 2, no lapse.
 //
 // Every change goes through `transition(state, event, today)`, which returns
 // a new frozen object and never touches its input. Nothing else in the app
@@ -28,7 +33,12 @@ const TOP_RUNG = {reading: 5, sound: 3, meaning: 3};
 const FLOOR = 2;                           // a miss never drops below the quiz
 const LAPSE_RUNG = {reading: 4, sound: 2, meaning: 2};
 export const PLACED_STEP = 4;              // 30 days
-export const SPREAD = Object.freeze([7, 60]);  // placed due days, from today
+// A placement's first reviews (brief 7.13 decided 11, P3): the reviewed
+// characters within EARLY days, the skipped ones within SKIPPED, at most
+// PER_DAY of those a day (the window runs past day 60 for a big placement).
+export const EARLY = Object.freeze([3, 14]);
+export const SKIPPED = Object.freeze([14, 60]);
+export const PER_DAY = 40;
 const SOURCES = new Set(['learned', 'placed', 'marked']);
 export const EVENTS = Object.freeze(['meet', 'pass', 'miss', 'forgot',
                                      'mark_known', 'placed']);
@@ -52,6 +62,11 @@ export function check(s) {
   if (kind === 'reading' ? s.unlocked !== null
                          : !(s.unlocked === null || isDay(s.unlocked))) bad('unlocked');
   if (kind !== 'reading' && s.source !== 'learned') bad('a part is only learned');
+  if (s.placed !== undefined) {
+    if (!(s.placed === true || s.placed === 'passed' || s.placed === 'missed')
+        || s.source !== 'placed') bad('placed');
+    if (s.placed === true && s.rung !== MAINTAIN) bad('placed before its first review');
+  }
   return s;
 }
 
@@ -65,17 +80,24 @@ function meet(state, event, today) {
                source: 'learned', met: today, unlocked: null, last: today});
 }
 
+// A placed reading's first review settles its `placed` (decided 11).
+const settled = (s, how) => (s.placed === true ? {placed: how} : {});
+
 function pass(s, today) {
   const kind = kindOf(s.item);
   const step = Math.min(s.step + 1, LAST_STEP);
   const rung = s.rung === MAINTAIN || s.rung === TOP_RUNG[kind] ? MAINTAIN : s.rung + 1;
   // a part's first pass is a pass of its test task: it unlocks its characters
   const unlocked = kind === 'reading' ? null : (s.unlocked ?? today);
-  return make({...s, rung, step, due: today + INTERVALS[step], unlocked, last: today});
+  return make({...s, rung, step, due: today + INTERVALS[step], unlocked, last: today,
+               ...settled(s, 'passed')});
 }
 
 function miss(s, today) {
   const kind = kindOf(s.item);
+  if (s.placed === true) {                 // placement was wrong: quietly back to learning
+    return make({...s, rung: FLOOR, step: 0, due: today + 1, last: today, placed: 'missed'});
+  }
   if (s.rung === MAINTAIN) {               // a lapse
     return make({...s, rung: LAPSE_RUNG[kind], step: 0, due: today + 1,
                  lapses: s.lapses + 1, last: today});
@@ -84,9 +106,12 @@ function miss(s, today) {
                due: today + 1, last: today});
 }
 
+// I forgot this. On a placed reading before its first review it is the
+// same quiet path as a first miss (Phase 0 Q9): no lapse.
 function forgot(s, today) {
-  return make({...s, rung: FLOOR, step: 0, due: today,
-               lapses: s.lapses + (s.rung === MAINTAIN ? 1 : 0), last: today});
+  const lapse = s.rung === MAINTAIN && s.placed !== true ? 1 : 0;
+  return make({...s, rung: FLOOR, step: 0, due: today, lapses: s.lapses + lapse, last: today,
+               ...settled(s, 'missed')});
 }
 
 function known(s, event, today, source) {
@@ -95,7 +120,7 @@ function known(s, event, today, source) {
   }
   return make({item: event.item, rung: MAINTAIN, step: PLACED_STEP, due: event.due,
                lapses: s ? s.lapses : 0, source, met: s ? s.met : today,
-               unlocked: null, last: today});
+               unlocked: null, last: today, ...(source === 'placed' ? {placed: true} : {})});
 }
 
 // transition(state | null, {type, item?, due?}, today) -> frozen state
@@ -130,13 +155,23 @@ export function transition(state, event, today) {
 
 // ---- helpers for the callers
 
-// Due days for a placement of many items at once, spread over SPREAD days
-// from today in the order given (the caller passes path order), so a big
-// placement doesn't all fall due on one day and set off the backlog rule.
-export function spreadDue(items, today) {
-  const [lo, hi] = SPREAD, n = items.length, span = hi - lo + 1;
-  return new Map(items.map((id, i) => [id, today + lo + Math.floor(i * span / n)]));
+// placedDue(early, skipped, today) -> Map id -> due day: a placement's first
+// reviews (decided 11). `early` (the reviewed characters, nearest the cutoff
+// first) are spread over EARLY; `skipped` (rarest first, so the most common
+// come last) over SKIPPED, never more than PER_DAY a day, so the window
+// grows past day 60 when it must. Spread evenly, in the order given.
+export function placedDue(early, skipped, today) {
+  const out = new Map();
+  const spread = (ids, lo, hi) => {
+    const span = hi - lo + 1;
+    ids.forEach((id, i) => out.set(id, today + lo + Math.floor(i * span / ids.length)));
+  };
+  spread(early, EARLY[0], EARLY[1]);
+  spread(skipped, SKIPPED[0], Math.max(SKIPPED[1], SKIPPED[0] + Math.ceil(skipped.length / PER_DAY) - 1));
+  return out;
 }
 
 export const isKnown = s => !!s && s.rung === MAINTAIN;
+// a placed reading still waiting for its first review (decided 11)
+export const isProvisional = s => !!s && s.placed === true;
 export const isDue = (s, today) => !!s && s.due <= today;

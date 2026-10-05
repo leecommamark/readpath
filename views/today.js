@@ -70,9 +70,11 @@ export function todayModel(content, states, summary, reading = null) {
 // The placement check's card on Today (brief 7.8 decided 3): until a check
 // has been done (a placement record) or the card has been dismissed (Not
 // now: meta.placementOffer, a flag, not progress); never in first run,
-// which offers the check itself. Path's row offers it either way.
-export function placementOffered({placement = null, meta = {}, firstRun = false} = {}) {
-  return !firstRun && !placement && !meta.placementOffer;
+// which offers the check itself, and never while a check's review is pending
+// (the resume card takes its place, 7.13 decided 10). Path's row offers it
+// either way.
+export function placementOffered({placement = null, meta = {}, firstRun = false, pending = null} = {}) {
+  return !firstRun && !pending && !placement && !meta.placementOffer;
 }
 
 // The gear before Settings, drawn here (no icon set): a dashed ring is its
@@ -95,7 +97,9 @@ function gear() {
 //                         version, loadedMs, unsent, practiceCount, onPractice,
 //                         onKeepGoing, onRead(textId),
 //                         build, update, onUpdate, install, onInstall, exportDue,
-//                         onFeedback, onAbout, onSettings, placementOffer, onCheck, onNotNow})
+//                         onFeedback, onAbout, onSettings, placementOffer, onCheck, onNotNow,
+//                         placementPending ('questions' | 'review' | falsy), onResume,
+//                         onStartOver, placementHigh, onPlacementNoted})
 //   update: a new build is waiting ("Update ready · Reload", patch plan 7B);
 //   install: 'ios' (the Add to Home Screen steps) | 'prompt' (the browser's
 //   Install) | null; exportDue: pwa.js's exportReminder(), {days, never}
@@ -144,12 +148,34 @@ export function renderToday(el, m, opts) {
         (r.toLearn ? ` · ${plural(r.toLearn, 'reading')} to go` : ' · every reading known')),
       h('span', {class: 'bar', 'aria-hidden': 'true'}, h('i', {style: `width:${r.pct}%`}))));
 
-  const place = opts.placementOffer && h('section', {class: 'block', 'aria-labelledby': 'place-h'},
+  const place = opts.placementOffer && !opts.placementPending && h('section', {class: 'block', 'aria-labelledby': 'place-h'},
     h('h2', {id: 'place-h'}, 'Already read some Chinese?'),
     h('p', {class: 'note'}, 'Check what you know: a few minutes’ check marks the characters you can already read.'),
     h('div', {class: 'btns'},
       h('button', {type: 'button', class: 'btn', onclick: opts.onCheck}, 'Check'),
       h('button', {type: 'button', class: 'btn quiet', onclick: opts.onNotNow}, 'Not now')));
+
+  // placement may have been high (7.13 decided 12): said once, then OK
+  const high = opts.placementHigh && h('section', {class: 'block', 'aria-labelledby': 'high-h'},
+    h('h2', {id: 'high-h'}, 'Placement may have been high'),
+    h('p', {class: 'note'}, `${opts.placementHigh.miss} of the ${opts.placementHigh.pass + opts.placementHigh.miss} `
+      + 'placed characters you’ve reviewed so far didn’t come back to you. They’ve gone back into '
+      + 'learning on their own, so there’s nothing to do.'),
+    h('button', {type: 'button', class: 'btn', onclick: opts.onPlacementNoted}, 'OK'));
+
+  // a check left midway (Mark, after 7.13) or done but not confirmed (7.13
+  // decided 10): go on with it, or start over
+  const atReview = opts.placementPending === 'review';
+  const resume = opts.placementPending && h('section', {class: 'block', 'aria-labelledby': 'resume-h'},
+    h('h2', {id: 'resume-h'}, atReview ? 'Finish checking your placement' : 'Finish your placement check'),
+    h('p', {class: 'note'}, atReview
+      ? 'Your check is done. Look over its last pages, then mark them known.'
+      : 'You’re partway through. Carry on where you left off.'),
+    h('div', {class: 'btns'},
+      h('button', {type: 'button', class: 'btn primary', onclick: opts.onResume},
+        atReview ? 'Finish checking' : 'Carry on'),
+      opts.onStartOver && h('button', {type: 'button', class: 'btn quiet', onclick: opts.onStartOver},
+        'Start over')));
 
   const known = h('section', {class: 'block'},
     h('span', {class: 'label'}, 'Known'),
@@ -207,5 +233,5 @@ export function renderToday(el, m, opts) {
   put(clear(el),
     h('div', {class: 'top'}, h('span', {}, opts.date || ''), h('span', {})),
     h('h1', {id: 'today-h'}, 'Today'),
-    update || '', warn, session, reading || '', next || '', place || '', known, install || '', progress);
+    update || '', warn, session, reading || '', next || '', place || '', resume || '', high || '', known, install || '', progress);
 }

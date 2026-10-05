@@ -6,132 +6,277 @@
 // with a written rank, most written first. Which list ranked them is the
 // export's business, not this file's.
 //
-// The search (Mark, 2026-09-29, step 6 6b; it replaces songpath's, plan
-// 9.2): seven levels narrowing the learner's frontier ON A LOG SCALE -- the
-// midpoint is the geometric mean of `lo` and `hi`, and the band round it is
-// ±BAND of it -- so the steps are fine among the common characters and
-// sweeping among the rare ones (knowing one rare character says more about
-// knowing other rare ones than one common character says about the top 100).
-// A level passes only on THREE RIGHT IN A ROW; a miss fails it -- except the
-// check's first miss, which is forgiven once and asked again, so one slip
-// can't cap a strong reader at the easy end (Mark chose it over strict three
-// in a row and over three-before-two-wrong). So the check stops where the
-// learner knows most of what it marks, not half: for a learner whose
-// knowledge fades with rarity, songpath's best of 3 marked 18-34% wrongly,
-// this about 8-17% (Phase 6b's simulation). A pass moves `lo` up to the
-// midpoint, a fail moves `hi` down. The estimate is `lo`, so it errs low.
-// "I don't know" is a miss.
+// The search (brief 7.13 decided 6; it replaces step 6 6b's seven levels of
+// three right in a row, which decided hundreds of characters on about three
+// answers a level and marked 8-17% wrongly even for a learner who never
+// guessed). Every answer feeds one model, and the cutoff is read off its
+// pessimistic side:
 //
-// Applying it only ever adds (brief 6, decided 6): a reading already in
-// Maintain is never in a plan, whatever was answered; a miss changes
-// nothing. transition() itself would overwrite a known reading, so the rule
-// lives here. Parts are never in a plan (they aren't in the pool).
+//   P(right at rank r) = g + (1 - g - m) * fade(r / K),
+//   fade(x) = 1 / (1 + x^(1/s))
+//
+// K is the rank where half is known; s how gently knowledge fades with
+// rarity; g the chance of a right answer to an unknown character (a guess
+// that gets both the reading and the meaning); m the chance of a miss on a
+// known one (a slip or a hole). The model is a GRID over the four, with this
+// prior: K log-uniform from 1 to 8,000 (past the pool's 2,922, for a reader
+// who knows them all); s from sharp (0.2) to gentle (0.65), equally likely;
+// g and m each equally likely low or high. Every answer reweights the grid.
+//
+// The cutoff N: each cell's N is the largest rank whose expected unknown
+// share, after the review step, is within BUDGET (the reviewed band counts
+// only for what the learner misses there: Mark, Phase 3, counted the review
+// in the target); the check's N is the LOWER quantile of those, weighted, so
+// it is the pessimistic side of the estimate, not its midpoint. The next
+// question goes to the rank whose answer, either way, would most narrow the
+// spread of N, and asks an unasked character in a band round it. The check
+// stops once N's midpoint is within SETTLED of its lower bound (after
+// MIN_QUESTIONS), or at MAX_QUESTIONS. Tuned against test/placement_sim.js's
+// learner (guessing, holes, slips) until brief 7.13 decided 1's targets
+// passed: of what it marks, after the review, at most 5% unknown at the
+// median, 10% in the worst tenth.
+// "I don't know" is a miss, and so is a right reading with a wrong meaning
+// (brief 7.13 decided 5: the meaning is asked after a right reading).
+//
+// Applying it is core/review.js's: nothing is placed until the learner
+// confirms the review pages (brief 7.13 decided 7), and it only ever adds.
 //
 // Pure: the content, the states, the day and a seeded rng come in. A check
 // is a plain object; answer() returns a new one and never edits its input.
 
-import {readingChoices} from './choices.js';
-import {spreadDue, transition, isKnown} from './state.js';
+import {readingChoices, placementMeaningChoices} from './choices.js';
 
-export const LEVELS = 7;
-export const PER_LEVEL = 3;                // right answers to pass a level
-export const MISSES = 1;                   // wrong answers that fail it
-export const FORGIVEN = 1;                 // misses per check that don't count (a slip)
-export const BAND = 0.15;                  // the band: the midpoint's rank ±15%
+export const MAX_QUESTIONS = 35;
+export const MIN_QUESTIONS = 12;
+export const BUDGET = 0.04;                // the model's after-review unknown share at the cutoff
+export const LOWER = 0.2;                  // the quantile of N that is the cutoff
+export const SETTLED = 1.25;               // stop once median N / lower N is this
+export const BAND = 0.15;                  // a question's band: its rank ±15%
 export const MIN_BAND = 2;                 // ... and at least ±2 places
-export const MIN_RATIO = 1.15;             // stop once hi / lo is this narrow
-export const MAX_QUESTIONS = LEVELS * (PER_LEVEL + MISSES - 1) + FORGIVEN;
+// The review step (brief 7.13 decided 8): the rarest R of the top N are
+// reviewed, R = min(N, REVIEW_A * N^REVIEW_B), fitted to Mark's anchors
+// (10 -> 10, 100 -> about 70, 500 -> about 100). The cutoff counts on the
+// learner untapping CAUGHT of the unknown characters it is shown there
+// (Mark, Phase 3: the target counts the review step).
+export const REVIEW_A = 25, REVIEW_B = 0.22;
+export const CAUGHT = 0.8;
+export const reviewBand = n => Math.min(n, Math.round(REVIEW_A * Math.pow(n, REVIEW_B)));
+const K_MAX = 8000, K_STEPS = 48;
+const SS = [0.2, 0.3, 0.45, 0.65];
+const GS = [0.02, 0.1];
+const MS = [0.06, 0.2];
+const PROBES = 24;                         // ranks weighed for the next question
 
-// The next question of a check, or null when it's done: a character from the
-// band round the (geometric) midpoint that hasn't been asked in this run.
-// Ranks are 1-based positions in the pool; lo = 0 is "none known".
+// The grid, made once: each cell {K, s, g, m}.
+const GRID = (() => {
+  const out = [];
+  for (let i = 0; i < K_STEPS; i++) {
+    const K = Math.exp(Math.log(K_MAX) * i / (K_STEPS - 1));
+    for (const s of SS) for (const g of GS) for (const m of MS) out.push({K, s, g, m});
+  }
+  return out;
+})();
+
+// Each cell's cutoff for a pool of `size`: the largest N whose expected
+// unknown share, after the review, is within BUDGET -- the skipped range
+// counts in full, the reviewed band only for what the learner misses
+// (1 - CAUGHT). Unknown at rank r is 1 - fade(r / K); g and m don't enter.
+// Made once per pool size, with the order and log N the search uses.
+const CUTS = new Map();
+function cuts(size) {
+  let t = CUTS.get(size);
+  if (t) return t;
+  const byKs = new Map();
+  const cum = new Float64Array(size + 1);
+  const N = new Float64Array(GRID.length);
+  GRID.forEach((cell, i) => {
+    const key = `${cell.K} ${cell.s}`;
+    if (!byKs.has(key)) {
+      for (let r = 1; r <= size; r++) {
+        cum[r] = cum[r - 1] + 1 - 1 / (1 + Math.pow(r / cell.K, 1 / cell.s));
+      }
+      let best = 0;
+      for (let n = 1; n <= size; n++) {
+        const skip = n - reviewBand(n);
+        if (cum[skip] + (1 - CAUGHT) * (cum[n] - cum[skip]) <= BUDGET * n) best = n;
+      }
+      byKs.set(key, best);
+    }
+    N[i] = byKs.get(key);
+  });
+  const order = GRID.map((c, i) => i).sort((a, b) => N[a] - N[b]);
+  t = {N, order, logN: Float64Array.from(N, n => Math.log(n + 1))};
+  CUTS.set(size, t);
+  return t;
+}
+
+const pRight = (cell, r) => cell.g + (1 - cell.g - cell.m) / (1 + Math.pow(r / cell.K, 1 / cell.s));
+
+// Each check's grid log-weights are carried on it (`lw`), one answer added at
+// a time; the probes' P(right) are made once per pool size.
+const PROBE_TABLES = new Map();
+function probes(size) {
+  let t = PROBE_TABLES.get(size);
+  if (t) return t;
+  t = [];
+  for (let j = 0; j < PROBES; j++) {
+    const r = Math.max(1, Math.round(Math.exp(Math.log(size) * j / (PROBES - 1))));
+    t.push({r, p: Float64Array.from(GRID, c => pRight(c, r))});
+  }
+  PROBE_TABLES.set(size, t);
+  return t;
+}
+
+function weights(lw) {
+  let top = -Infinity;
+  for (const x of lw) if (x > top) top = x;
+  const w = new Float64Array(lw.length);
+  let sum = 0;
+  for (let i = 0; i < lw.length; i++) sum += (w[i] = Math.exp(lw[i] - top));
+  for (let i = 0; i < w.length; i++) w[i] /= sum;
+  return w;
+}
+
+// The q-quantile of N under weights w, capped to the pool.
+function quantileN(w, q, size) {
+  const {N, order} = cuts(size);
+  let t = 0;
+  for (const i of order) {
+    t += w[i];
+    if (t >= q) return N[i];
+  }
+  return N[order[order.length - 1]];
+}
+
+// The expected spread of log N after an answer at a probe: the weighted
+// variance under each outcome, weighted by its chance.
+function expectedSpread(w, p, LOGN) {
+  let pr = 0, mr = 0, mw = 0;
+  for (let i = 0; i < w.length; i++) {
+    pr += w[i] * p[i];
+    mr += w[i] * p[i] * LOGN[i];
+    mw += w[i] * (1 - p[i]) * LOGN[i];
+  }
+  const pw = 1 - pr;
+  mr /= pr; mw /= pw;
+  let vr = 0, vw = 0;
+  for (let i = 0; i < w.length; i++) {
+    vr += w[i] * p[i] * (LOGN[i] - mr) ** 2;
+    vw += w[i] * (1 - p[i]) * (LOGN[i] - mw) ** 2;
+  }
+  return vr + vw;                          // = pr * Var_r + pw * Var_w
+}
+
+// The rank to ask next: of PROBES ranks across the pool, the one whose
+// answer leaves the least expected spread of N.
+function bestRank(w, size) {
+  let best = 1, least = Infinity;
+  const {logN} = cuts(size);
+  for (const {r, p} of probes(size)) {
+    const e = expectedSpread(w, p, logN);
+    if (e < least) { least = e; best = r; }
+  }
+  return best;
+}
+
+const addAnswer = (lw, wrank, ok) => Float64Array.from(lw, (x, i) => {
+  const p = pRight(GRID[i], wrank);
+  return x + Math.log(ok ? p : 1 - p);
+});
+
+const estimate = (lw, size) => {
+  const w = weights(lw);
+  return {w, lower: quantileN(w, LOWER, size), mid: quantileN(w, 0.5, size)};
+};
+
+// The next question of a check, or null when it's done: an unasked character
+// in the band round the best rank.
 function next(c, rng) {
-  const a = Math.max(1, c.lo);
-  if (c.level >= LEVELS || c.hi / a < MIN_RATIO) return null;
-  const mid = Math.max(1, Math.round(Math.sqrt(a * c.hi)));
-  const from = Math.max(1, Math.min(Math.floor(mid * (1 - BAND)), mid - MIN_BAND));
-  const to = Math.min(c.pool.length, Math.max(Math.ceil(mid * (1 + BAND)), mid + MIN_BAND));
+  const n = c.asked.length;
+  if (n >= MAX_QUESTIONS) return null;
+  const size = c.pool.length;
+  const {w, lower, mid} = estimate(c.lw, size);
+  if (n >= MIN_QUESTIONS && (mid + 1) / (lower + 1) <= SETTLED) return null;
+  const at = bestRank(w, size);
   const asked = new Set(c.asked.map(x => x.id));
-  const band = c.pool.slice(from - 1, to).filter(p => !asked.has(p.id));
-  if (!band.length) return null;
-  return {...rng.pick(band), mid};
+  for (let widen = 1; widen <= 64; widen *= 2) {
+    const from = Math.max(1, Math.min(Math.floor(at * (1 - BAND * widen)), at - MIN_BAND * widen));
+    const to = Math.min(size, Math.max(Math.ceil(at * (1 + BAND * widen)), at + MIN_BAND * widen));
+    const band = c.pool.slice(from - 1, to).filter(p => !asked.has(p.id));
+    if (band.length) return rng.pick(band);
+  }
+  return null;
 }
 
 // startCheck(pool, rng) -> a check. `pool` is content.placementPool().
 export function startCheck(pool, rng) {
-  const c = {pool, lo: 0, hi: pool.length, level: 0, results: [], asked: [], cur: null,
-             forgiven: 0};
+  const c = {pool, asked: [], lw: new Float64Array(GRID.length), cur: null};
   return Object.freeze({...c, cur: next(c, rng)});
 }
 
-// question(check) -> {id, char, wrank, level (1-based), n (1-based within the
-// level)} | null when the check is done.
+// resumeCheck(pool, asked, rng) -> a check rebuilt from the answers a left
+// check had (Mark, after 7.13: leaving midway keeps them). Answers to
+// characters no longer in the pool are dropped; ranks are the pool's now.
+export function resumeCheck(pool, asked, rng) {
+  const at = new Map(pool.map(p => [p.id, p]));
+  const kept = asked.filter(a => at.has(a.id)).map(a => ({...a, wrank: at.get(a.id).wrank}));
+  const lw = kept.reduce((w, a) => addAnswer(w, a.wrank, a.ok), new Float64Array(GRID.length));
+  const c = {pool, asked: kept, lw, cur: null};
+  return Object.freeze({...c, cur: next(c, rng)});
+}
+
+// question(check) -> {id, char, wrank, n (1-based), max} | null when the
+// check is done.
 export function question(c) {
   if (!c.cur) return null;
   const {id, char, wrank} = c.cur;
-  return {id, char, wrank, level: c.level + 1, n: c.results.length + 1};
+  return {id, char, wrank, n: c.asked.length + 1, max: MAX_QUESTIONS};
 }
 
-// answer(check, ok, rng) -> the next check. ok false is a wrong answer or
-// "I don't know".
-export function answer(c, ok, rng) {
+// answer(check, got, rng) -> the next check. `got` is {reading, meaning}
+// (brief 7.13 decided 5): right only if both are, and anything else is a
+// miss, as are a wrong answer and "I don't know". A bare boolean is both.
+export function answer(c, got, rng) {
   if (!c.cur) throw new Error('answer: the check is done');
-  const asked = [...c.asked, {id: c.cur.id, ok: !!ok}];
-  let {lo, hi, level, forgiven} = c;
-  // the first miss of the check is forgiven, once: asked again at the level
-  if (!ok && forgiven < FORGIVEN) {
-    const d = {...c, asked, forgiven: forgiven + 1, cur: null};
-    return Object.freeze({...d, cur: next(d, rng)});
-  }
-  let results = [...c.results, !!ok];
-  const rights = results.filter(Boolean).length;
-  if (rights === PER_LEVEL || results.length - rights === MISSES) {  // settled
-    if (rights === PER_LEVEL) lo = c.cur.mid; else hi = c.cur.mid;
-    level++;
-    results = [];
-  }
-  const d = {pool: c.pool, lo, hi, level, results, asked, forgiven, cur: null};
+  const g = typeof got === 'object' && got !== null
+    ? {reading: !!got.reading, meaning: !!got.reading && !!got.meaning}
+    : {reading: !!got, meaning: !!got};
+  const ok = g.reading && g.meaning;
+  const d = {pool: c.pool, asked: [...c.asked, {id: c.cur.id, wrank: c.cur.wrank, ok, ...g}],
+             lw: addAnswer(c.lw, c.cur.wrank, ok), cur: null};
   return Object.freeze({...d, cur: next(d, rng)});
 }
 
 export const done = c => !c.cur;
 
-// result(check) -> {n, right, asked}: about the n most written characters are
-// known; `right` the ids answered right; `asked` how many questions.
+// result(check) -> {n, right, asked}: the n most written characters are
+// known (the cutoff, on the pessimistic side; 0 when it is under one); `right`
+// the ids answered right; `asked` how many characters were asked.
 export function result(c) {
-  return {n: c.lo, right: c.asked.filter(a => a.ok).map(a => a.id),
+  const {lower} = estimate(c.lw, c.pool.length);
+  return {n: Math.floor(lower), right: c.asked.filter(a => a.ok).map(a => a.id),
           asked: c.asked.length};
 }
 
-// The question's four readings (readingChoices, as a session's rung 2): the
-// wrong ones from the readings already asked in this check, then main
-// readings near the character on the path.
+// The question's four readings (readingChoices, as a session's rung 2).
+// Never a reading of this check's earlier characters, nor one that sounds
+// like it (brief 7.13 decided 4: 6b drew the wrong choices from them, so a
+// learner could rule them out); one wrong choice is another reading of the
+// character's sound part where there is one; the rest are main readings
+// near the character on the path.
 export function choicesFor(content, c, rng) {
   const q = question(c);
   if (!q) return null;
-  const pool = c.asked.map(a => content.item(a.id).jp);
-  return readingChoices(content, q.char, content.item(q.id).jp, rng, pool);
+  const earlier = c.asked.map(a => content.item(a.id).jp);
+  return readingChoices(content, q.char, content.item(q.id).jp, rng, [], earlier,
+                        {soundRival: true});
 }
 
-// placementPlan(content, states, {n, right}, today) -> {ids, due}: the top n
-// of the pool and every reading answered right, less any already in
-// Maintain, in path order, with due days spread over SPREAD (state.js) so a
-// big placement never sets off the backlog rule. Not now is {n: 0, right}.
-export function placementPlan(content, states, {n, right = []}, today) {
-  const pool = content.placementPool();
-  const want = new Set([...pool.slice(0, Math.max(0, n)).map(p => p.id), ...right]);
-  const ids = [...want]
-    .filter(id => content.kind(id) === 'reading' && !isKnown(states[id]))
-    .sort((a, b) => content.rank(a) - content.rank(b));
-  return {ids, due: spreadDue(ids, today)};
-}
-
-// applyPlacement(states, plan, today) -> a new states object: each id placed
-// through transition(). The input is not touched.
-export function applyPlacement(states, {ids, due}, today) {
-  const out = {...states};
-  for (const id of ids) {
-    out[id] = transition(states[id] || null, {type: 'placed', item: id, due: due.get(id)}, today);
-  }
-  return out;
+// The meaning question, asked after a right reading (decided 5): {answer,
+// choices}, four English meanings, none of an earlier character's.
+export function meaningChoicesFor(content, c, rng) {
+  const q = question(c);
+  if (!q) return null;
+  return placementMeaningChoices(content, q.id, rng,
+                                 c.asked.map(a => content.item(a.id).char));
 }

@@ -74,12 +74,14 @@ export function loadContent(tables) {
   }
   const mainOf = new Map();                // char -> main reading item id
   const written = new Map();               // char -> {wrank, wshare}
+  const holeRisk = new Set();              // char -> hole-risk (7.13)
   const value = new Map();                 // char -> word-token value per million (7.5)
   for (const [ch, rs] of readingsOf) {
     const m = rs.find(r => r.primary && r.item);
     if (m) mainOf.set(ch, readingId(ch, m.jp));
     if (m && m.wrank != null) written.set(ch, {wrank: m.wrank, wshare: m.wshare});
     if (m && m.value != null) value.set(ch, m.value);
+    if (m && m.wrank != null && m.holerisk) holeRisk.add(ch);
   }
   // placement's pool (patch plan 6): every main reading with a written rank,
   // most written first. Which list ranked them is the export's business.
@@ -203,6 +205,9 @@ export function loadContent(tables) {
     // written characters, per million; null for the colloquial few unranked
     wrankOf: ch => (written.get(ch) || {}).wrank ?? null,
     wshareOf: ch => (written.get(ch) || {}).wshare ?? null,
+    // curated/holerisk.tsv (7.13 P1): a literary character a heritage
+    // learner may not know; only ever true on a ranked main reading
+    holeRiskOf: ch => holeRisk.has(ch),
     // its share of word tokens, per million, both lists (patch plan 7.5):
     // a family card's "N‰ of text" sums it
     valueOf: ch => value.get(ch) ?? 0,

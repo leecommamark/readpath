@@ -33,7 +33,9 @@ export const KEYS = Object.freeze({
   states: 'readpath.states', settings: 'readpath.settings',
   reports: 'readpath.reports', meta: 'readpath.meta', today: 'readpath.today',
   texts: 'readpath.texts', offKnown: 'readpath.offKnown',
-  placement: 'readpath.placement'});
+  placement: 'readpath.placement',
+  // a finished check not yet confirmed (brief 7.13 decided 10)
+  placementPending: 'readpath.placement.pending'});
 export const APP = 'readpath';
 export const FORMAT = 1;
 const DB_NAME = 'readpath', DB_STORE = 'kv', DB_V = 1;

@@ -35,9 +35,11 @@ import {familyCards, familyPage, familyTap, renderFamily, renderDone, familiesOf
         BROWSE_CHUNK} from './views/families.js';
 // the check's confirm, named so it never shadows window.confirm (7B: Import
 // progress called this one and broke)
-import {questionModel, finish, confirm as confirmPlacement, undoConfirm, resultModel,
-        renderQuestion, renderResult} from './views/check.js';
-import {startCheck, answer as answerCheck} from './core/placement.js';
+import {questionModel, meaningModel, renderQuestion, renderMeaning, tilesPerPage, reviewModel,
+        nothingFound, renderReview, renderNothing} from './views/check.js';
+import {startCheck, resumeCheck, answer as answerCheck, result as checkResult} from './core/placement.js';
+import {startPending, questionsPending, stageOf, toggle as toggleReview, toPage, resume as resumeReview, confirmReview,
+        undoConfirm, placementHigh} from './core/review.js';
 import {makeRng} from './core/rng.js';
 import {search} from './core/search.js';
 import {renderFind} from './views/find.js';
@@ -72,7 +74,7 @@ const app = {
   browse: {sort: 'text', shown: 0},  // Browse families' sort and rows drawn (7.7)
   steps: 'families',        // the Steps tab's side: 'families' | 'meaning' (7.8)
   fromTab: 'path',          // the tab a family page or a tree was opened from (7.8)
-  check: null,              // {check, rng, record}: the placement check on
+  check: null,              // {check, rng, meaning, back} or {review, perPage}: the placement check on
   pathQuery: '',            // Find a character's box, kept while the app is open
   firstRun: false,          // first run is on (patch plan 7B)
   updateReady: false,       // a new build is waiting (7B Phase 2)
@@ -136,9 +138,21 @@ function showToday() {
     onFeedback: openFeedback,
     onAbout: () => showAbout(),
     onSettings: () => showSettings(),
-    // the placement check's card (brief 7.8 decided 3)
+    // the placement check's card (brief 7.8 decided 3), or, while a finished
+    // check waits for its review, the card that reopens it (7.13 decided 10)
     placementOffer: placementOffered({placement: app.store.load(KEYS.placement, null),
-                                      meta: app.store.load(KEYS.meta, {}), firstRun: app.firstRun}),
+                                      meta: app.store.load(KEYS.meta, {}), firstRun: app.firstRun,
+                                      pending: app.store.load(KEYS.placementPending, null)}),
+    // 'questions' or 'review' (Mark, after 7.13: a check left midway resumes)
+    placementPending: !app.firstRun && stageOf(app.store.load(KEYS.placementPending, null)),
+    onResume: () => resumePlacement(),
+    onStartOver: () => startPlacement(),
+    // once, if more than 30% of placed first reviews missed (7.13 decided 12)
+    placementHigh: placementHigh(app.store.load(KEYS.placement, null), app.learner.states),
+    onPlacementNoted: () => {
+      app.store.save(KEYS.placement, {...app.store.load(KEYS.placement, null), noted: true});
+      showToday();
+    },
     onCheck: () => startPlacement(),
     onNotNow: () => {
       app.store.save(KEYS.meta, {...app.store.load(KEYS.meta, {}), placementOffer: 'dismissed'});
@@ -200,7 +214,8 @@ function route() {
   else if (hash.startsWith('path/family/')) showFamily(decodeURIComponent(hash.slice(12)), {push: false});
   else if (hash.startsWith('char/')) showTree(decodeURIComponent(hash.slice(5)), {push: false});
   else if (/^path\/block\/\d+$/.test(hash)) showTab('path');
-  else if (hash === 'path/check') startPlacement({push: false});
+  else if (hash === 'path/check/review') openReview({push: false});
+  else if (hash === 'path/check') resumePlacement({push: false});
   else if (stepsView(hash)) showSteps(stepsView(hash));
   else if (hash === 'path/done') showDone({push: false});
   else if (hash === 'about') showAbout({push: false});
@@ -653,8 +668,10 @@ function showPath() {
   renderPath($('path'), pathModel(app.content, app.store.load(KEYS.states, {}), nextUp), {
     onTree: form => showTree(form),
     kindOf,
-    onCheck: () => startPlacement(),
+    // a check left midway is finished from here too, not started again
+    onCheck: () => resumePlacement(),
     placement: app.store.load(KEYS.placement, null),
+    pending: !!app.store.load(KEYS.placementPending, null),
     query: app.pathQuery,
     onQuery(q, host) {
       app.pathQuery = q;
@@ -793,14 +810,33 @@ function studyFamily(key) {
 // and the number of runs, so a rerun on the same day asks different
 // characters.
 
+// A new check replaces any pending one (7.13 decided 10).
 function startPlacement({push = true} = {}) {
-  if (app.firstRun) push = false;      // first run goes on from the check, not back
+  app.store.forget(KEYS.placementPending);
+  openCheck(rng => startCheck(app.content.placementPool(), rng), 0, {push});
+}
+
+// Go on with a pending check (Mark, after 7.13): its questions, rebuilt from
+// the answers so far, or its review pages; a new check if there is none.
+function resumePlacement({push = true} = {}) {
+  const pending = app.store.load(KEYS.placementPending, null);
+  if (!pending) return startPlacement({push});
+  if (stageOf(pending) === 'review') return openReview({push});
+  openCheck(rng => resumeCheck(app.content.placementPool(), pending.asked, rng),
+            pending.asked.length, {push});
+}
+
+function openCheck(make, salt, {push}) {
+  // first run goes on from the check, not back, and keeps no history
+  if (app.firstRun) push = null;
   if (push) history.pushState({check: true}, '', '#path/check');
+  else if (push === false) history.replaceState({check: true}, '', '#path/check');
   const last = app.store.load(KEYS.placement, null);
-  const rng = makeRng((deviceSeed(app.store) * 131 + systemDay() * 7 + ((last && last.runs) || 0)) >>> 0);
+  const rng = makeRng((deviceSeed(app.store) * 131 + systemDay() * 7 + ((last && last.runs) || 0)
+                       + salt * 13) >>> 0);
   app.reader = null;
   app.family = null;
-  app.check = {check: startCheck(app.content.placementPool(), rng), rng, record: null};
+  app.check = {check: make(rng), rng, meaning: null, back: []};
   showScreen('check');
   markTab('path');
   drawCheck();
@@ -809,51 +845,133 @@ function startPlacement({push = true} = {}) {
 function leaveCheck() {
   app.check = null;
   if (app.firstRun) return finishFirstRun();
+  // Today's cards follow the check: the resume card while a review is
+  // pending, the offer gone once a check is recorded (7.13)
+  showToday();
   if (history.state && history.state.check) history.back();
   else showTab('path');
 }
 
 function drawCheck() {
   const c = app.check;
-  const today = systemDay();
-  if (!c.record) {
-    const m = questionModel(app.content, c.check, c.rng);
-    if (m) {
-      renderQuestion($('check'), m, {
-        onExit: leaveCheck,
-        onAnswer(ok) { c.check = answerCheck(c.check, ok, c.rng); drawCheck(); },
-      });
-      window.scrollTo(0, 0);
-      return;
-    }
-    // done: what was answered right is placed now, Confirm or not (decided 1)
-    const done = finish(app.content, app.store.load(KEYS.states, {}), c.check, today,
-                        app.store.load(KEYS.placement, null));
-    app.store.save(KEYS.states, done.states);
-    app.store.save(KEYS.placement, done.record);
-    c.record = done.record;
-    statesChanged();
+  // ‹ Back (Mark, 7.13): each screen's check and step are kept before an
+  // answer, and Back puts the last back. A check is never edited, so the
+  // kept one is exactly the screen before.
+  const keep = () => c.back.push({check: c.check, meaning: c.meaning});
+  const nav = {onExit: leaveCheck, canBack: c.back.length > 0,
+               onBack: () => { Object.assign(c, c.back.pop()); drawCheck(); }};
+  // the answers so far are kept, so ✕ midway leaves a check to finish later
+  // (Mark, after 7.13; it had recorded nothing)
+  if (c.check.asked.length) {
+    app.store.save(KEYS.placementPending,
+                   questionsPending(c.check, systemDay(), app.store.load(KEYS.placement, null)));
+  } else app.store.forget(KEYS.placementPending);
+  if (c.meaning) {
+    // the meaning step of a question whose reading was right (7.13 decided 5)
+    renderMeaning($('check'), c.meaning, {
+      ...nav,
+      onAnswer(ok) {
+        keep();
+        c.meaning = null;
+        c.check = answerCheck(c.check, {reading: true, meaning: ok}, c.rng);
+        drawCheck();
+      },
+    });
+    window.scrollTo(0, 0);
+    return;
   }
-  renderResult($('check'), resultModel(app.content, app.store.load(KEYS.states, {}), c.record, today), {
+  const m = questionModel(app.content, c.check, c.rng);
+  if (m) {
+    renderQuestion($('check'), m, {
+      ...nav,
+      onAnswer(ok) {
+        keep();
+        if (ok) c.meaning = meaningModel(app.content, c.check, c.rng);
+        else c.check = answerCheck(c.check, {reading: false}, c.rng);
+        drawCheck();
+      },
+    });
+    window.scrollTo(0, 0);
+    return;
+  }
+  finishQuestions();
+}
+
+// The questions are done: nothing is placed (brief 7.13 decided 7). The
+// result becomes the pending record, which replaces any earlier one, and the
+// review pages open. A check that found nothing to place says so and keeps
+// its record, so Today stops offering the check.
+function finishQuestions() {
+  const today = systemDay();
+  const states = app.store.load(KEYS.states, {});
+  const last = app.store.load(KEYS.placement, null);
+  const pending = startPending(checkResult(app.check.check), today, last);
+  if (nothingFound(app.content, states, pending)) {
+    app.store.forget(KEYS.placementPending);
+    app.store.save(KEYS.placement, {day: today, n: pending.n, asked: pending.asked,
+                                    right: pending.right.length, confirmed: false,
+                                    runs: pending.runs, placed: 0});
+    renderNothing($('check'), {asked: pending.asked, right: pending.right.length,
+                               allKnown: pending.n > 0 || pending.right.length > 0}, {onDone: leaveCheck});
+    window.scrollTo(0, 0);
+    return;
+  }
+  app.store.save(KEYS.placementPending, pending);
+  openReview({push: false});
+}
+
+// ---- the review pages (patch plan 7.13, Phase 4): an entry in the history
+// like the check, so ✕ or back leaves them; leaving keeps the pending record
+// (taps and page), and Today's card or #path/check/review reopens it, less
+// whatever became known meanwhile.
+
+function openReview({push = true} = {}) {
+  const saved = app.store.load(KEYS.placementPending, null);
+  if (!saved) return showTab('path');
+  if (push) history.pushState({check: true}, '', '#path/check/review');
+  else history.replaceState({check: true}, '', '#path/check/review');
+  const perPage = tilesPerPage(window.innerWidth, window.innerHeight);
+  const pending = resumeReview(app.content, app.store.load(KEYS.states, {}), saved, perPage);
+  app.store.save(KEYS.placementPending, pending);
+  app.reader = null;
+  app.family = null;
+  app.check = {review: true, perPage};
+  showScreen('check');
+  markTab('path');
+  drawReview();
+}
+
+function drawReview() {
+  const {perPage} = app.check;
+  const states = app.store.load(KEYS.states, {});
+  const pending = app.store.load(KEYS.placementPending, null);
+  const save = p => { app.store.save(KEYS.placementPending, p); drawReview(); };
+  const turn = by => { save(toPage(pending, pending.page + by)); window.scrollTo(0, 0); };
+  renderReview($('check'), reviewModel(app.content, states, pending, perPage), {
+    onExit: leaveCheck,
+    onToggle: id => save(toggleReview(pending, id)),
+    onBack: () => turn(-1),
+    onNext: () => turn(1),
     onConfirm() {
-      const r = confirmPlacement(app.content, app.store.load(KEYS.states, {}), c.record.n, today);
+      const today = systemDay();
+      const last = app.store.load(KEYS.placement, null);
+      const r = confirmReview(app.content, states, pending, today, perPage);
       app.store.save(KEYS.states, r.states);
-      const record = c.record;
-      app.store.save(KEYS.placement, {...record, confirmed: true});
+      app.store.save(KEYS.placement, r.record);
+      app.store.forget(KEYS.placementPending);
       leaveCheck();
       statesChanged();
-      // Undo puts back what Confirm changed and nothing else (Mark, 6b); the
-      // right answers placed at the finish stay, as Not now would leave them
+      // Undo puts back everything Confirm placed, the record before it, and
+      // the review pages with their taps (Phase 0 Q7): Today offers them again
       toast(`${r.placed.toLocaleString('en-GB')} ${r.placed === 1 ? 'character' : 'characters'} marked known.`, {action: 'Undo', onAction: () => {
         app.store.save(KEYS.states, undoConfirm(app.store.load(KEYS.states, {}), r.before));
-        app.store.save(KEYS.placement, {...record, confirmed: false});
+        if (last) app.store.save(KEYS.placement, last); else app.store.forget(KEYS.placement);
+        app.store.save(KEYS.placementPending, pending);
         statesChanged();
-        toast('Undone: only the characters you answered right stay marked.');
+        toast('Undone. Finish checking your placement from Today when you’re ready.');
       }});
     },
-    onNotNow: leaveCheck,
   });
-  window.scrollTo(0, 0);
 }
 
 // A family's page is an entry in the history, as the Reader is, so back

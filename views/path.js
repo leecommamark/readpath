@@ -203,7 +203,8 @@ function rowsBlock(m, cb) {
   const last = cb.placement || null;
   return h('section', {class: 'block jumps'},
     m.families.done > 0 && row('Done', plural(m.families.done, 'card'), cb.onDone),
-    row('Placement check', last ? `Last check: about ${n0(last.n)}` : 'Already read some Chinese?', cb.onCheck),
+    row('Placement check', cb.pending ? 'In progress: tap to finish it'
+      : last ? `Last check: about ${n0(last.n)}` : 'Already read some Chinese?', cb.onCheck),
     cb.onFeedback && row('Send feedback', 'A note, and your reports, to Mark', cb.onFeedback));
 }
 
