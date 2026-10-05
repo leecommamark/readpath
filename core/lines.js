@@ -63,13 +63,20 @@ export function linesOf(text, srcText, lexicon, wordJp) {
 
 // A line's sentences, as [from, to) part indexes: a text part with a
 // sentence end (。！？；, or ! ? ;) closes one, closing quotes with it (呀？」).
-// A lyric line is one sentence; a prose line is a paragraph of them.
+// So does a space between two Chinese characters, which written Chinese
+// never has unless it means a pause (a lyric's phrasing: Mark, 7.14); a
+// space beside a Latin word (我用 iPhone 打字) doesn't. A lyric line without
+// one is one sentence; a prose line is a paragraph of them.
 const SENTENCE_END = /[。！？；!?;]/;
+const PAUSE = /^\s+$/u;                   // the whole text part: words on both sides
 export function sentenceSpans(parts) {
   const out = [];
   let from = 0;
   parts.forEach((p, k) => {
-    if (p.type === 'text' && SENTENCE_END.test(p.text)) { out.push([from, k + 1]); from = k + 1; }
+    if (p.type === 'text' && (SENTENCE_END.test(p.text) || PAUSE.test(p.text))) {
+      out.push([from, k + 1]);
+      from = k + 1;
+    }
   });
   if (from < parts.length) out.push([from, parts.length]);
   return out;

@@ -23,14 +23,15 @@ import {coverage} from './core/coverage.js';
 import {fnv1aCp} from './dict.js';
 
 export const SAMPLE_URL = 'starter/jamcaa.txt';
-export const LINES_FORMAT = 2;
+export const LINES_FORMAT = 3;
 
 export function createLibrary({store, content, dict, cache = null, version}) {
   const held = new Map();                  // cache key -> {lines, tokens}
   const list = () => store.load(KEYS.texts, []);
   const save = texts => store.save(KEYS.texts, texts);
   const find = id => list().find(t => t.id === id) || null;
-  // LINES_FORMAT moves when the cached shape does (Phase 5: tokens gained `sent`)
+  // LINES_FORMAT moves when the cached shape does (Phase 5: tokens gained
+  // `sent`; 7.14: a space between Chinese characters ends a sentence)
   const keyOf = t => `${version}:${LINES_FORMAT}:${t.id}:${fnv1aCp(t.body)}`;
   // once, on load: a text saved with compatibility ideographs (7.11)
   {
@@ -95,8 +96,10 @@ export function createLibrary({store, content, dict, cache = null, version}) {
       const {title, body} = splitTitled(await res.text());
       return this.add(body, {title, day});
     },
-    // importFiles([{name, raw}], {day, onStep}) -> {log, added, skipped, failed}
-    //   raw null: a file that couldn't be read, logged as failed.
+    // importFiles([{name, raw, title?}], {day, onStep}) -> {log, added, skipped, failed}
+    //   raw null: a file that couldn't be read, logged as failed. title: a
+    //   text set's, taken off its first line (7.14), used in place of the
+    //   first line's.
     //   One file at a time, in order, flushed after each (songpath's batch):
     //   an LRC's timestamps are stripped, the title is the first line (else
     //   the file's name), a refusal is logged and the batch moves on, and a
@@ -106,7 +109,7 @@ export function createLibrary({store, content, dict, cache = null, version}) {
       const log = [];
       const count = {added: 0, skipped: 0, failed: 0};
       for (let i = 0; i < files.length; i++) {
-        const {name, raw} = files[i];
+        const {name, raw, title = ''} = files[i];
         onStep(i + 1, files.length, name);
         if (raw === null) {                // the file couldn't be read
           log.push({name, result: 'failed', why: 'couldn’t read the file'});
@@ -114,7 +117,7 @@ export function createLibrary({store, content, dict, cache = null, version}) {
           continue;
         }
         const {body, note} = bodyOfFile(raw);
-        const r = this.add(body, {title: autoTitle(body) || name.replace(/\.[^.]*$/, ''), day});
+        const r = this.add(body, {title: title || autoTitle(body) || name.replace(/\.[^.]*$/, ''), day});
         if (r.problem) {
           log.push({name, result: 'skipped', why: r.problem.why});
           count.skipped++;

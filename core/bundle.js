@@ -6,9 +6,13 @@
 // under TEXTS_BASE; the only URLs built here are TEXTS_BASE + a BUNDLE_ID
 // folder + (index.json | an index entry's file name), so nothing outside
 // TEXTS_BASE is ever fetched. The texts go to library.importFiles as
-// [{name, raw}] (raw null: the file couldn't be read).
+// [{name, raw, title}] (raw null: the file couldn't be read): a set's file is
+// its title on line 1, then the text, so the title comes off, as the
+// sample's does (Mark, 7.14).
 //
 // index.json: {format: 1, name, description, texts: [{file, title, chars}]}
+
+import {splitTitled} from './import.js';
 
 export const TEXTS_BASE = 'https://leecommamark.github.io/readpath-beta-texts/';
 export const BUNDLE_ID = /^[a-z0-9-]{1,40}$/;
@@ -73,7 +77,7 @@ export async function fetchBundleIndex(id, fetchFn) {
   return {id, name, description, texts};
 }
 
-// fetchBundleTexts(index, files, fetchFn, onStep) -> [{name, raw}]
+// fetchBundleTexts(index, files, fetchFn, onStep) -> [{name, raw, title}]
 //   The chosen files that are in the index, in index order, one at a time.
 //   onStep(i, n, title) runs before each. A file that fails comes back with
 //   raw null and the rest go on.
@@ -88,7 +92,9 @@ export async function fetchBundleTexts(index, files, fetchFn, onStep = () => {})
       const res = await fetchFn(TEXTS_BASE + index.id + '/' + encodeURIComponent(file), {cache: 'no-cache'});
       if (res.ok) raw = await res.text();
     } catch { /* raw stays null */ }
-    out.push({name: file, raw});
+    if (raw === null) { out.push({name: file, raw, title}); continue; }
+    const t = splitTitled(raw);
+    out.push({name: file, raw: t.body, title: t.title || title});
   }
   return out;
 }
