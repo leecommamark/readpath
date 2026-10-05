@@ -680,6 +680,10 @@ const textsActions = {
         textsUi.bundle = {stage: 'ask', input: '', error: 'Couldn’t paste. Paste into the box instead.'};
         return showTexts();
       }
+      if (!(raw || '').trim()) {
+        textsUi.bundle = {stage: 'ask', input: '', error: 'Nothing to paste. Copy the link first, then tap Paste.'};
+        return showTexts();
+      }
       textsActions.onLinkGet(raw);
     }
     : null,

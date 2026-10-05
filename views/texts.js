@@ -67,10 +67,13 @@ export function previewLine(p) {
 export const addLabel = n => `Add ${plural(n, 'text')}`;
 export const NOT_A_SET = 'That isn’t a link to a text set, or a set’s name.';
 // what the field's Get does with what's in it: {id} | {error}, before
-// anything is fetched
+// anything is fetched. A pasted message with the link in it gives the link's
+// set (the emulator, 7.14): each URL in it is tried, trailing punctuation off.
+const URLS = /https?:\/\/[^\s<>"'「」（）()]+/g;
 export function linkInput(raw) {
   if (!(raw || '').trim()) return {error: 'Paste a link, or type a set’s name.'};
-  const id = bundleIdOf(raw);
+  const id = bundleIdOf(raw) ||
+    (raw.match(URLS) || []).map(u => bundleIdOf(u.replace(/[.,;:!?。，；：！？]+$/u, ''))).find(Boolean);
   return id ? {id} : {error: NOT_A_SET};
 }
 // the note under a preview opened outside the installed app (7.14): on iOS
