@@ -13,9 +13,9 @@
 //
 // refModel() is pure; renderRef() draws it into the overlay.
 
-import {h, han, clear, put, rubyWord, jpSpan} from './dom.js';
-import {builtFrom, relationText, word as wordEntry, overOf, overChar, meaningWording,
-        cardWords, WORDS_SHOWN} from './facts.js';
+import {h, han, clear, put, rubyWord, jpSpan, layerChip} from './dom.js';
+import {builtFrom, relationOf, word as wordEntry, overOf, overChar, meaningWording,
+        cardWords, WORDS_SHOWN, LAYER_TEXT} from './facts.js';
 import {isKnown, MAINTAIN} from '../core/state.js';
 import {canMarkKnown, canForget, canKnowOff} from '../actions.js';
 import {canTestMe} from '../runner.js';
@@ -162,7 +162,8 @@ export function refModel(content, states, form, texts = [], opts = {}) {
     const readings = content.readingsOf(form).filter(r => r.item).map(r => {
       const id = `r:${form}:${r.jp}`;
       return {id, jp: r.jp, gloss: r.gloss, main: !!r.primary,
-              relation: r.primary ? null : relationText(r.relation),
+              layer: r.layer || null,
+              relation: r.primary ? null : relationOf(r),
               status: statusOf(content, states[id], id)};
     });
     const words = cardWords(content, states, main);
@@ -315,7 +316,8 @@ export function renderRef(el, m, cb) {
   if (m.kind === 'char') {
     body.push(h('div', {class: 'ref-readings'},
       ...m.readings.map(r => h('div', {class: 'reading-block center'},
-        h('p', {class: 'jp big-jp'}, r.jp),
+        h('div', {class: 'jp-line'}, h('p', {class: 'jp big-jp'}, r.jp),
+          layerChip(r.layer, LAYER_TEXT[r.layer])),
         r.gloss && h('p', {class: 'gloss-line'}, r.gloss),
         !r.main && h('p', {class: 'sm'}, `${r.relation}; ${r.status}`)))));
     body.push(simplifiedLine(m));

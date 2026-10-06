@@ -7,7 +7,8 @@
 //   * each character of each token maps to its MAIN reading item, or to a
 //     secondary reading item when the token is a word whose jyutping names
 //     that reading (銀行 -> 行 hong4; 行山 -> 行 haang4). A single-character
-//     token has no word context, so it is the main reading;
+//     token has no word context, so it is the character's LONE reading
+//     (brief 7.16: its 白 reading, 返 faan1, 生 saang1; else the main one);
 //   * known readings (in Maintain) are dropped;
 //   * each remaining reading brings its unmet prerequisites (a part not yet
 //     unlocked, a main reading not yet known, and that main reading's own
@@ -21,14 +22,20 @@ import {isKnown} from './state.js';
 import {prereqMet} from './unlock.js';
 
 // The reading item a character stands for in a token, or null (off the path).
-export function readingItemFor(content, ch, jp) {
+// The one place a token's reading is decided: the Reader, coverage, the
+// focus text, rung 5's sentences and In your texts all ask here. With the
+// word's jyutping it is that reading. A character standing alone (a token
+// of one character: `alone`) takes its lone reading (brief 7.16). Anything
+// else -- a word with no jyutping, or one whose jyutping names no item --
+// is the main reading.
+export function readingItemFor(content, ch, jp, alone = false) {
   const main = content.mainReading(ch);
   if (!main) return null;
   if (jp) {
     const id = readingId(ch, jp);
     if (content.has(id)) return id;
   }
-  return main;
+  return (alone && content.loneReading(ch)) || main;
 }
 
 // Every character token of a text, in text order: [{ch, id, line, sent}], where
@@ -42,7 +49,8 @@ export function charItems(content, tokens) {
     const jps = jp ? jp.split(' ') : [];
     const perChar = jps.length === chars.length;   // else no word context
     chars.forEach((ch, i) => {
-      out.push({ch, id: readingItemFor(content, ch, perChar ? jps[i] : ''), line, sent});
+      out.push({ch, id: readingItemFor(content, ch, perChar ? jps[i] : '', chars.length === 1),
+                line, sent});
     });
   }
   return out;

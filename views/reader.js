@@ -16,7 +16,8 @@
 // readerModel() is pure (a test reads it without a DOM); renderReader()
 // draws it. What a tap does is the shell's (main.js).
 
-import {h, han, clear, put} from './dom.js';
+import {h, han, clear, put, jpSpan, layerChip} from './dom.js';
+import {LAYER_TEXT} from './facts.js';
 import {readingItemFor} from '../core/focus.js';
 import {isKnown} from '../core/state.js';
 import {coverage} from '../core/coverage.js';
@@ -33,32 +34,34 @@ const GLOSS_SHOWN = 18;                    // characters of a gloss under a word
 const shortGloss = g => cutGloss(g, GLOSS_SHOWN);
 
 // A word's meaning: the dictionary's for a word of 2+ characters; for one
-// character, its main reading's (the content's curated gloss), else the
+// character, its lone reading's (brief 7.16; the content's curated gloss), else the
 // dictionary's.
 // -> {text, weak}: muted as core/provenance.js says (brief 7.11).
 export function wordGloss(content, form, {wordOf, charOf}) {
   if (Array.from(form).length > 1) return {text: ((wordOf && wordOf(form)) || {}).gloss || '', weak: false};
-  return charGloss(content, form, charOf || null);
+  return charGloss(content, form, charOf || null, {lone: true});
 }
 export const glossOf = (content, form, opts) => wordGloss(content, form, opts).text;
 
 // One word part -> its characters as the Reader shows them:
-//   {char, shown, over, id, known, off, offKnown}
+//   {char, shown, over, id, known, off, offKnown, layer}
 //   shown  the form on the page: as written when asked for and s2t changed it
 //   over   the jyutping over it, or null where it's known in that reading
 //   id     its reading item (the word's jyutping decides it), null off the path
 //   offKnown  off the path, and in the learner's offKnown set: no jyutping
+//   layer  文 or 白: the mark on the reading it has here (brief 7.16), or null
 export function wordChars(content, states, part, {asWritten = false, charOf, offKnown} = {}) {
   const jps = part.jp ? part.jp.split(' ') : [];
   const perChar = jps.length === part.chars.length;
   return part.chars.map((c, k) => {
-    const id = readingItemFor(content, c.char, perChar ? jps[k] : '');
+    const id = readingItemFor(content, c.char, perChar ? jps[k] : '', part.chars.length === 1);
     const syl = perChar ? jps[k]
       : id ? content.item(id).jp : ((charOf && charOf(c.char)) || {}).jp || '';
     const known = !!id && isKnown(states[id]);
     const offK = !id && !!offKnown && offKnown.has(c.char);
     return {char: c.char, shown: asWritten && c.src ? c.src : c.char,
-            over: known || offK ? null : (syl || null), id, known, off: !id, offKnown: offK};
+            over: known || offK ? null : (syl || null), id, known, off: !id, offKnown: offK,
+            layer: (id && content.item(id).layer) || null};
   });
 }
 
@@ -102,7 +105,10 @@ export function selectedWord(m) {
   for (const l of m.lines) {
     for (const p of l.parts || []) {
       if (p.selected) {
-        return {key: p.key, form: p.form, gloss: p.gloss, weak: !!p.weak, line: l.line, chars: p.chars};
+        return {key: p.key, form: p.form, gloss: p.gloss, weak: !!p.weak, line: l.line, chars: p.chars,
+                // P6 (brief 7.16): which reading each marked character has here
+                layers: p.chars.filter(c => c.layer).map(c => ({char: c.char, layer: c.layer,
+                                                                 jp: c.id.split(':')[2]}))};
       }
     }
   }
@@ -190,6 +196,8 @@ export function renderReader(el, m, cb) {
                    onclick: () => cb.onWord(null)}, '✕')),
     h('p', {class: `gloss-line${word.weak ? ' weak' : ''}`}, word.gloss || 'No meaning in the dictionary for this one.'),
     word.weak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE),
+    ...word.layers.map(x => h('p', {class: 'note layer-note'},
+      han(x.char), ' here is ', jpSpan(x.jp), `, ${LAYER_TEXT[x.layer]} `, layerChip(x.layer, LAYER_TEXT[x.layer]))),
     h('div', {class: 'links'},
       ...word.chars.map(c => glyphTile(c.char, cb.kindOf ? cb.kindOf(c.char) : null,
                                         {size: 'sm', progress: cb.progressOf ? cb.progressOf(c.char) : null,

@@ -33,6 +33,13 @@ export const han = (text, attrs = {}) =>
 // learner has them on (app.css .jp). Never wrap other text in it.
 export const jpSpan = text => h('span', {class: 'jp', lang: 'en'}, text);
 
+// A 文 or 白 chip (brief 7.16): its own element, never inside a .jp (the
+// font would draw nothing wrong, but .jp holds jyutping only, jp.test.js).
+// `label` is facts.js LAYER_TEXT's words, for a screen reader and a tooltip.
+export const layerChip = (layer, label) => layer
+  ? h('span', {class: 'layer-chip', lang: 'zh-Hant-HK', title: label, 'aria-label': label}, layer)
+  : null;
+
 // Characters each over their jyutping line (views/facts.js overOf: blank
 // where the learner knows it). `mark` underlines one (a word question's
 // target).

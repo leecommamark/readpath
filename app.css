@@ -256,6 +256,16 @@ mark.rb { background: none; color: inherit;
 .verdict.learn { color: var(--learn-text); }
 .answer-line { margin: 0; }
 .big-jp { font-size: var(--t-lg); font-weight: 600; }
+/* a reading and its 文 / 白 chip (brief 7.16): the chip beside the jyutping,
+   never inside it */
+.jp-line { display: flex; justify-content: center; align-items: baseline; gap: var(--s2); }
+.jp-line > p { margin: 0; }
+.layer-chip {
+  display: inline-block; font-family: var(--han); font-size: var(--t-sm);
+  line-height: 1; padding: 3px 5px; border: 1px solid var(--rule); border-radius: 4px;
+  color: var(--muted); vertical-align: middle;
+}
+.layer-note { margin: 0; }
 .reading-block { display: flex; flex-direction: column; gap: 2px; }
 .reading-block p { margin: 0; }
 .reading-block.center { align-items: center; text-align: center; }

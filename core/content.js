@@ -70,15 +70,20 @@ export function loadContent(tables) {
       words: r.words || [],
       unlockAfter: r.unlock_after ? readingId(r.char, r.unlock_after) : null,
       relation: r.relation, base: r.base,
+      // 文 or 白 (brief 7.16, Mark's ruling), null where he made none
+      layer: r.layer || null,
     });
   }
   const mainOf = new Map();                // char -> main reading item id
+  const loneOf = new Map();                // char -> its lone reading item id (7.16)
   const written = new Map();               // char -> {wrank, wshare}
   const holeRisk = new Set();              // char -> hole-risk (7.13)
   const value = new Map();                 // char -> word-token value per million (7.5)
   for (const [ch, rs] of readingsOf) {
     const m = rs.find(r => r.primary && r.item);
     if (m) mainOf.set(ch, readingId(ch, m.jp));
+    const lone = rs.find(r => r.lone && r.item);
+    if (lone) loneOf.set(ch, readingId(ch, lone.jp));
     if (m && m.wrank != null) written.set(ch, {wrank: m.wrank, wshare: m.wshare});
     if (m && m.value != null) value.set(ch, m.value);
     if (m && m.wrank != null && m.holerisk) holeRisk.add(ch);
@@ -201,6 +206,9 @@ export function loadContent(tables) {
     prereqs: id => item(id).prereqs,
     kind: id => item(id).kind,
     mainReading: ch => mainOf.get(ch) || null,
+    // the reading item a character takes standing alone in a text (brief
+    // 7.16, Decided 2): its 白 reading, or Mark's ruling, else the main one
+    loneReading: ch => loneOf.get(ch) || mainOf.get(ch) || null,
     // a character's written-Chinese rank (1 = most written) and its share of
     // written characters, per million; null for the colloquial few unranked
     wrankOf: ch => (written.get(ch) || {}).wrank ?? null,

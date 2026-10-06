@@ -54,8 +54,10 @@ export const charGlossWeak = c => !!c && !!c.gloss && WEAK_SRC.has(c.src);
 // else the `char` table's, muted as on the off-path card. A word of 2+
 // characters is never muted: CC-CEDICT's word glosses show normally (Mark,
 // 7.11 Phase 0), and review/word_gloss_diff.tsv is their fix.
-export function charGloss(content, form, charOf = content.char) {
-  const r = content.mainReading(form);
+// {lone: true}: the lone reading's gloss instead (the Reader's one-character
+// word, brief 7.16: a lone 返 shows faan1's sense).
+export function charGloss(content, form, charOf = content.char, {lone = false} = {}) {
+  const r = lone ? content.loneReading(form) : content.mainReading(form);
   const it = r && content.item(r);
   if (it && it.gloss) return {text: it.gloss, weak: it.src === 'other_reading'};
   const c = charOf ? charOf(form) : null;

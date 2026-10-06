@@ -102,6 +102,18 @@ export function relationText(relation) {
   return RELATION_TEXT[relation] || RELATION_TEXT.other;
 }
 
+// 文 and 白 in words (brief 7.16, Decided 4): the chip says the character,
+// these say what it means.
+export const LAYER_TEXT = {白: 'the spoken reading', 文: 'the literary reading'};
+// "the spoken reading (白)", or null for a reading with no mark
+export const layerWords = layer => (LAYER_TEXT[layer] ? `${LAYER_TEXT[layer]} (${layer})` : null);
+// How a secondary reading relates to the main one: its 文/白 mark where
+// Mark ruled one (in place of "the literary and colloquial readings"),
+// else the relation's words.
+export function relationOf(item) {
+  return layerWords(item.layer) || relationText(item.relation);
+}
+
 // The jyutping to show over each character of `form` read `jp`: the
 // syllable, or null where the learner knows that character in that reading
 // (Maintain), where the word has no jyutping, or at index `skip` (a question's

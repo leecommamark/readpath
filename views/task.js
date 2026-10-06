@@ -18,8 +18,9 @@
 //             part) and Tell apart (a member of a family, from its meaning)
 //   standin   a part test with nothing to ask (no member left): passed
 
-import {h, han, clear, put, rubyWord, jpSpan} from './dom.js';
-import {cardWords, word as wordEntry, builtFrom, relationText, overOf, meaningWording} from './facts.js';
+import {h, han, clear, put, rubyWord, jpSpan, layerChip} from './dom.js';
+import {cardWords, word as wordEntry, builtFrom, relationOf, overOf, meaningWording,
+        LAYER_TEXT} from './facts.js';
 import {kindOf} from '../core/content.js';
 import {readingChoices, characterChoices, meaningChoices,
         tellApartChoices} from '../core/choices.js';
@@ -119,7 +120,8 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
     return m;
   }
   const it = content.item(task.item);
-  const reveal = {glyph: it.char, jp: it.jp, gloss: it.gloss, words: cardWords(content, states, task.item)};
+  const reveal = {glyph: it.char, jp: it.jp, gloss: it.gloss, layer: it.layer || null,
+                  words: cardWords(content, states, task.item)};
   // a question's answer teaches as a part test's does: the reading, its
   // meaning and the card's words (brief 7.9, Mark: "all of the tests"; the
   // card's words, all of them, since 7.10)
@@ -130,7 +132,7 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
     if (!from) {
       const pattern = task.pattern && {
         main: content.item(task.pattern.main).jp,
-        relation: relationText(task.pattern.relation),
+        relation: relationOf(it),
       };
       return {...base, kind: 'teach', glyph: it.char, reveal, pattern,
               lead: pattern ? `A new reading of ${it.char}` : 'A new character',
@@ -221,7 +223,7 @@ function sentenceCard(content, states, task, it, lineOf) {
     const perChar = jps.length === p.chars.length;
     if (!others) {
       const k = p.chars.findIndex((c, i) => c.char === it.char
-        && readingItemFor(content, c.char, perChar ? jps[i] : '') === task.item);
+        && readingItemFor(content, c.char, perChar ? jps[i] : '', p.chars.length === 1) === task.item);
       if (k >= 0) {
         chars[k] = {...chars[k], over: null, mark: true};
         others = perChar ? jps.filter((_, i) => i !== k) : [];
@@ -266,9 +268,10 @@ function wordLines(ws) {
 
 // The reading, then the meaning on a line of its own (Mark's iPhone check:
 // "the english gloss and reading appeared in the same line").
-function readingBlock(jp, gloss, cls = '') {
+function readingBlock(jp, gloss, cls = '', layer = null) {
   return h('div', {class: `reading-block ${cls}`.trim()},
-    jp && h('p', {class: 'jp big-jp'}, jp),
+    jp && h('div', {class: 'jp-line'}, h('p', {class: 'jp big-jp'}, jp),
+      layerChip(layer, LAYER_TEXT[layer])),
     gloss && h('p', {class: 'gloss-line'}, gloss));
 }
 
@@ -397,8 +400,8 @@ export function renderTask(el, m, cb) {
       glyphButton(m.glyph, cb),
       tipLine(cb),
       m.partLead && h('p', {class: 'note center part-lead'}, m.partLead),
-      m.quiet ? h('div', {class: 'muted'}, readingBlock(r.jp, r.gloss, 'center'))
-              : readingBlock(r.jp, r.gloss, 'center'),
+      m.quiet ? h('div', {class: 'muted'}, readingBlock(r.jp, r.gloss, 'center', r.layer))
+              : readingBlock(r.jp, r.gloss, 'center', r.layer),
       m.partNote && h('p', {class: 'note center'}, m.partNote),
       m.standsFor && h('p', {class: 'note center'}, 'It stands for ', han(m.standsFor)),
       m.pattern && h('p', {class: 'note center'}, 'Its main reading is ', jpSpan(m.pattern.main), '; ',
