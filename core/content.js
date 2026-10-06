@@ -136,9 +136,11 @@ export function loadContent(tables) {
   // how far a meaning part can be trusted, and Mark's note on it (CO-059)
   const partTrust = new Map(T.meaning_part.map(m => [m.part, {reliability: m.reliability || null,
                                                              note: m.note || null}]));
-  // the part a shape stands for (忄 心, 氵 水, 㣺 心): two parts are one where
-  // this agrees, and never tell characters apart (CO-062)
-  const stands = new Map(T.meaning_part.filter(m => m.stands_for).map(m => [m.part, m.stands_for]));
+  // the part a shape counts as when telling apart (忄 心, 氵 水, 㣺 心): two
+  // parts are one where this agrees, and never tell characters apart
+  // (CO-062). `tells_as` is stands_for, except where Mark made a shape its
+  // own part (brief 7.17: 月 body parts against 肉 meat)
+  const stands = new Map(T.meaning_part.filter(m => m.tells_as).map(m => [m.part, m.tells_as]));
   const onePart = part => (part && stands.get(part)) || part;
   const byRank = ids => ids.sort((a, b) => items.get(a).rank - items.get(b).rank);
   const members = new Map();               // part item id -> [reading item id]

@@ -15,7 +15,7 @@
 //     parts), so text-driven learning keeps the path's prerequisites;
 //   * the result is in path order, which puts every prerequisite first.
 //
-// Characters not on the 3,000-character path are listed, not learned.
+// Characters not on the path are listed, not learned.
 
 import {readingId} from './content.js';
 import {isKnown} from './state.js';

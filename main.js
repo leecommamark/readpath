@@ -30,7 +30,7 @@ import {showSession} from './views/session.js';
 import {refModel, renderRef, shownOfRef} from './views/refcard.js';
 import {renderReport} from './views/report.js';
 import {markKnown, forgot, markInReader, undoMark, canKnowOff, knowOff, unknowOff,
-        undoOff} from './actions.js';
+        undoOff, carryOffKnown} from './actions.js';
 import {pathModel, renderPath} from './views/path.js';
 import {familyCards, familyPage, familyTap, renderFamily, renderDone, familiesOf, browseModel, renderBrowse,
         BROWSE_CHUNK} from './views/families.js';
@@ -1298,6 +1298,11 @@ async function boot() {
     $('loading').textContent = `Read Path couldn’t start: ${e.message}.`;
     return;
   }
+  // an off-path "I know this" whose character the path now takes (brief
+  // 7.17, P2): placed, provisional, before anything reads the states
+  const carry = carryOffKnown(app.content, app.store.load(KEYS.states, {}),
+                              app.store.load(KEYS.offKnown, []), systemDay());
+  if (carry.carried.length) app.store.save(KEYS.states, carry.states);
   // tones as marks or numbers (7.12): before any jyutping is drawn
   applyJp(document.documentElement, app.store);
   $('loading').hidden = true;

@@ -8,7 +8,7 @@
 // own tasks. They write into `learner.states`, the run's while a session is
 // on, so the session sees them at once.
 
-import {transition, isKnown, INTERVALS, PLACED_STEP} from './core/state.js';
+import {transition, isKnown, INTERVALS, PLACED_STEP, placedDue} from './core/state.js';
 
 export const canMarkKnown = (content, states, id) =>
   !!id && content.kind(id) === 'reading' && !isKnown(states[id]);
@@ -75,6 +75,27 @@ export function knowOff(list, ch) {
 export function unknowOff(list, ch) {
   return {list: withOff(list, ch, false), char: ch, before: list.includes(ch)};
 }
+// carryOffKnown(content, states, list, today) -> {states, carried}: the
+// path grew (brief 7.17, P2, Mark 2026-10-06), so a character a learner
+// marked "I know this" while it was off the path may be on it now. Each
+// such character with no state yet becomes a known state, provisional with
+// an early first review, as a placed character is (7.13: state.js
+// `placed`, placedDue's early window). One with a state already keeps it,
+// and the list itself is left alone (on the path it no longer reads it).
+// Safe to run at every start: a carried character has a state the next
+// time. `carried` is the reading ids placed, in the list's order.
+export function carryOffKnown(content, states, list, today) {
+  const carried = list.map(ch => content.mainReading(ch))
+    .filter(id => id && !states[id]);
+  if (!carried.length) return {states, carried};
+  const due = placedDue(carried, [], today);
+  const out = {...states};
+  for (const id of carried) {
+    out[id] = transition(null, {type: 'placed', item: id, due: due.get(id)}, today);
+  }
+  return {states: out, carried};
+}
+
 // Undo: the character back in the list exactly if it was there before.
 export function undoOff(list, {char, before}) {
   return withOff(list, char, before);

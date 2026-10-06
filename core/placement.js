@@ -19,8 +19,8 @@
 // rarity; g the chance of a right answer to an unknown character (a guess
 // that gets both the reading and the meaning); m the chance of a miss on a
 // known one (a slip or a hole). The model is a GRID over the four, with this
-// prior: K log-uniform from 1 to 8,000 (past the pool's 2,922, for a reader
-// who knows them all); s from sharp (0.2) to gentle (0.65), equally likely;
+// prior: K log-uniform from 1 to 8,000 (past the pool's 4,856 since brief
+// 7.17, 2,922 before, for a reader who knows them all); s from sharp (0.2) to gentle (0.65), equally likely;
 // g and m each equally likely low or high. Every answer reweights the grid.
 //
 // The cutoff N: each cell's N is the largest rank whose expected unknown
