@@ -47,9 +47,9 @@ import {renderFind} from './views/find.js';
 import {partsModel, renderParts, stepsView, stepsUrl} from './views/parts.js';
 import {treeModel, renderTree} from './views/tree.js';
 import {makeReport, addReport, unsent} from './reports.js';
-import {createOverlays, createCardStack} from './overlay.js';
+import {createOverlays, createCardStack, runTree} from './overlay.js';
 import {glyphKind, tileProgress} from './views/glyph.js';
-import {needsWelcome, installContext, starterFocus, finishWelcome} from './firstrun.js';
+import {needsWelcome, installContext, starterFocus, finishWelcome, sayNo} from './firstrun.js';
 import {renderWelcome, renderOffer, renderInstall, installFirst} from './views/welcome.js';
 import {BUILD} from './build.js';
 import {watchWorker, installOffer, exportReminder, askPersist} from './pwa.js';
@@ -206,8 +206,12 @@ window.addEventListener('popstate', () => {
   if (overlays.onPop()) return;
   if (app.firstRun) return;     // first run keeps no history of its own
   // the Reader is an entry in the history, so the phone's back gesture
-  // leaves it (never during a session, which has its own ✕)
-  if (!app.run) route();
+  // leaves it (never during a session, which has its own ✕); during one,
+  // it retraces the trees opened from it and then shows the session (7.18)
+  if (!app.run) return route();
+  const tree = runTree(history.state);
+  if (tree) showTree(tree, {push: false});
+  else if (app.tree) backToSession();
 });
 
 // The screen the URL names: #read/<text id> is the Reader,
@@ -286,7 +290,7 @@ function drawRef() {
     onClose: () => hideOverlay('ref'),
     onBack: prev ? () => { cards.back(); drawRef(); sheet.scrollTop = 0; } : null,
     backTo: prev,
-    closeLabel: app.run ? 'Back to the session' : 'Close',
+    closeLabel: app.run && !(app.tree && app.tree.inRun) ? 'Back to the session' : 'Close',
     onRef: openRef,
     kindOf,
     progressOf: progressFrom(learner.states),
@@ -309,7 +313,8 @@ function drawRef() {
         }});
     },
     onReport: () => openReport(shownOfRef(m), 'reference'),
-    onTree: app.run ? null : f => showTree(f),
+    // under Built from, mid-session too (brief 7.18 Decided 3)
+    onTree: f => showTree(f),
     // In your texts opens the Reader at that line's section; not mid-session
     onOpenText: app.run ? null : (id, line) => {
       const lines = (app.library.heldLines().find(t => t.id === id) || {}).lines;
@@ -568,7 +573,7 @@ function drawReader() {
   const t = r && app.library.find(r.id);
   if (!t || !r.lines) return;
   const m = readerModel(app.content, app.store.load(KEYS.states, {}), t, r.lines, {
-    section: t.section, asWritten: t.asWritten, showAll: readerSettings().showAll,
+    section: t.section, asWritten: t.asWritten, allJp: !!readerSettings().allJp,
     mode: readerSettings().mode || 'read',
     selected: r.selected, wordOf: app.dict.wordOf, charOf: app.content.char,
     offKnown: new Set(app.store.load(KEYS.offKnown, []))});
@@ -584,7 +589,7 @@ function drawReader() {
       drawReader();
       toast(`“${t.title}” is the focus. Today teaches it first.`);
     },
-    onShowAll(v) { saveReader({showAll: v}); drawReader(); },
+    onAllJp(v) { saveReader({allJp: v}); drawReader(); },
     onMode(mode) { saveReader({mode}); r.selected = null; drawReader(); },
     // Mark mode: through transition() alone (actions.js), with an Undo that
     // puts back exactly the state there was
@@ -749,6 +754,7 @@ function startSession({keepGoing = false, practice = false} = {}) {
   showSession($('session'), app.content, run, {
     onExit: () => { app.run = null; showToday(); showTab('today'); },
     onRef: openRef,
+    onTree: f => showTree(f),
     onReport: shown => openReport(shown, 'card'),
     tipOnce,
     lineOf: s => app.library.lineAt(s),
@@ -865,6 +871,7 @@ function testMe(id) {
       }
     },
     onRef: openRef,
+    onTree: f => showTree(f),
     onReport: shown => openReport(shown, 'card'),
     tipOnce,
     lineOf: l => app.library.lineAt(l),
@@ -891,6 +898,7 @@ function studyFamily(key) {
       window.scrollTo(0, 0);
     },
     onRef: openRef,
+    onTree: f => showTree(f),
     onReport: shown => openReport(shown, 'card'),
     tipOnce,
     lineOf: l => app.library.lineAt(l),
@@ -1122,26 +1130,36 @@ function drawFamily() {
 // on a tile pushes another, so back retraces the trail; the breadcrumb goes
 // back as many steps as it names.
 
+//
+// During a session (brief 7.18 Decided 3) a tree opens from a card or a Meet
+// and leaves the run alone: its entries are marked `inRun`, its trail starts
+// afresh, the tabs stay hidden, and Learn this family next isn't offered.
+// Back from the first shows the session screen as it was, nothing redrawn.
+
 function showTree(form, {push = true} = {}) {
   if (!form) return showTab(app.fromTab);
+  const inRun = !!app.run;
   // the trail lives in each history entry, so back and the breadcrumb
   // always name the entries there are
   const saved = !push && history.state && history.state.tree === form && history.state.trail;
-  const trail = app.tree ? app.tree.trail : [];
+  const trail = app.tree && (!inRun || app.tree.inRun) ? app.tree.trail : [];
   const next = saved || [...trail, form];
-  // from a card's "Its tree", the tree takes the card's history entry, so
+  // from a card's "Trace this character’s steps" (its tree), the tree takes the card's history entry, so
   // back from the tree lands where the card was opened
   const fromCard = overlays.isOpen('ref');
   if (fromCard) hideOverlay('ref', {fromPop: true});
   if (push) {
-    history[fromCard ? 'replaceState' : 'pushState']({tree: form, trail: next}, '',
+    history[fromCard ? 'replaceState' : 'pushState']({tree: form, trail: next, ...(inRun && {inRun})}, '',
                                                      `#char/${encodeURIComponent(form)}`);
   }
-  app.reader = null;
-  app.family = null;
-  app.tree = {trail: next, expanded: {}};
+  if (!inRun) {
+    app.reader = null;
+    app.family = null;
+  }
+  app.tree = {trail: next, expanded: {}, inRun};
   showScreen('tree');
-  markTab(app.fromTab);
+  if (inRun) $('tabs').hidden = true;
+  else markTab(app.fromTab);
   drawTree();
   window.scrollTo(0, 0);
 }
@@ -1152,14 +1170,22 @@ function drawTree() {
   const m = treeModel(app.content, app.store.load(KEYS.states, {}), form,
                       {trail: t.trail, expanded: t.expanded});
   renderTree($('tree'), m, {
-    onBack: () => (history.state && history.state.tree != null ? history.back() : showTab(app.fromTab)),
+    onBack: () => (t.inRun ? (runTree(history.state) ? history.back() : backToSession())
+      : history.state && history.state.tree != null ? history.back() : showTab(app.fromTab)),
     onCrumb: i => history.go(i - (t.trail.length - 1)),
     onTree: f => showTree(f),
     onRef: openRef,
     onMore: L => { t.expanded[L] = (t.expanded[L] || 0) + 1; drawTree(); },
-    onStudy: key => studyFamily(key),
+    // no run starts from a tree while one is going (7.18)
+    onStudy: t.inRun ? null : key => studyFamily(key),
     kindOf,
   });
+}
+
+// Back to the session from its trees: the card as it was left.
+function backToSession() {
+  app.tree = null;
+  showScreen('session');
 }
 
 async function exportProgress() {
@@ -1255,7 +1281,8 @@ function showWelcome() {
 
 function showOffer() {
   showScreen('welcome');
-  renderOffer($('welcome'), {onCheck: () => startPlacement(), onSkip: finishFirstRun});
+  renderOffer($('welcome'), {onCheck: () => startPlacement(),
+                             onNo: () => { sayNo(app.store); finishFirstRun(); }});
   window.scrollTo(0, 0);
 }
 

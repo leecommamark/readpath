@@ -1,6 +1,6 @@
 // firstrun.js — first run (patch plan 7B, Phase 1; DESIGN *Screens*).
 //
-// welcome → "Already read some Chinese?" (step 6's check, or skip) → the
+// welcome → "Already read some Chinese?" (step 6's check, or No) → the
 // sample 飲茶 added as the focus → Today. It appears only on a device with
 // no learner state, and never again once it has finished.
 //
@@ -8,6 +8,7 @@
 //   installContext(nav, matchMedia) -> {ios, android, standalone}
 //   await starterFocus(library, fetchFn, day) -> the focus text
 //   finishWelcome(store, day)     records that first run is done
+//   sayNo(store)                  "No" to "Already read some Chinese?"
 
 import {KEYS} from './store.js';
 
@@ -46,6 +47,14 @@ export async function starterFocus(library, fetchFn, day) {
   if (!id) throw new Error(r.problem.message);
   library.setFocus(id);
   return library.focus();
+}
+
+// "No" (brief 7.18 Decided 6; Mark, P1): Today's placement card is
+// dismissed, as Not now does, with the answer as its value. No placement
+// record -- Path would read one as "Last check: about 0" -- and no state:
+// the check still runs from Path.
+export function sayNo(store) {
+  store.save(KEYS.meta, {...store.load(KEYS.meta, {}), placementOffer: 'no'});
 }
 
 export function finishWelcome(store, day) {

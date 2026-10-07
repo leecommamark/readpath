@@ -97,7 +97,7 @@ export function renderParts(el, m, cb) {
     h('div', {class: 'top'}),
     h('h1', {id: 'parts-h'}, 'Steps'),
     stepsSwitch('meaning', cb.onSwitch),
-    h('p', {class: 'note'}, 'Tap a part to see its tree.'),
+    h('p', {class: 'note'}, 'Tap a part to trace its steps.'),
     h('p', {class: 'note'},
       'Each comes on the path just before the characters that need it. Once you’ve met it and '
       + 'passed its test, those characters unlock. Knowing characters doesn’t mark their parts known: '

@@ -7,7 +7,8 @@
 // also listed at the foot as "Not taught yet" -- unless the learner has said
 // they know it (readpath.offKnown, patch plan 6): then neither. Read mode: tap a word for
 // its meaning (a panel at the foot, whose characters open their reference
-// cards), or Show all meanings under every word. A long text is read a
+// cards), or Show all jyutping over every character, known or not (brief 7.18;
+// it replaced Show all meanings). A long text is read a
 // section at a time (core/sections.js), and a text s2t changed can be shown
 // as written. Mark mode (Phase 5): tap a character to mark it known, or a
 // known one for "I forgot this" (the shell does it, through actions.js, with
@@ -24,14 +25,7 @@ import {coverage} from '../core/coverage.js';
 import {tokensOf} from '../core/lines.js';
 import {sectionsOf, entryLine, entryIndex} from '../core/sections.js';
 import {glyphTile} from './glyph.js';
-import {shortGloss as cutGloss} from '../core/gloss.js';
 import {charGloss, DICTIONARY_SENSE} from '../core/provenance.js';
-
-const GLOSS_SHOWN = 18;                    // characters of a gloss under a word
-
-// A gloss under a word: core/gloss.js's one rule, cut to fit under a word;
-// the panel shows the whole meaning.
-const shortGloss = g => cutGloss(g, GLOSS_SHOWN);
 
 // A word's meaning: the dictionary's for a word of 2+ characters; for one
 // character, its lone reading's (brief 7.16; the content's curated gloss), else the
@@ -47,10 +41,12 @@ export const glossOf = (content, form, opts) => wordGloss(content, form, opts).t
 //   {char, shown, over, id, known, off, offKnown, layer}
 //   shown  the form on the page: as written when asked for and s2t changed it
 //   over   the jyutping over it, or null where it's known in that reading
+//          (`all`: the syllable even then, brief 7.18; known, offKnown, off
+//          and id keep their values, so Mark mode still tells them apart)
 //   id     its reading item (the word's jyutping decides it), null off the path
 //   offKnown  off the path, and in the learner's offKnown set: no jyutping
 //   layer  文 or 白: the mark on the reading it has here (brief 7.16), or null
-export function wordChars(content, states, part, {asWritten = false, charOf, offKnown} = {}) {
+export function wordChars(content, states, part, {asWritten = false, charOf, offKnown, all = false} = {}) {
   const jps = part.jp ? part.jp.split(' ') : [];
   const perChar = jps.length === part.chars.length;
   return part.chars.map((c, k) => {
@@ -60,16 +56,16 @@ export function wordChars(content, states, part, {asWritten = false, charOf, off
     const known = !!id && isKnown(states[id]);
     const offK = !id && !!offKnown && offKnown.has(c.char);
     return {char: c.char, shown: asWritten && c.src ? c.src : c.char,
-            over: known || offK ? null : (syl || null), id, known, off: !id, offKnown: offK,
+            over: !all && (known || offK) ? null : (syl || null), id, known, off: !id, offKnown: offK,
             layer: (id && content.item(id).layer) || null};
   });
 }
 
 // readerModel(content, states, text, lines, opts) -> what the Reader shows
-//   opts: {section, asWritten, showAll, selected ('line:part'), mode ('read' |
+//   opts: {section, asWritten, allJp, selected ('line:part'), mode ('read' |
 //          'mark'), wordOf, charOf, offKnown (a Set of characters)}
 export function readerModel(content, states, text, lines, opts = {}) {
-  const {asWritten = false, showAll = false, mode = 'read'} = opts;
+  const {asWritten = false, allJp = false, mode = 'read'} = opts;
   const selected = mode === 'read' ? opts.selected || null : null;
   const sections = sectionsOf(lines);
   const i = Math.max(0, Math.min(sections.length - 1, opts.section || 0));
@@ -84,9 +80,9 @@ export function readerModel(content, states, text, lines, opts = {}) {
       words.push({form: p.form, jp: p.jp});
       const key = `${at}:${from + k}`;
       const {text: gloss, weak} = wordGloss(content, p.form, opts);
-      return {type: 'word', key, form: p.form, gloss, weak, short: showAll ? shortGloss(gloss) : '',
+      return {type: 'word', key, form: p.form, gloss, weak,
               selected: key === selected, chars: wordChars(content, states, p, {asWritten, charOf: opts.charOf,
-                                                    offKnown: opts.offKnown})};
+                                                    offKnown: opts.offKnown, all: allJp})};
     })};
   });
   const here = coverage(content, states, words);
@@ -94,7 +90,7 @@ export function readerModel(content, states, text, lines, opts = {}) {
     id: text.id, title: text.title, focus: !!text.focus,
     pct: whole.pct, toLearn: whole.toLearn,
     offPath: whole.offPath.filter(ch => !(opts.offKnown && opts.offKnown.has(ch))),
-    canAsWritten: !!text.src, asWritten, showAll, mode,
+    canAsWritten: !!text.src, asWritten, allJp, mode,
     section: {i, n: sections.length, pct: here.pct},
     lines: shownLines,
   };
@@ -157,7 +153,7 @@ export const MODE_HINT = {
 };
 
 // renderReader(el, model, cb)
-//   cb: onBack, onFocus, onShowAll(bool), onAsWritten(bool), onSection(i),
+//   cb: onBack, onFocus, onAllJp(bool), onAsWritten(bool), onSection(i),
 //       onWord(key|null), onRef(char), onReport(word|null), onMode(mode),
 //       onMark(char cell)
 export function renderReader(el, m, cb) {
@@ -175,13 +171,11 @@ export function renderReader(el, m, cb) {
                 type: 'button', class: `rc-mark${c.known ? ' is-known' : ''}${c.off ? ' is-off' : ''}`,
                 'aria-label': c.off ? `${c.char}: not on the path` : c.known
                   ? `${c.char}: known; tap if you’ve forgotten it` : `${c.char}: mark known`,
-                onclick: () => cb.onMark(c)}, charCell(c)))),
-              p.short && h('span', {class: `rgloss${p.weak ? ' weak' : ''}`, lang: 'en'}, p.short))
+                onclick: () => cb.onMark(c)}, charCell(c)))))
           : h('button', {type: 'button', class: `rword${p.selected ? ' sel' : ''}`,
                          'aria-label': `${p.form}: its meaning`,
                          onclick: () => cb.onWord(p.selected ? null : p.key)},
-              h('span', {class: 'rw'}, ...p.chars.map(charCell)),
-              p.short && h('span', {class: `rgloss${p.weak ? ' weak' : ''}`, lang: 'en'}, p.short))))))));
+              h('span', {class: 'rw'}, ...p.chars.map(charCell)))))))));
 
   const modes = h('div', {class: 'modes', role: 'group', 'aria-label': 'Mode'},
     ...['read', 'mark'].map(k => h('button', {
@@ -218,7 +212,7 @@ export function renderReader(el, m, cb) {
     h('div', {class: 'bar', 'aria-hidden': 'true'}, h('i', {style: `width:${m.pct}%`})),
     h('div', {class: 'reader-controls'},
       modes,
-      toggle('Show all meanings', m.showAll, cb.onShowAll),
+      toggle('Show all jyutping', m.allJp, cb.onAllJp),
       m.canAsWritten && toggle('As written', m.asWritten, cb.onAsWritten)),
     m.canAsWritten && h('p', {class: 'note'},
       m.asWritten ? 'Shown as it was pasted, in simplified.' : 'Shown in traditional; it was pasted in simplified.'),

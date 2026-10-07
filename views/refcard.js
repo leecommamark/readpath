@@ -14,7 +14,7 @@
 // refModel() is pure; renderRef() draws it into the overlay.
 
 import {h, han, clear, put, rubyWord, jpSpan, layerChip} from './dom.js';
-import {builtFrom, relationOf, word as wordEntry, overOf, overChar, meaningWording,
+import {builtFrom, relationOf, word as wordEntry, allOver, charJp, meaningWording,
         cardWords, WORDS_SHOWN, LAYER_TEXT} from './facts.js';
 import {isKnown, MAINTAIN} from '../core/state.js';
 import {canMarkKnown, canForget, canKnowOff} from '../actions.js';
@@ -33,7 +33,8 @@ const lineLength = l => l.parts.reduce((n, p) =>
 
 // In your texts: lines that have `form`, the focus text's first, then the
 // newest text's; the shortest line of each text before a second from any.
-// Each is its words (the Reader's jyutping rule, `form` marked) cut to
+// Each is its words, every syllable over them as on the rest of the card
+// (Mark, brief 7.18 P4; the Reader's rule until then), `form` marked, cut to
 // about 24 characters around it. `texts` is texts.js heldLines().
 // The forms `form` was written as in the learner's texts, where s2t turned
 // them into it (爱 for 愛): the card's 簡 line (patch plan 6.5, CO-043,
@@ -68,7 +69,7 @@ export function inYourTexts(content, states, form, texts = []) {
       if (n < EXCERPT && from > 0) n += lineLength({parts: [l.parts[--from]]});
     }
     const parts = l.parts.slice(from, to).map(p => (p.type !== 'word' ? {text: p.text}
-      : {form: p.form, over: wordChars(content, states, p, {charOf: content.char}).map(c => c.over),
+      : {form: p.form, over: wordChars(content, states, p, {charOf: content.char, all: true}).map(c => c.over),
          mark: Array.from(p.form).indexOf(form)}));
     return {text: t.id, title: t.title, line: i, parts,
             before: from > 0, after: to < l.parts.length};
@@ -143,7 +144,7 @@ function partRoles(content, states, form, {itemsOnly = false} = {}) {
                 wording: kind === 'meaning' ? meaningWording(content, form, gloss) : null,
                 canTest: canTestMe(content, states, id),
                 members: members.slice(0, MEMBERS_SHOWN)
-                  .map(ch => ({ch, over: overChar(content, states, ch)})),
+                  .map(ch => ({ch, over: charJp(content, ch)})),
                 more: Math.max(0, members.length - MEMBERS_SHOWN)});
   }
   return roles;
@@ -166,10 +167,10 @@ export function refModel(content, states, form, texts = [], opts = {}) {
               relation: r.primary ? null : relationOf(r),
               status: statusOf(content, states[id], id)};
     });
-    const words = cardWords(content, states, main);
+    const words = cardWords(content, main);
     return {kind: 'char', glyph: form, main, readings, gloss: m.gloss,
-            built: builtFrom(content, form, states),
-            looksLike: familyOf(content, form).map(ch => ({ch, over: overChar(content, states, ch)})),
+            built: builtFrom(content, form),
+            looksLike: familyOf(content, form).map(ch => ({ch, over: charJp(content, ch)})),
             words, inTexts, simplified, asPart: partRoles(content, states, form, {itemsOnly: true}),
             // the tag at the top: the reading the card was opened for (a
             // search row's, patch plan 7A 6b: 好 hou3 from its own row says
@@ -192,19 +193,17 @@ export function refModel(content, states, form, texts = [], opts = {}) {
     for (const f of o.words) {
       const w = wordOf && wordOf(f);
       if (!w) continue;
-      const over = overOf(content, states, f, w.jp)
-        .map((jp, i) => (offKnown.has([...f][i]) ? null : jp));
-      words.push({form: f, jp: w.jp, gloss: w.gloss, over});
+      words.push({form: f, jp: w.jp, gloss: w.gloss, over: allOver(f, w.jp)});
       if (words.length >= WORDS_SHOWN) break;
     }
     const c = content.char(form) || {};
     return {kind: 'offpath', glyph: form, readings: o.readings, gloss: c.gloss || '',
             // CC-CEDICT's sense, a reading only kCantonese gives: muted (7.10)
             glossWeak: charGlossWeak(c), readingsWeak: offReadingsWeak(o),
-            words, wordForms: o.words, built: builtFrom(content, form, states), inTexts, simplified,
+            words, wordForms: o.words, built: builtFrom(content, form), inTexts, simplified,
             status: known ? 'you know this' : 'not on the path', known};
   }
-  return {kind: 'other', glyph: form, built: builtFrom(content, form, states), inTexts};
+  return {kind: 'other', glyph: form, built: builtFrom(content, form), inTexts};
 }
 
 // What the card showed, for a report.
@@ -231,7 +230,7 @@ const kindOf = (cb, ch) => (cb.kindOf ? cb.kindOf(ch) : null);
 const progressOf = (cb, ch) => (cb.progressOf ? cb.progressOf(ch) : null);
 const charBtn = (ch, cb) => glyphTile(ch, kindOf(cb, ch),
   {size: 'sm', progress: progressOf(cb, ch), onTap: c => cb.onRef(c)});
-// a tile with its jyutping over it (blank where known; brief 7.6 decided 5)
+// a tile with its jyutping over it (brief 7.6 decided 5; known or not since 7.18)
 const rubyBtn = ({ch, over}, cb) => glyphTile(ch, kindOf(cb, ch),
   {size: 'sm', over: over || '', progress: progressOf(cb, ch), onTap: c => cb.onRef(c)});
 
@@ -257,19 +256,35 @@ function simplifiedLine(m) {
 }
 
 // Built from: each part in its dotted box with its reading or meaning and
-// role, then, where the sound part's reading is no clue, the members that
-// carry the sound (CO-016: 當 <- 尚 soeng6, sounds like 黨 堂)
+// role. Its tree comes next and Sounds like after it (brief 7.18).
 function builtSection(built, cb) {
-  const like = built.find(b => b.cousins && b.cousins.length);
   return section('Built from', h('p', {class: 'built'},
     ...built.flatMap((b, i) => [i ? h('span', {class: 'built-plus'}, '+') : '',
       // a part and its note wrap together, never apart (7.5)
       h('span', {class: 'part'}, charBtn(b.part, cb),
         h('span', {class: 'muted'},
         // a sound part's note is its reading, a meaning part's its gloss
-        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${b.role})`] : `(${b.role})`))])),
-    like && h('p', {class: 'ref-row like-line'}, h('span', {class: 'sm'}, 'Sounds like '),
+        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${b.role})`] : `(${b.role})`))])));
+}
+
+// Where the sound part's reading is no clue, the members that carry the
+// sound (CO-016: 當 <- 尚 soeng6, sounds like 黨 堂)
+function likeSection(built, cb) {
+  const like = built.find(b => b.cousins && b.cousins.length);
+  return like && h('section', {class: 'block'},
+    h('p', {class: 'ref-row like-line'}, h('span', {class: 'sm'}, 'Sounds like '),
       ...like.cousins.map(x => rubyBtn(x, cb))));
+}
+
+// its tree (patch plan 7.7): what it is built from and what is built from
+// it; directly under Built from, and mid-session too (brief 7.18)
+function treeRow(m, cb) {
+  if (!cb.onTree || !(m.kind === 'char' || m.kind === 'part' || m.kind === 'offpath')) return null;
+  return h('section', {class: 'block jumps'},
+    h('button', {type: 'button', class: 'jump', onclick: () => cb.onTree(m.glyph)},
+      h('span', {class: 'jump-text'}, h('b', {}, 'Trace this character’s steps'),
+        h('span', {class: 'sm'}, 'What it’s built from, and what’s built from it')),
+      h('span', {class: 'jump-go', 'aria-hidden': 'true'}, '›')));
 }
 
 function section(label, ...body) {
@@ -321,9 +336,9 @@ export function renderRef(el, m, cb) {
         r.gloss && h('p', {class: 'gloss-line'}, r.gloss),
         !r.main && h('p', {class: 'sm'}, `${r.relation}; ${r.status}`)))));
     body.push(simplifiedLine(m));
-    if (m.built.length) {
-      body.push(builtSection(m.built, cb));
-    }
+    if (m.built.length) body.push(builtSection(m.built, cb));
+    body.push(treeRow(m, cb));
+    if (m.built.length) body.push(likeSection(m.built, cb));
     if (m.looksLike.length) {
       body.push(section('Looks like', h('p', {class: 'ref-row'},
         ...m.looksLike.map(x => rubyBtn(x, cb)))));
@@ -343,6 +358,7 @@ export function renderRef(el, m, cb) {
       m.canForget && h('button', {type: 'button', class: 'btn', onclick: cb.onForgot},
         m.readings.length > 1 ? ['I forgot ', jpSpan(m.readings.find(r => r.main).jp)] : 'I forgot this'))));
   } else if (m.kind === 'part') {
+    body.push(treeRow(m, cb));
     for (const r of m.roles) body.push(roleSection(r, cb));
     body.push(glyphKey());
   } else if (m.kind === 'offpath') {
@@ -353,9 +369,9 @@ export function renderRef(el, m, cb) {
         m.gloss && m.glossWeak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE))));
     body.push(h('p', {class: 'note center'}, 'Not on the learning path: it’s never taught or quizzed.'));
     body.push(simplifiedLine(m));
-    if (m.built.length) {
-      body.push(builtSection(m.built, cb));
-    }
+    if (m.built.length) body.push(builtSection(m.built, cb));
+    body.push(treeRow(m, cb));
+    if (m.built.length) body.push(likeSection(m.built, cb));
     if (m.words.length) {
       body.push(section('Words', ...m.words.map(w => h('p', {class: 'word-line'},
         rubyWord(w.form, w.over), w.gloss ? ` ${w.gloss}` : ''))));
@@ -373,15 +389,6 @@ export function renderRef(el, m, cb) {
   } else {
     body.push(h('p', {class: 'note center'}, 'Not on your path.'));
     body.push(textsSection(m, cb));
-  }
-  // its tree (patch plan 7.7): what it is built from and what is built from
-  // it; not from inside a session
-  if (cb.onTree && (m.kind === 'char' || m.kind === 'part' || m.kind === 'offpath')) {
-    body.push(h('section', {class: 'block jumps'},
-      h('button', {type: 'button', class: 'jump', onclick: () => cb.onTree(m.glyph)},
-        h('span', {class: 'jump-text'}, h('b', {}, 'Its tree'),
-          h('span', {class: 'sm'}, 'What it’s built from, and what’s built from it')),
-        h('span', {class: 'jump-go', 'aria-hidden': 'true'}, '›'))));
   }
   body.push(h('div', {class: 'foot'},
     h('button', {type: 'button', class: 'btn wide', onclick: cb.onBack || cb.onClose},

@@ -8,7 +8,8 @@ import {cardModel, renderTask} from './task.js';
 import {glyphKind} from './glyph.js';
 
 // showSession(el, content, run, {onExit(), onRef(char), onReport(shown),
-//                                tipOnce(), lineOf({text, line})})
+//                                tipOnce(), lineOf({text, line}), onTree(form)
+//                                (optional: a Meet card's Its tree row)})
 // ‹ Back takes back the last answer and asks it again (Mark, 2026-09-29).
 export function showSession(el, content, run, cb) {
   const count = h('span', {class: 'count mono'});
@@ -55,6 +56,7 @@ export function showSession(el, content, run, cb) {
       onRef: cb.onRef,
       onReport: cb.onReport,
       tipOnce: cb.tipOnce,
+      onTree: cb.onTree,
       kindOf: form => glyphKind(content, form),
     });
     window.scrollTo(0, 0);

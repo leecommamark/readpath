@@ -98,7 +98,8 @@ export function familyPage(content, states, key, mode = 'read') {
     const id = content.mainReading(c);
     const state = stateOf(states[id]);
     return {id, kind: 'reading', form: c, state, progress: progressOf(states[id], 'reading'),
-            jp: state === 'known' ? null : content.item(id).jp};
+            // known or not (brief 7.18 Decided 5: fading is the Reader's)
+            jp: content.item(id).jp};
   });
   const counts = {known: 0, learning: 0, ahead: 0};
   for (const c of cells) counts[c.state]++;
@@ -133,7 +134,7 @@ const plural = (n, one, many = `${one}s`) => `${n.toLocaleString('en-GB')} ${n =
 const STATE_SAID = {known: 'known', learning: 'learning', ahead: 'not met yet'};
 export const FAMILY_HINT = {
   mark: 'Tap a character you know to mark it known, or a known one if you’ve forgotten it.',
-  read: 'Tap a character to see its tree.',     // its tree since 7.7 (said so 7.8)
+  read: 'Tap a character to trace its steps.',   // its tree since 7.7 (said so 7.8; worded so after 7.18)
 };
 
 // known / total, as a ring (the mock-up's): its own colours, so a test of
@@ -378,7 +379,7 @@ export function renderBrowse(el, m, cb) {
     h('h1', {id: 'browse-h'}, 'Steps'),
     stepsSwitch('families', cb.onSwitch),
     // a row opens the family; its tiles open trees (7.8)
-    h('p', {class: 'note'}, 'Open a family and tap a character to see its tree.'),
+    h('p', {class: 'note'}, 'Open a family and tap a character to trace its steps.'),
     // a dropdown, not chips: four didn't fit a phone's line (Mark, 7.8)
     h('label', {class: 'sort-by'}, 'Sort by ',
       h('select', {class: 'sort-select', onchange: e => e.target.value !== m.sort && cb.onSort(e.target.value)},

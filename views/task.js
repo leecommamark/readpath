@@ -72,7 +72,7 @@ function partCard(content, task, base) {
             // inferred Meet shows them, so the answer teaches without a tap
             // (brief 7.9; the card's words since 7.10)
             reveal: {glyph: m.char, jp: m.jp, gloss: m.gloss,
-                     words: cardWords(content, base.states, task.target),
+                     words: cardWords(content, task.target),
                      pattern: pat ? PATTERN_TEXT[pat.split(':')[1]] || null : null}};
   }
   if (task.task === 'tell_apart' && task.target) {
@@ -89,7 +89,7 @@ function partCard(content, task, base) {
             // means (CO-049; Mark, 2026-09-29: 清 cing1 clear · 氵 water)
             reveal: {glyph: t.answer, jp: a.jp,
                      // and the answer's card words under them (7.9, 7.10)
-                     words: cardWords(content, base.states, content.mainReading(t.answer)),
+                     words: cardWords(content, content.mainReading(t.answer)),
                      head: {char: task.target, jp: content.partReading(task.target)},
                      marks: t.choices.map(ch => ({char: ch, part: row(ch).meaning_part,
                                                   gloss: row(ch).part_gloss, jp: row(ch).reading,
@@ -112,16 +112,15 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
   const base = {task: task.task, item: task.item, rung: task.rung, asked: task.asked,
                 fallback: task.fallback, role: task.role};
   if (content.kind(task.item) !== 'reading') {
-    const m = partCard(content, task, {...base, rng, pool, met: !!states[task.item], states});
+    const m = partCard(content, task, {...base, rng, pool, met: !!states[task.item]});
     delete m.rng;
     delete m.pool;
     delete m.met;
-    delete m.states;
     return m;
   }
   const it = content.item(task.item);
   const reveal = {glyph: it.char, jp: it.jp, gloss: it.gloss, layer: it.layer || null,
-                  words: cardWords(content, states, task.item)};
+                  words: cardWords(content, task.item)};
   // a question's answer teaches as a part test's does: the reading, its
   // meaning and the card's words (brief 7.9, Mark: "all of the tests"; the
   // card's words, all of them, since 7.10)
@@ -136,7 +135,7 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
       };
       return {...base, kind: 'teach', glyph: it.char, reveal, pattern,
               lead: pattern ? `A new reading of ${it.char}` : 'A new character',
-              built: pattern ? [] : builtFrom(content, it.char, states),
+              built: pattern ? [] : builtFrom(content, it.char),
               choices: [], answer: null};
     }
     const part = content.item(from);
@@ -294,15 +293,27 @@ function builtLine(built, cb) {
         b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${b.role})`] : `(${b.role})`)));
   const joined = [];
   parts.forEach((p, i) => { if (i) joined.push(h('span', {class: 'built-plus'}, '+')); joined.push(p); });
-  // where the sound part's reading is no clue, members that carry the sound
-  // (CO-016: 當 <- 尚 soeng6, sounds like 黨 堂), each with its jyutping
-  const like = built.find(b => b.cousins && b.cousins.length);
-  const line = h('p', {class: 'built'}, h('span', {class: 'label'}, 'Built from '), ...joined);
-  if (!like) return line;
-  return h('div', {}, line,
-    h('p', {class: 'built like-line'}, h('span', {class: 'label'}, 'Sounds like '),
-      ...like.cousins.map(({ch, over}) => glyphTile(ch, tileKind(cb, ch),
-        {size: 'sm', over: over || '', onTap: cb.onRef ? c => cb.onRef(c) : null}))));
+  return h('p', {class: 'built'}, h('span', {class: 'label'}, 'Built from '), ...joined);
+}
+
+// Where the sound part's reading is no clue, members that carry the sound
+// (CO-016: 當 <- 尚 soeng6, sounds like 黨 堂), each with its jyutping; under
+// Its tree, not Built from (brief 7.18)
+function likeLine(built, cb) {
+  const like = built && built.find(b => b.cousins && b.cousins.length);
+  return like && h('p', {class: 'built like-line'}, h('span', {class: 'label'}, 'Sounds like '),
+    ...like.cousins.map(({ch, over}) => glyphTile(ch, tileKind(cb, ch),
+      {size: 'sm', over: over || '', onTap: cb.onRef ? c => cb.onRef(c) : null})));
+}
+
+// Its tree (patch plan 7.7), as the reference card's row; only where the
+// caller gives cb.onTree (brief 7.18)
+function treeRow(ch, cb) {
+  return cb.onTree && h('section', {class: 'block jumps'},
+    h('button', {type: 'button', class: 'jump', onclick: () => cb.onTree(ch)},
+      h('span', {class: 'jump-text'}, h('b', {}, 'Trace this character’s steps'),
+        h('span', {class: 'sm'}, 'What it’s built from, and what’s built from it')),
+      h('span', {class: 'jump-go', 'aria-hidden': 'true'}, '›')));
 }
 
 // A glyph as a tile by its kind (views/glyph.js), opening its reference
@@ -374,7 +385,9 @@ function revealBlock(m, ok, cb, given) {
 }
 
 // renderTask(el, model, {onAnswer(ok), onNext(), onRef(char), onReport(shown),
-//                        kindOf(form): glyph.js glyphKind, for the tiles})
+//                        kindOf(form): glyph.js glyphKind, for the tiles,
+//                        onTree(form): a Meet card's Its tree row, under Built
+//                        from; none, no row (brief 7.18)})
 // onAnswer is called once, the moment the answer is given (so it is saved
 // then); onNext when the learner moves on.
 export function renderTask(el, m, cb) {
@@ -409,6 +422,8 @@ export function renderTask(el, m, cb) {
       ...(m.facts || []).map(f => h('p', {class: 'note center'}, f)),
       wordLines(r.words),
       builtLine(m.built, cb),
+      treeRow(m.glyph, cb),
+      likeLine(m.built, cb),
       h('div', {class: 'foot'}, cont(meetAndGo), report()));
     return;
   }

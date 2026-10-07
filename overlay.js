@@ -118,6 +118,13 @@ export function createOverlays({doc, history, win = null, ids = ['ref', 'report'
   return {open, close, isOpen, top, onPop, get skipPop() { return skipPop; }};
 }
 
+// A tree opened during a session (brief 7.18 Decided 3) is an entry in the
+// history marked `inRun`, so a back gesture retraces the trees opened from
+// the session and then lands on the session as it was. A tree entry from
+// before the session (Learn this family next was tapped on a tree) isn't
+// one: back past the session's own trees goes to the session, never to it.
+export const runTree = state => (state && state.tree != null && state.inRun ? state.tree : null);
+
 // A card opened from a card stacks, and "Back to 清" returns to it.
 // open(form) pushes it unless it's already on top; back() pops one.
 export function createCardStack() {

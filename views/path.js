@@ -216,7 +216,7 @@ export function renderPath(el, m, cb) {
     h('div', {class: 'top'}),
     h('h1', {id: 'path-h'}, 'Path'),
     // every tile and stone here opens a tree, and nothing said so (7.8)
-    h('p', {class: 'note'}, 'Tap a character to see its tree.'),
+    h('p', {class: 'note'}, 'Tap a character to trace its steps.'),
     h('section', {class: 'block first where'},
       h('p', {class: 'known'}, h('b', {}, plural(w.characters, 'character')), ' and ',
         h('b', {}, plural(w.parts, 'part')), ' known'),

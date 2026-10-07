@@ -1,6 +1,6 @@
 // tree.js — a character's tree (patch plan 7.7, Phase 3; brief 7.7 decided
 // 3-5 and 8). `#char/<form>`, opened from a tile on Path's screens or from
-// a card's "Its tree".
+// a card's "Trace this character’s steps" (its tree).
 //
 // The header: the character's tile (it opens the card), gloss, readings,
 // where it is on the path and its state, the parts in written order, and
@@ -94,7 +94,7 @@ const DX = 76, DY = 108, PAD = 12;
 const SVG = 'http://www.w3.org/2000/svg';
 
 // renderTree(el, m, cb)   cb: onBack, onCrumb(i), onTree(form), onRef(form),
-// onMore(level), onStudy(key), kindOf(form)
+// onMore(level), onStudy(key) (none during a session: no button), kindOf(form)
 export function renderTree(el, m, cb) {
   const kindOf = f => (cb.kindOf ? cb.kindOf(f) : null);
   const crumbs = m.trail.length > 1 && h('nav', {class: 'tree-crumbs', 'aria-label': 'Trees you came through'},
@@ -186,7 +186,7 @@ export function renderTree(el, m, cb) {
       h('span', {class: `tree-key-line te-${k.cls}`, 'aria-hidden': 'true'}), k.text)),
     ...KEY_BORDERS.map(k => h('span', {class: 'tree-key-item'},
       h('span', {class: `gk-${k.cls}`, 'aria-hidden': 'true'}), k.text)));
-  const study = m.familyKey && h('div', {class: 'btns'},
+  const study = m.familyKey && cb.onStudy && h('div', {class: 'btns'},
     h('button', {type: 'button', class: 'btn', onclick: () => cb.onStudy(m.familyKey)},
       m.familyHead === m.form ? 'Learn this family next' : ['Learn ', han(m.familyHead), '’s family next']));
 

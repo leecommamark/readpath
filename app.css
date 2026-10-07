@@ -434,8 +434,6 @@ p.in-text { cursor: default; }
 .rc.off .rt { color: var(--learn-text); }
 .rtext { font-family: var(--han); font-size: var(--t-han); line-height: 1.25;
          padding-top: calc(var(--t-xs) * 1.2); white-space: pre-wrap; }
-.rgloss { font-size: var(--t-xs); line-height: 1.15; color: var(--muted); max-width: 7em;
-          text-align: center; margin-top: 1px; font-family: var(--body); }
 .not-taught .marks .han { letter-spacing: .15em; }
 .word-panel { position: sticky; bottom: calc(var(--tap) + 16px + env(safe-area-inset-bottom));
               z-index: 4; margin-top: var(--s4); background: var(--surface);
@@ -619,8 +617,9 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .tree-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .te { fill: none; stroke-linecap: round; }
 .te-sound { stroke: var(--known); stroke-width: 1.25; }
-.te-meaning { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
-.te-shape { stroke: var(--muted); stroke-width: 1; opacity: .45; }
+/* meaning solid, shape a faint dotted line (Mark, after 7.18; they were the other way round) */
+.te-meaning { stroke: var(--muted); stroke-width: 1; }
+.te-shape { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: .45; }
 .te-sound.hot { stroke-width: 1.75; }
 .te-meaning.hot, .te-shape.hot { stroke-width: 1.5; }
 .tree-node { position: absolute; display: flex; flex-direction: column; align-items: center;
@@ -642,8 +641,8 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .tree-key { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); }
 .tree-key-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .tree-key-line { display: inline-block; width: 22px; height: 0; border-top: 1.25px solid var(--known); }
-.tree-key-line.te-meaning { border-top: 1px dashed var(--muted); }
-.tree-key-line.te-shape { border-top: 1px solid var(--muted); opacity: .45; }
+.tree-key-line.te-meaning { border-top: 1px solid var(--muted); }
+.tree-key-line.te-shape { border-top: 1px dashed var(--muted); opacity: .45; }
 .gk-solid { width: 14px; height: 14px; border: 1.5px solid var(--ink); border-radius: 3px; box-sizing: border-box; }
 
 /* ---- Path: where you are on the path (patch plan 7.7, Phase 4) ---------

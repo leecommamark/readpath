@@ -80,7 +80,7 @@ export function renderWelcome(el, cb) {
       h('button', {type: 'button', class: 'link', onclick: cb.onImport}, 'Import progress')));
 }
 
-// renderOffer(el, cb)   cb: onCheck, onSkip
+// renderOffer(el, cb)   cb: onCheck, onNo
 export function renderOffer(el, cb) {
   put(clear(el),
     h('div', {class: 'top'}),
@@ -91,5 +91,5 @@ export function renderOffer(el, cb) {
         + 'It’s optional, and you can run it again from Path.'),
       h('div', {class: 'btns stack'},
         h('button', {type: 'button', class: 'btn primary', onclick: cb.onCheck}, 'Take the check'),
-        h('button', {type: 'button', class: 'btn quiet', onclick: cb.onSkip}, 'Skip'))));
+        h('button', {type: 'button', class: 'btn quiet', onclick: cb.onNo}, 'No'))));
 }

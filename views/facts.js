@@ -41,12 +41,12 @@ export function firstWord(content, id) {
 // learner can know of it: a sound part's reading, a meaning part's gloss,
 // study item or not. A sound part shows its reading nearest this character
 // (稅: 兌 deoi3, though 兌 is taught jyut6), and where even that is no clue,
-// `cousins`: members that carry the sound, each with its jyutping unless
-// known (當 <- 尚 soeng6: like 黨 堂). Patch plan 6.5, CO-064 and CO-016.
+// `cousins`: members that carry the sound, each with its jyutping, known or
+// not (當 <- 尚 soeng6: like 黨 堂; brief 7.18). Patch plan 6.5, CO-064 and CO-016.
 // In written order, as the tree has them (brief 7.9, Mark: 的 is 白 + 勺),
 // matched by the shape the character shows (`written`, as roleIn does); a
 // part the tree doesn't show keeps its place after the rest.
-export function builtFrom(content, ch, states = {}) {
+export function builtFrom(content, ch) {
   const order = content.partsInOrder(ch);
   const at = p => {
     const i = order.indexOf(p.written || p.part);
@@ -59,7 +59,7 @@ export function builtFrom(content, ch, states = {}) {
     if (role === 'sound') note = reading || content.partReading(part);
     if (role === 'meaning') note = content.partGloss(part);
     const like = role === 'sound' && cousins
-      ? cousins.map(c => ({ch: c, over: overChar(content, states, c)})) : [];
+      ? cousins.map(c => ({ch: c, over: charJp(content, c)})) : [];
     return {part, role, note, cousins: like};
   });
 }
@@ -114,11 +114,19 @@ export function relationOf(item) {
   return layerWords(item.layer) || relationText(item.relation);
 }
 
-// The jyutping to show over each character of `form` read `jp`: the
+// Where a known character loses its jyutping (Mark, 2026-10-06, brief 7.18
+// Decided 5): only where reading is practised -- the Reader (reader.js
+// wordChars, unless Show all jyutping is on) and a rung 4/5 prompt. A
+// reference card stays a reference card: it, the Meet card, an answer's
+// words, the tree, a family's page and Today show every syllable. Until 7.18
+// it faded everywhere (Mark, 2026-09-29: "anywhere in the app ... if they
+// are not already known"); a card that hid a known reading made the learner
+// recall it to read the card.
+
+// A rung 4 prompt's jyutping over each character of `form` read `jp`: the
 // syllable, or null where the learner knows that character in that reading
 // (Maintain), where the word has no jyutping, or at index `skip` (a question's
-// target). Mark, 2026-09-29: "basically anywhere in the app if characters are
-// appearing, they should have jyutping if they are not already known".
+// target).
 export function overOf(content, states, form, jp, skip = -1) {
   const chars = [...form];
   const syl = jp ? jp.split(' ') : [];
@@ -129,22 +137,29 @@ export function overOf(content, states, form, jp, skip = -1) {
   });
 }
 
-// One character's main reading, or null where it is known or has none.
-export function overChar(content, states, ch) {
+// One character's main reading, or null where it has none.
+export function charJp(content, ch) {
   const id = content.mainReading(ch);
-  if (!id) return null;
-  return isKnown(states[id]) ? null : content.item(id).jp;
+  return id ? content.item(id).jp : null;
 }
 
-// wordsFor with each word's jyutping over its unknown characters.
-export function wordsWithOver(content, states, id, n = 3) {
-  return wordsFor(content, id, n).map(w => ({...w, over: overOf(content, states, w.form, w.jp)}));
+// Every syllable of `form` read `jp`, for a reference view (nulls where the
+// word has no jyutping).
+export function allOver(form, jp) {
+  const chars = [...form];
+  const syl = jp ? jp.split(' ') : [];
+  return chars.map((_, i) => (syl.length === chars.length ? syl[i] : null));
+}
+
+// wordsFor with each word's jyutping over every character.
+export function wordsWithOver(content, id, n = 3) {
+  return wordsFor(content, id, n).map(w => ({...w, over: allOver(w.form, w.jp)}));
 }
 
 // The words a reading item's card shows, and so every answer and Meet that
 // teaches it (patch plan 7.10, Mark 2026-10-03: "the literal exact same
 // example words as the card"): one list, picked once, by the export.
 export const WORDS_SHOWN = 4;
-export function cardWords(content, states, id) {
-  return wordsWithOver(content, states, id, WORDS_SHOWN);
+export function cardWords(content, id) {
+  return wordsWithOver(content, id, WORDS_SHOWN);
 }
