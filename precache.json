@@ -1,5 +1,5 @@
 {
- "build": "573281fbd4274e46",
+ "build": "93339c7e54573001",
  "files": [
   "actions.js",
   "app.css",
@@ -34,6 +34,7 @@
   "core/normalize.js",
   "core/placement.js",
   "core/provenance.js",
+  "core/relay.js",
   "core/review.js",
   "core/rng.js",
   "core/search.js",
@@ -70,6 +71,7 @@
   "loader.js",
   "main.js",
   "manifest.webmanifest",
+  "outbox.js",
   "overlay.js",
   "pwa.js",
   "reports.js",

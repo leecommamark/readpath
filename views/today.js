@@ -211,9 +211,6 @@ export function renderToday(el, m, opts) {
     h('div', {class: 'btns', style: 'margin-top:var(--s2)'},
       h('button', {type: 'button', class: 'btn quiet', onclick: opts.onExport}, 'Export'),
       h('button', {type: 'button', class: 'btn quiet', onclick: opts.onImport}, 'Import')),
-    // Send feedback, and About and licences (patch plan 7B, Phase 3)
-    opts.onFeedback && h('div', {class: 'btns', style: 'margin-top:var(--s2)'},
-      h('button', {type: 'button', class: 'btn quiet', onclick: opts.onFeedback}, 'Send feedback')),
     // Settings, then About and licences, on one row (brief 7.12 decided 4)
     (opts.onSettings || opts.onAbout) && h('div', {class: 'links settings-links'},
       opts.onSettings && h('button', {type: 'button', class: 'link', onclick: opts.onSettings},
@@ -221,9 +218,18 @@ export function renderToday(el, m, opts) {
       opts.onAbout && h('button', {type: 'button', class: 'link', onclick: opts.onAbout},
         'About and licences')),
     opts.unsent > 0 && h('p', {class: 'note unsent'},
-      `${plural(opts.unsent, 'report')} ${opts.unsent === 1 ? 'goes' : 'go'} out with your next export.`),
+      `${plural(opts.unsent, 'report')} not sent yet. ${opts.unsent === 1 ? 'It goes' : 'They go'} `
+      + 'to Mark when the app is back online, and with your next export.'),
     opts.version && h('p', {class: 'sm', style: 'margin:var(--s2) 0 0'},
       (opts.build ? `App ${opts.build} · ` : '') + `Content ${opts.version}` + (opts.loadedMs != null ? ` · loaded in ${opts.loadedMs} ms` : '')));
+
+  // Send feedback, near the top during the beta (brief 7.19 P5): a row as
+  // on Path, under the session card
+  const feedback = opts.onFeedback && h('section', {class: 'block jumps'},
+    h('button', {type: 'button', class: 'jump', onclick: opts.onFeedback},
+      h('span', {class: 'jump-text'}, h('b', {}, 'Send feedback'),
+        h('span', {class: 'sm'}, 'A note, and your reports, to Mark')),
+      h('span', {class: 'jump-go', 'aria-hidden': 'true'}, '›')));
 
   const trouble = opts.trouble;
   const warn = h('p', {class: 'warn', role: 'status', hidden: !trouble},
@@ -233,5 +239,5 @@ export function renderToday(el, m, opts) {
   put(clear(el),
     h('div', {class: 'top'}, h('span', {}, opts.date || ''), h('span', {})),
     h('h1', {id: 'today-h'}, 'Today'),
-    update || '', warn, session, reading || '', next || '', place || '', resume || '', high || '', known, install || '', progress);
+    update || '', warn, session, feedback || '', reading || '', next || '', place || '', resume || '', high || '', known, install || '', progress);
 }

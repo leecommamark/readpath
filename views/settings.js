@@ -1,7 +1,7 @@
 // settings.js — the Settings screen (brief 7.12, decided 4 and 5).
 //
-// One setting today: how jyutping's tones are drawn, Tone marks or Numbers
-// (jp.js). Two option cards, each showing sik6 as it would draw whatever is
+// How jyutping's tones are drawn, Tone marks or Numbers (jp.js), and the
+// name on reports and feedback (brief 7.19 P2). Two option cards, each showing sik6 as it would draw whatever is
 // chosen; a Preview of two lines that redraws as the choice changes; with
 // marks, a key to them. Reached from Your progress on Today, #settings,
 // Back as About's.
@@ -20,12 +20,12 @@ export const KEY = [
 ];
 const OPTIONS = [{mode: 'marks', label: 'Tone marks'}, {mode: 'numbers', label: 'Numbers'}];
 
-// settingsModel(settings) -> {jp: 'marks' | 'numbers'}
+// settingsModel(settings) -> {jp: 'marks' | 'numbers', name}
 export function settingsModel(settings) {
-  return {jp: jpMode(settings)};
+  return {jp: jpMode(settings), name: settings.testerName || ''};
 }
 
-// renderSettings(el, m, {onBack, onJp(mode)})
+// renderSettings(el, m, {onBack, onJp(mode), onName(name)})
 export function renderSettings(el, m, cb) {
   const option = o => h('label', {class: `opt-card${m.jp === o.mode ? ' on' : ''}`},
     h('input', {type: 'radio', name: 'jp-mode', value: o.mode, checked: m.jp === o.mode,
@@ -55,5 +55,13 @@ export function renderSettings(el, m, cb) {
           h('dd', {}, said)]))),
       h('p', {class: 'note'}, 'Search and answers still take numbers (',
         h('span', {class: 'jp jp-numbers', lang: 'en'}, 'sik6'),
-        '). Copied and exported text keeps numbers too.')));
+        '). Copied and exported text keeps numbers too.')),
+    // the tester's name on reports and feedback (brief 7.19 P2)
+    cb.onName && h('section', {class: 'block'},
+      h('label', {class: 'label', for: 'tester-name'}, 'Your name'),
+      h('p', {class: 'note'}, 'On your reports and feedback, so Mark knows who sent them. '
+        + 'Nowhere else.'),
+      h('input', {type: 'text', class: 'note-input', id: 'tester-name', maxlength: 60,
+                  autocomplete: 'name', value: m.name, placeholder: 'Optional',
+                  onchange: e => cb.onName(e.target.value)})));
 }

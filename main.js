@@ -56,6 +56,8 @@ import {watchWorker, installOffer, exportReminder, askPersist} from './pwa.js';
 import {feedbackDoc, deviceOf, mailtoUrl, toSend, markSent, undoSent,
         SUBJECT} from './feedback.js';
 import {renderFeedback} from './views/feedback.js';
+import {createOutbox, relaySend, askName, saveName} from './outbox.js';
+import {budget} from './core/relay.js';
 import {renderAbout} from './views/about.js';
 
 const $ = id => document.getElementById(id);
@@ -331,72 +333,124 @@ function openReport(shown, where) {
   const sheet = showOverlay('report');
   renderReport(sheet, {
     onCancel: () => hideOverlay('report'),
-    onSave: (kind, note) => {
-      addReport(app.store, makeReport(shown, {kind, note, where, build: app.version,
-                                              day: systemDay(), at: Date.now()}));
+    onSave: (kind, note, name) => {
+      if (name !== undefined) saveName(app.store, name);
+      const report = makeReport(shown, {kind, note, where, build: app.version,
+                                        day: systemDay(), at: Date.now()});
+      addReport(app.store, report);
       hideOverlay('report');
-      toast('Report saved. It goes out with your next Export.');
       if (!app.run) showToday();
+      // sent in the background (brief 7.19 P1); one that doesn't go waits
+      // for the outbox's next flush, and Send feedback and Export carry it
+      outbox().sendReport(report).then(r => {
+        toast(r.ok ? 'Report sent. Thank you.'
+          : r.retry ? 'Report saved. It goes to Mark when it can.'
+          : 'Report saved. It goes with Send feedback or your next export.');
+        if (r.ok && !app.run) showToday();
+      });
     },
-  });
+  }, {askName: askName(app.store)});
 }
+
+// ---- the outbox (brief 7.19): reports and feedback sent through the
+// relay, Web3Forms. Made on first use; flushed at launch and on 'online'.
+
+function sendCtx(day = systemDay()) {
+  const meta = app.store.load(KEYS.meta, {});
+  const ctx = installContext(navigator, globalThis.matchMedia);
+  return {build: BUILD, content: app.version, day, at: Date.now(),
+          device: deviceOf({nav: navigator, win: window, standalone: ctx.standalone,
+                            persisted: meta.persisted, storage: app.storage})};
+}
+
+function outbox() {
+  app.outbox ||= createOutbox({store: app.store, fetchFn: (...a) => fetch(...a), ctx: () => sendCtx(),
+                               online: () => navigator.onLine !== false});
+  return app.outbox;
+}
+
+function flushOutbox() {
+  outbox().flush().then(n => {
+    if (n && !app.run) showToday();
+  }, e => console.warn('readpath: outbox', e));
+}
+
+// what the sheet says when the relay can't take it
+const whyNot = r => r.why === 'offline' ? 'you’re offline'
+  : r.why === 'cap' ? 'too many sent this hour'
+  : r.retry ? 'it couldn’t be reached' : 'it was refused';
 
 // ---- Send feedback, and About and licences (patch plan 7B, Phase 3)
 //
-// The file is made inside Send's tap, before share(), which needs the tap
-// (transient activation). A share that resolves marks the reports sent; a
-// cancelled one marks nothing. Without file sharing, an email opens, and
-// the reports are marked sent with an Undo, since nothing says it went.
+// Send goes through the relay first (brief 7.19). Offline or over the
+// hour's cap, it goes straight to today's way: the share sheet, or an
+// email. When the relay fails or refuses, the sheet stays open, note and
+// all, and its button becomes Share or Email: share() needs a tap of its
+// own (transient activation), which the wait for the relay has used up.
+//
+// The share file is made inside that tap. A share that resolves marks the
+// reports sent; a cancelled one marks nothing. Without file sharing, an
+// email opens, and the reports are marked sent with an Undo, since nothing
+// says it went.
 
 function openFeedback() {
   const sheet = showOverlay('feedback');
   const probe = new File([''], 'readpath-feedback.txt', {type: 'text/plain'});
   const canShare = !!(navigator.canShare && navigator.canShare({files: [probe]}));
-  renderFeedback(sheet, {reports: toSend(app.store).length, canShare}, {
-    onCancel: () => hideOverlay('feedback'),
-    onSend(note, include) {
-      const reps = include ? toSend(app.store) : [];
-      const meta = app.store.load(KEYS.meta, {});
-      const ctx = installContext(navigator, globalThis.matchMedia);
-      const day = systemDay();
-      const {name, text, doc} = feedbackDoc({
-        note, reports: reps, build: BUILD, content: app.version, day, at: Date.now(),
-        device: deviceOf({nav: navigator, win: window, standalone: ctx.standalone,
-                          persisted: meta.persisted, storage: app.storage})});
-      const ids = reps.map(r => r.id);
-      const done = (how, undoable) => {
-        const before = markSent(app.store, ids, isoOf(day));
-        hideOverlay('feedback');
-        if (!app.run) showToday();
-        const what = ids.length ? ` with ${ids.length} ${ids.length === 1 ? 'report' : 'reports'}` : '';
-        toast(`${how}${what}. Thank you.`, undoable ? {action: 'Undo', onAction: () => {
-          undoSent(app.store, before);
-          if (!app.run) showToday();
-        }} : {});
-      };
-      // the sheet closes first (its history entry popped), and the email
-      // opens once that back() has landed: a mailto: navigation started
-      // before it let the back() go past the page in the browser pane
-      const email = () => {
-        const url = mailtoUrl(doc);
-        done('Email opened', true);
-        setTimeout(() => {
-          const a = Object.assign(document.createElement('a'), {href: url});
-          document.body.append(a);
-          a.click();
-          a.remove();
-        }, 250);
-      };
-      const file = new File([text], name, {type: 'text/plain'});
-      if (canShare && navigator.canShare({files: [file]})) {
-        navigator.share({files: [file], title: SUBJECT}).then(() => done('Sent', false), e => {
-          if (e && e.name === 'AbortError') return;          // cancelled: nothing sent
-          console.warn('readpath: share', e);
-          email();
-        });
-      } else {
+  const made = (note, include) => {
+    const reps = include ? toSend(app.store) : [];
+    const c = sendCtx();
+    return {...feedbackDoc({...c, note, reports: reps}), ids: reps.map(r => r.id), day: c.day};
+  };
+  const done = ({ids, day}, how, undoable) => {
+    const before = markSent(app.store, ids, isoOf(day));
+    hideOverlay('feedback');
+    if (!app.run) showToday();
+    const what = ids.length ? ` with ${ids.length} ${ids.length === 1 ? 'report' : 'reports'}` : '';
+    toast(`${how}${what}. Thank you.`, undoable ? {action: 'Undo', onAction: () => {
+      undoSent(app.store, before);
+      if (!app.run) showToday();
+    }} : {});
+  };
+  // today's way, unchanged: called inside a tap
+  const other = (note, include) => {
+    const m = made(note, include);
+    // the sheet closes first (its history entry popped), and the email
+    // opens once that back() has landed: a mailto: navigation started
+    // before it let the back() go past the page in the browser pane
+    const email = () => {
+      const url = mailtoUrl(m.doc);
+      done(m, 'Email opened', true);
+      setTimeout(() => {
+        const a = Object.assign(document.createElement('a'), {href: url});
+        document.body.append(a);
+        a.click();
+        a.remove();
+      }, 250);
+    };
+    const file = new File([m.text], m.name, {type: 'text/plain'});
+    if (canShare && navigator.canShare({files: [file]})) {
+      navigator.share({files: [file], title: SUBJECT}).then(() => done(m, 'Sent', false), e => {
+        if (e && e.name === 'AbortError') return;          // cancelled: nothing sent
+        console.warn('readpath: share', e);
         email();
+      });
+    } else {
+      email();
+    }
+  };
+  const view = renderFeedback(sheet, {reports: toSend(app.store).length, askName: askName(app.store), canShare}, {
+    onCancel: () => hideOverlay('feedback'),
+    async onSend(note, include, name) {
+      if (name !== undefined) saveName(app.store, name);
+      if (navigator.onLine === false || budget(app.store.load(KEYS.meta, {}), Date.now()).left <= 0) {
+        return other(note, include);
       }
+      const m = made(note, include);
+      const r = await relaySend(app.store, m.doc, {fetchFn: (...a) => fetch(...a), now: m.doc.at});
+      if (r.ok) return done(m, 'Sent', false);
+      console.warn('readpath: relay', r.why);
+      view.fallback(whyNot(r), other);
     },
   });
 }
@@ -411,6 +465,7 @@ function showSettings({push = true} = {}) {
   const draw = () => renderSettings($('settings'), settingsModel(app.store.load(KEYS.settings, {})), {
     onBack: () => (history.state && history.state.settings ? history.back() : showTab('today')),
     onJp: mode => { setJp(document.documentElement, app.store, mode); draw(); },
+    onName: name => saveName(app.store, name),
   });
   draw();
   window.scrollTo(0, 0);
@@ -1359,6 +1414,8 @@ async function boot() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && systemDay() !== app.today) showToday();
   });
+  // unsent reports go when the app opens and when it's back online (7.19 P3)
+  window.addEventListener('online', flushOutbox);
   // the focus text pulls in Today's first composition (usually from the
   // device cache; the dictionary only when its content version is new)
   window.readpath = app;          // for poking at from the console
@@ -1367,6 +1424,7 @@ async function boot() {
   if (welcome) return showWelcome();
   try { await app.library.warmFocus(); } catch (e) { console.warn('readpath: focus text', e); }
   showToday();
+  flushOutbox();
   if (!link) return route();
   showTab('texts');
   if (link.id) return openBundle(link.id);

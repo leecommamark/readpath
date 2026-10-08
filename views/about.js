@@ -8,6 +8,7 @@ import {h, clear, put} from './dom.js';
 import {NAME} from './welcome.js';
 
 const CC4 = 'https://creativecommons.org/licenses/by-sa/4.0/';
+const WEB3FORMS = 'https://web3forms.com/';
 
 function link(href, text) {
   const ext = /^https?:/.test(href);
@@ -37,8 +38,9 @@ export function renderAbout(el, m, cb) {
       h('p', {class: 'sm'}, `App ${m.build} · Content ${m.version}`)),
     h('section', {class: 'block'},
       h('h2', {}, 'Your data'),
-      h('p', {}, 'Everything stays on this device. Nothing is sent except what you choose to send '
-        + 'with Send feedback.'),
+      h('p', {}, 'Everything stays on this device. Nothing is sent except your reports and what '
+        + 'you send with Send feedback, to Mark, through ', link(WEB3FORMS, 'Web3Forms'),
+        ' (a form-to-email service).'),
       h('p', {}, 'No analytics of any kind.')),
     h('section', {class: 'block'},
       h('h2', {}, 'The data'),
