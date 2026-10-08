@@ -25,6 +25,7 @@ import {kindOf} from '../core/content.js';
 import {readingChoices, characterChoices, meaningChoices,
         tellApartChoices} from '../core/choices.js';
 import {toneless} from '../core/content.js';
+import {WORD_MAX} from '../core/tasks.js';
 import {readingItemFor} from '../core/focus.js';
 import {sentenceSpans} from '../core/lines.js';
 import {wordChars} from './reader.js';
@@ -36,7 +37,7 @@ export const PATTERN_TEXT = {
   ng_j: 'In this series ng- becomes j- before yu and i.',
 };
 
-function partCard(content, task, base) {
+function partCard(content, task, base, states = {}) {
   const it = content.item(task.item);
   const key = jp => content.syllables.get(toneless(jp))?.key;
   if (task.task === 'part_meet') {
@@ -76,7 +77,7 @@ function partCard(content, task, base) {
                      pattern: pat ? PATTERN_TEXT[pat.split(':')[1]] || null : null}};
   }
   if (task.task === 'tell_apart' && task.target) {
-    const t = tellApartChoices(content, task.target, base.rng, it.part);
+    const t = tellApartChoices(content, task.target, base.rng, it.part, states);
     const row = ch => content.tellapart.find(r => r.head === task.target && r.char === ch);
     const a = content.item(content.mainReading(t.answer));
     return {...base, kind: 'question', lead: 'Which one means', text: a.gloss, hint: a.jp,
@@ -88,8 +89,11 @@ function partCard(content, task, base) {
             // reading and meaning, then its meaning part and what that part
             // means (CO-049; Mark, 2026-09-29: 清 cing1 clear · 氵 water)
             reveal: {glyph: t.answer, jp: a.jp,
-                     // and the answer's card words under them (7.9, 7.10)
-                     words: cardWords(content, content.mainReading(t.answer)),
+                     // and the answer's card words under them (7.9, 7.10),
+                     // of 4 characters at most (brief 7.20 P1: not
+                     // 黔東南苗族侗族自治州)
+                     words: cardWords(content, content.mainReading(t.answer))
+                       .filter(w => [...w.form].length <= WORD_MAX),
                      head: {char: task.target, jp: content.partReading(task.target)},
                      marks: t.choices.map(ch => ({char: ch, part: row(ch).meaning_part,
                                                   gloss: row(ch).part_gloss, jp: row(ch).reading,
@@ -112,7 +116,7 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
   const base = {task: task.task, item: task.item, rung: task.rung, asked: task.asked,
                 fallback: task.fallback, role: task.role};
   if (content.kind(task.item) !== 'reading') {
-    const m = partCard(content, task, {...base, rng, pool, met: !!states[task.item]});
+    const m = partCard(content, task, {...base, rng, pool, met: !!states[task.item]}, states);
     delete m.rng;
     delete m.pool;
     delete m.met;

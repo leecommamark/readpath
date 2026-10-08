@@ -33,6 +33,7 @@
 // part, Tell apart for a meaning part), Maintained at the test task.
 
 import {readingId} from './content.js';
+import {tellApartPool} from './choices.js';
 import {MAINTAIN} from './state.js';
 import {partUnlocked} from './unlock.js';
 
@@ -90,9 +91,19 @@ function predictTarget(content, states, id, exclude, rng, role) {
 }
 
 // Tell apart: one of the gated families the part resolves; Test me avoids
-// the family it asked last, where the part resolves more than one.
-function tellApartTarget(content, id, rng, exclude = null) {
-  const all = content.item(id).resolves || [];
+// the family it asked last, where the part resolves more than one. Only a
+// family with 2 or more members near the learner (choices.js
+// tellApartPool; brief 7.20 P1) is asked; with none, there is no target.
+// Among those, a family whose member this part marks is near the learner
+// comes first, so the question still tests the part (m:亻 asked 理 among
+// 埋 裏 哩 when 里's 亻 member, 俚, was too far off).
+function tellApartTarget(content, states, id, rng, exclude = null) {
+  const part = content.item(id).part;
+  const near = (content.item(id).resolves || [])
+    .map(h => [h, tellApartPool(content, h, states).eligible])
+    .filter(([, el]) => el.length >= 2);
+  const marked = near.filter(([, el]) => el.some(r => r.meaning_part === part));
+  const all = (marked.length ? marked : near).map(([h]) => h);
   const heads = all.length > 1 ? all.filter(h => h !== exclude) : all;
   if (!heads.length) return null;
   return rng ? rng.pick(heads) : heads[0];
@@ -111,7 +122,7 @@ function tellApartTarget(content, id, rng, exclude = null) {
 // 2-4 characters, as songpath's quiz words were (the reference card still
 // lists all eight), preferring a word whose other characters the learner
 // knows in the reading the word gives them. The draw stays seeded.
-const WORD_MAX = 4;
+export const WORD_MAX = 4;
 export function wordFor(content, states, id, rng = null) {
   const all = content.wordsOf(id);
   if (!all.length) return null;
@@ -174,7 +185,7 @@ export function taskFor(content, states, id, opts = {}) {
     return descriptor({
       task, item: id, rung, asked: rung, role,
       target: task === 'predict' ? predictTarget(content, states, id, exclude, rng, role)
-                                 : tellApartTarget(content, id, rng,
+                                 : tellApartTarget(content, states, id, rng,
                                                    role === 'testme' ? exclude : null),
     });
   }

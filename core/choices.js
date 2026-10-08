@@ -75,6 +75,45 @@ function index(content) {
   return X;
 }
 
+// ---- tell apart near the learner (brief 7.20 P1, Mark 2026-10-08)
+//
+// A first session (placed at ~270 known) was asked 侗 (rank 4,808) among
+// 胴 恫 洞, and offered 騮 餾 遛 against 榴: the family was any the part
+// resolves, the member any member. Now a member is *eligible* when its main
+// reading is met (learning or known) or lies within TELL_WINDOW path ranks
+// after the learner's frontier, the rank of the first main reading not yet
+// met. The target is an eligible member; wrong choices are eligible members
+// first, then the family's other members ranked TELL_FAR or less. A family
+// with fewer than 2 eligible members is not asked. Without `states` (a
+// reference view) every member is eligible, as before.
+export const TELL_WINDOW = 300;
+export const TELL_FAR = 3000;
+
+// The rank of the first main reading on the path not yet met; past the end,
+// when every one is.
+export function frontier(content, states) {
+  const X = index(content);
+  for (const id of X.mains) if (!states[id]) return content.rank(id);
+  return Infinity;
+}
+
+// tellApartPool(content, head, states) -> {eligible: [row], far: [row]}:
+// the family's members a question may ask about, and the others that may
+// still be offered (ranked TELL_FAR or less), each in the family's order.
+export function tellApartPool(content, head, states = null) {
+  const rows = index(content).family.get(head) || [];
+  if (!states) return {eligible: rows, far: []};
+  const edge = frontier(content, states) + TELL_WINDOW;
+  const eligible = [], far = [];
+  for (const r of rows) {
+    const id = content.mainReading(r.char);
+    const rank = id ? content.rank(id) : Infinity;
+    if (id && (states[id] || rank <= edge)) eligible.push(r);
+    else if (rank <= TELL_FAR) far.push(r);
+  }
+  return {eligible, far};
+}
+
 const glossOf = (content, ch) => {
   const id = content.mainReading(ch);
   return id ? content.item(id).gloss : null;
@@ -202,16 +241,23 @@ export function characterChoices(content, id, rng) {
   return {answer: ch, choices: rng.shuffle([ch, ...wrong])};
 }
 
-// tellApartChoices(content, head, rng, part) -> {answer, choices}: Tell apart,
-// one member of the family asked for by its meaning, among the members that
-// sound like it, then the rest. The member is the one `part` (the meaning
-// part under test) marks, where the family has one: the question tests that
-// part. Otherwise, and among several, it is drawn from those with a
-// same-sounding sibling, which is what a meaning part tells apart. A family
-// has at least 3 members, so a question may have 3 choices, not 4.
-export function tellApartChoices(content, head, rng, part = null) {
-  const rows = index(content).family.get(head);
-  if (!rows) throw new Error(`no tell-apart family: ${head}`);
+// tellApartChoices(content, head, rng, part, states) -> {answer, choices}:
+// Tell apart, one member of the family asked for by its meaning, among the
+// members that sound like it, then the rest. The member is the one `part`
+// (the meaning part under test) marks, where the family has one: the
+// question tests that part. Otherwise, and among several, it is drawn from
+// those with a same-sounding sibling, which is what a meaning part tells
+// apart. A family has at least 3 members, so a question may have 3 choices,
+// not 4. With `states`, the member and the choices come from
+// tellApartPool's eligible members first (brief 7.20 P1), so a question
+// may have only 2.
+export function tellApartChoices(content, head, rng, part = null, states = null) {
+  const all = index(content).family.get(head);
+  if (!all) throw new Error(`no tell-apart family: ${head}`);
+  // tellApartTarget only names a family with 2+ eligible members; a caller
+  // whose states disagree gets the whole family, as before 7.20
+  const pool = tellApartPool(content, head, states);
+  const {eligible: rows, far} = pool.eligible.length >= 2 ? pool : {eligible: all, far: []};
   const rivals = rows.filter(r => rows.some(o => o !== r && o.sound === r.sound));
   const marked = rows.filter(r => part && r.meaning_part === part);
   const markedRivals = marked.filter(r => rivals.includes(r));
@@ -221,11 +267,14 @@ export function tellApartChoices(content, head, rng, part = null) {
   // 忙's 忄 are one part, so they tell nothing apart (patch plan 6.5,
   // CO-062, Mark 2026-09-29)
   const one = content.onePart || (x => x);
-  const sibs = rows.filter(r => r !== own && !(r.meaning_part && own.meaning_part
-    && r.meaning_part !== own.meaning_part && one(r.meaning_part) === one(own.meaning_part)));
+  const sib = r => r !== own && !(r.meaning_part && own.meaning_part
+    && r.meaning_part !== own.meaning_part && one(r.meaning_part) === one(own.meaning_part));
+  const near = rows.filter(sib), rest = far.filter(sib);
   const wrong = takeByGloss(content, [
-    sibs.filter(r => r.sound === own.sound).map(r => r.char),
-    sibs.filter(r => r.sound !== own.sound).map(r => r.char),
+    near.filter(r => r.sound === own.sound).map(r => r.char),
+    near.filter(r => r.sound !== own.sound).map(r => r.char),
+    rest.filter(r => r.sound === own.sound).map(r => r.char),
+    rest.filter(r => r.sound !== own.sound).map(r => r.char),
   ], [own.char], CHOICES - 1, rng);
   return {answer: own.char, choices: rng.shuffle([own.char, ...wrong])};
 }
