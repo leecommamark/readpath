@@ -10,8 +10,9 @@
 //     (phrase-aware: 头发 -> 頭髮 but 发生 -> 發生), replaces it, but only
 //     where that form reads better;
 //   * except a character curated/characters.tsv `s2t` forces (variants
-//     `force`: 么 -> 麼, Mark 2026-09-29), which always converts. That is
-//     the one place this differs from songpath.
+//     `force`: 么 -> 麼, Mark 2026-09-29), which always converts, before
+//     s2t and again after it (钩 -> 鉤 -> 鈎, brief 7.23). That is the one
+//     place this differs from songpath.
 // It also classifies the pasted text's script (simp / mixed / trad) and
 // records, per traditional form, the simplified form it came from.
 //
@@ -91,6 +92,9 @@ export function normalizeText(text, content) {
       let cand = V.vmap[a] || whole[i];
       if (V.vmap[cand]) cand = V.vmap[cand];   // s2t may give a TW form (說 -> 説)
       if (cand !== a && rd(cand) > rd(a)) b = cand;
+      // a forced form again, after s2t: 钩 gives 鉤, which brief 7.23 forces
+      // to 鈎 (Mark, 2026-10-09: the content is keyed on public typing)
+      if (V.force && V.force[b]) b = V.force[b];
     }
     if (b !== given[i]) {                      // as given, compatibility form included
       const e = subs.get(given[i] + b);

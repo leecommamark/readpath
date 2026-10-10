@@ -171,7 +171,7 @@ export function refModel(content, states, form, texts = [], opts = {}) {
     return {kind: 'char', glyph: form, main, readings, gloss: m.gloss,
             built: builtFrom(content, form),
             looksLike: familyOf(content, form).map(ch => ({ch, over: charJp(content, ch)})),
-            words, inTexts, simplified, asPart: partRoles(content, states, form, {itemsOnly: true}),
+            words, inTexts, simplified, also: alsoOf(content, form), asPart: partRoles(content, states, form, {itemsOnly: true}),
             // the tag at the top: the reading the card was opened for (a
             // search row's, patch plan 7A 6b: 好 hou3 from its own row says
             // "not met yet", not hou2's "known"), else the main one; named
@@ -201,16 +201,21 @@ export function refModel(content, states, form, texts = [], opts = {}) {
             // CC-CEDICT's sense, a reading only kCantonese gives: muted (7.10)
             glossWeak: charGlossWeak(c), readingsWeak: offReadingsWeak(o),
             words, wordForms: o.words, built: builtFrom(content, form), inTexts, simplified,
+            also: alsoOf(content, form),
             status: known ? 'you know this' : 'not on the path', known};
   }
   return {kind: 'other', glyph: form, built: builtFrom(content, form), inTexts};
 }
 
+// The other forms a learner may meet the character in (brief 7.23: 說, 説),
+// from curated/characters.tsv's also_written, as an array of characters.
+const alsoOf = (content, form) => [...((content.char(form) || {}).also || '')];
+
 // What the card showed, for a report.
 export function shownOfRef(m) {
   const prompt = m.kind === 'char'
     ? [m.glyph, m.readings.map(r => `${r.jp} ${r.gloss || ''}`.trim()).join('; '),
-       m.words.map(w => `${w.form} ${w.jp}`).join(', ')].join(' | ')
+       m.words.map(w => `${w.form} ${w.jp}`).join(', ')].concat(m.also && m.also.length ? [`also written ${m.also.join(' ')}`] : []).join(' | ')
     : m.kind === 'part'
       ? [m.glyph, ...m.roles.map(r => `${r.kind} ${r.reading || r.gloss || ''}`)].join(' | ')
       : m.kind === 'offpath'
@@ -253,6 +258,13 @@ function simplifiedLine(m) {
   if (!m.simplified || !m.simplified.length) return null;
   return h('p', {class: 'note center simp-line'}, 'Written ',
     ...m.simplified.flatMap((f, i) => [i ? ' or ' : '', han(f)]), ' in simplified in your texts');
+}
+
+// Also written 説: the character's other forms, plain glyphs (not taught)
+function alsoLine(m) {
+  if (!m.also || !m.also.length) return null;
+  return h('p', {class: 'note center also-line'}, 'Also written ',
+    ...m.also.flatMap((f, i) => [i ? ' or ' : '', han(f)]));
 }
 
 // Built from: each part in its dotted box with its reading or meaning and
@@ -335,6 +347,7 @@ export function renderRef(el, m, cb) {
           layerChip(r.layer, LAYER_TEXT[r.layer])),
         r.gloss && h('p', {class: 'gloss-line'}, r.gloss),
         !r.main && h('p', {class: 'sm'}, `${r.relation}; ${r.status}`)))));
+    body.push(alsoLine(m));
     body.push(simplifiedLine(m));
     if (m.built.length) body.push(builtSection(m.built, cb));
     body.push(treeRow(m, cb));
@@ -368,6 +381,7 @@ export function renderRef(el, m, cb) {
         m.gloss && h('p', {class: `gloss-line${m.glossWeak ? ' weak' : ''}`}, m.gloss),
         m.gloss && m.glossWeak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE))));
     body.push(h('p', {class: 'note center'}, 'Not on the learning path: it’s never taught or quizzed.'));
+    body.push(alsoLine(m));
     body.push(simplifiedLine(m));
     if (m.built.length) body.push(builtSection(m.built, cb));
     body.push(treeRow(m, cb));
