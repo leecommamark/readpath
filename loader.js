@@ -1,7 +1,7 @@
 // loader.js — the content tables, fetched (patch plan 4, Phase 3; patch
 // plan 5, Phase 1).
 //
-// Every boot table is fetched in parallel and parsed once: the nine content
+// Every boot table is fetched in parallel and parsed once: the content
 // tables, the Reader's four (lexicon, char, variants, offchar) and the
 // dictionary's index, about 5.8 MB (2.0 MB gzipped). The dictionary's 1,024 files are not
 // boot tables: dict.js fetches a text's as it needs them. The content

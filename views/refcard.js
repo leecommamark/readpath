@@ -21,6 +21,9 @@ import {canMarkKnown, canForget, canKnowOff} from '../actions.js';
 import {canTestMe} from '../runner.js';
 import {wordChars} from './reader.js';
 import {glyphTile, glyphKey} from './glyph.js';
+import {roleBar} from './families.js';
+import {roleCounts} from '../core/soundfamily.js';
+import {familiesOf} from '../core/family.js';
 import {charGlossWeak, offReadingsWeak, partGlossWeak, DICTIONARY_SENSE} from '../core/provenance.js';
 
 export {WORDS_SHOWN};
@@ -153,6 +156,20 @@ function partRoles(content, states, form, {itemsOnly = false} = {}) {
 // `texts` (texts.js heldLines()) gives In your texts; omitted, it's empty.
 // opts: {wordOf (dict.js: an off-path card's words, once their files are
 // held), offKnown (a Set: the characters the learner said they know)}.
+// the family page of a character's sound part, where it has one (brief
+// 7.25 P1: 煮 -> "者 family: how it's read")
+function familyOfPart(content, form) {
+  const part = content.soundPartOf(form);
+  return part && familiesOf(content).byKey.has(`f:${part}`) ? {key: `f:${part}`, head: part} : null;
+}
+
+// how a form is used as a part, for its card's bar (decided 10); null where
+// no character uses it for its sound or meaning
+function partUse(content, form) {
+  const r = roleCounts(content, form);
+  return r.sound || r.meaning ? r : null;
+}
+
 export function refModel(content, states, form, texts = [], opts = {}) {
   const {wordOf = null, offKnown = new Set(), focus = null} = opts;
   const inTexts = inYourTexts(content, states, form, texts);
@@ -172,6 +189,7 @@ export function refModel(content, states, form, texts = [], opts = {}) {
             built: builtFrom(content, form),
             looksLike: familyOf(content, form).map(ch => ({ch, over: charJp(content, ch)})),
             words, inTexts, simplified, also: alsoOf(content, form), asPart: partRoles(content, states, form, {itemsOnly: true}),
+            family: familyOfPart(content, form), partUse: partUse(content, form),
             // the tag at the top: the reading the card was opened for (a
             // search row's, patch plan 7A 6b: 好 hou3 from its own row says
             // "not met yet", not hou2's "known"), else the main one; named
@@ -185,7 +203,7 @@ export function refModel(content, states, form, texts = [], opts = {}) {
             canForget: canForget(content, states, main)};
   }
   const roles = partRoles(content, states, form);
-  if (roles.length) return {kind: 'part', glyph: form, roles};
+  if (roles.length) return {kind: 'part', glyph: form, roles, partUse: partUse(content, form)};
   if (canKnowOff(content, form)) {
     const o = content.offchar(form);
     const known = offKnown.has(form);
@@ -269,14 +287,23 @@ function alsoLine(m) {
 
 // Built from: each part in its dotted box with its reading or meaning and
 // role. Its tree comes next and Sounds like after it (brief 7.18).
-function builtSection(built, cb) {
+function builtSection(built, cb, family = null) {
   return section('Built from', h('p', {class: 'built'},
     ...built.flatMap((b, i) => [i ? h('span', {class: 'built-plus'}, '+') : '',
       // a part and its note wrap together, never apart (7.5)
       h('span', {class: 'part'}, charBtn(b.part, cb),
         h('span', {class: 'muted'},
         // a sound part's note is its reading, a meaning part's its gloss
-        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${b.role})`] : `(${b.role})`))])));
+        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${b.role})`] : `(${b.role})`))])),
+    // how its sound part's family is read (brief 7.25 P1); not mid-session
+    family && cb.onFamily && h('p', {class: 'family-link'},
+      h('button', {type: 'button', class: 'link', onclick: () => cb.onFamily(family.key)},
+        `${family.head} family: how it’s read ›`)));
+}
+
+// how this form is used as a part (brief 7.25 decided 10)
+function partUseSection(m) {
+  return m.partUse && section('As a part', roleBar(m.glyph, m.partUse));
 }
 
 // Where the sound part's reading is no clue, the members that carry the
@@ -325,7 +352,8 @@ function roleSection(r, cb) {
 // renderRef(el, model, {onClose, onBack, backTo, closeLabel, onRef(form), kindOf(form),
 //                        onMarkKnown, onForgot, onReport, onOpenText(id, line),
 //                        onTestMe(id) (none during a session), onKnowOff(bool),
-//                        onTree(form) (its tree; none during a session)})
+//                        onTree(form) (its tree; none during a session),
+//                        onFamily(key) (a sound part's family page; none during a session)})
 // onBack/backTo: the card this one was opened from, when there is one.
 export function renderRef(el, m, cb) {
   const head = h('div', {class: 'top sheet-head'},
@@ -349,7 +377,7 @@ export function renderRef(el, m, cb) {
         !r.main && h('p', {class: 'sm'}, `${r.relation}; ${r.status}`)))));
     body.push(alsoLine(m));
     body.push(simplifiedLine(m));
-    if (m.built.length) body.push(builtSection(m.built, cb));
+    if (m.built.length) body.push(builtSection(m.built, cb, m.family));
     body.push(treeRow(m, cb));
     if (m.built.length) body.push(likeSection(m.built, cb));
     if (m.looksLike.length) {
@@ -360,6 +388,7 @@ export function renderRef(el, m, cb) {
       body.push(section('Words', ...m.words.map(w => h('p', {class: 'word-line'},
         rubyWord(w.form, w.over), w.gloss ? ` ${w.gloss}` : ''))));
     }
+    body.push(partUseSection(m));
     for (const r of m.asPart || []) body.push(roleSection(r, cb));
     // a character that is a part item (青 止) says what its border means
     if ((m.asPart || []).length) body.push(glyphKey());
@@ -372,6 +401,7 @@ export function renderRef(el, m, cb) {
         m.readings.length > 1 ? ['I forgot ', jpSpan(m.readings.find(r => r.main).jp)] : 'I forgot this'))));
   } else if (m.kind === 'part') {
     body.push(treeRow(m, cb));
+    body.push(partUseSection(m));
     for (const r of m.roles) body.push(roleSection(r, cb));
     body.push(glyphKey());
   } else if (m.kind === 'offpath') {
@@ -383,7 +413,7 @@ export function renderRef(el, m, cb) {
     body.push(h('p', {class: 'note center'}, 'Not on the learning path: it’s never taught or quizzed.'));
     body.push(alsoLine(m));
     body.push(simplifiedLine(m));
-    if (m.built.length) body.push(builtSection(m.built, cb));
+    if (m.built.length) body.push(builtSection(m.built, cb, m.family));
     body.push(treeRow(m, cb));
     if (m.built.length) body.push(likeSection(m.built, cb));
     if (m.words.length) {

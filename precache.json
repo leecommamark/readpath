@@ -1,5 +1,5 @@
 {
- "build": "5218cecf7a8ca3aa",
+ "build": "c6f9b98bcf777cc8",
  "files": [
   "actions.js",
   "app.css",
@@ -17,6 +17,7 @@
   "content/path.json",
   "content/reading.json",
   "content/sound_part.json",
+  "content/sound_sim.json",
   "content/syllable.json",
   "content/tellapart.json",
   "content/variants.json",
@@ -42,6 +43,7 @@
   "core/segment.js",
   "core/sentences.js",
   "core/session.js",
+  "core/soundfamily.js",
   "core/state.js",
   "core/tasks.js",
   "core/today.js",

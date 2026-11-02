@@ -2,9 +2,8 @@
 //
 // The content tables are read-only and generated (readpath/tools/
 // export_content.py); this file only indexes them. It does no I/O: the caller
-// fetches or reads the nine `.json` files and passes them in, parsed, as
-// `{glyph, reading, part_role, sound_part, meaning_part, tellapart, word,
-// path, syllable}`. Each is `{fields: [...], rows: [[...]]}`.
+// fetches or reads the `.json` files named in TABLES and passes them in,
+// parsed, as `{glyph, reading, ...}`. Each is `{fields: [...], rows: [[...]]}`.
 //
 // Item ids are the export's: `r:清:cing1` (a character reading), `s:青` (a
 // sound part), `m:氵` (a meaning part). Everything the learner model asks of
@@ -13,7 +12,7 @@
 
 export const TABLES = ['glyph', 'reading', 'part_role', 'sound_part',
                        'meaning_part', 'tellapart', 'word', 'path', 'syllable',
-                       'decomp'];
+                       'decomp', 'sound_sim'];
 // The Reader's (patch plan 5, Phase 1), loaded at boot too, but optional
 // here: a caller that only composes Today needs none of them. `lexicon` is a
 // flat array, `variants` one object (s2t), `char` rows as above. `offchar`
@@ -187,6 +186,18 @@ export function loadContent(tables) {
     list.sort((a, b) => (a.role !== 'sound') - (b.role !== 'sound') || charRank(a.char) - charRank(b.char));
   }
 
+  // how a part is used, shape too (brief 7.25 decided 10): listed pairs, as
+  // usesOf; part_role has one row per character and part
+  const roleCounts = new Map();            // part -> {sound, meaning, form}
+  for (const r of T.part_role) {
+    if (r.listed === 0) continue;
+    if (!roleCounts.has(r.part)) roleCounts.set(r.part, {sound: 0, meaning: 0, form: 0});
+    const n = roleCounts.get(r.part);
+    if (r.role in n) n[r.role]++;
+  }
+
+  const soundSim = new Map(T.sound_sim.map(r => [`${r.slot}|${r.a}|${r.b}`, r.sim]));
+
   // ---- the lookups the learner model uses
   const item = id => {
     const it = items.get(id);
@@ -254,12 +265,17 @@ export function loadContent(tables) {
     roleIn: (char, form) => roleIn.get(`${char}|${form}`) || null,
     // the characters built from a part as their sound or meaning part
     usesOf: part => uses.get(part) || [],
+    // {sound, meaning, form}: how many characters use `part` each way
+    roleCountsOf: part => ({sound: 0, meaning: 0, form: 0, ...roleCounts.get(part)}),
     tellapart: T.tellapart,
     words: new Map(T.word.map(w => [`${w.form}|${w.jp}`, w])),
-    // toneless syllable -> {syllable, key, uses, tones, near, sim}: every
+    // toneless syllable -> {syllable, key, uses, tones, pair}: every
     // syllable a reading has, its sound key (as a merging speaker hears it),
-    // and its sound-alikes, closest first (step 4's reading choices)
+    // and its literary/colloquial counterparts (step 4's reading choices)
     syllables: new Map(T.syllable.map(s => [s.syllable, s])),
+    // phonology.py's similarity of two onsets, nuclei, codas or rimes, 0..1
+    // (brief 7.24: the tree's sound groups); 1 for the same, 0 if unseen
+    soundSim: (slot, a, b) => (a === b ? 1 : soundSim.get(`${slot}|${a}|${b}`) || 0),
     ...readerContent(tables),
   };
 }

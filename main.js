@@ -317,6 +317,8 @@ function drawRef() {
     onReport: () => openReport(shownOfRef(m), 'reference'),
     // under Built from, mid-session too (brief 7.18 Decided 3)
     onTree: f => showTree(f),
+    // its sound part's family, how it's read (brief 7.25 P1); not mid-session
+    onFamily: app.run ? null : key => showFamily(key),
     // In your texts opens the Reader at that line's section; not mid-session
     onOpenText: app.run ? null : (id, line) => {
       const lines = (app.library.heldLines().find(t => t.id === id) || {}).lines;
@@ -1135,7 +1137,10 @@ function drawReview() {
 // leaves it (patch plan 7.5; it took over from step 6's block grid).
 function showFamily(key, {push = true} = {}) {
   const url = `#path/family/${encodeURIComponent(key)}`;
-  if (push) history.pushState({family: key}, '', url);
+  // from a card (7.25 P1) the page takes the card's history entry, as a tree does
+  const fromCard = overlays.isOpen('ref');
+  if (fromCard) hideOverlay('ref', {fromPop: true});
+  if (push) history[fromCard ? 'replaceState' : 'pushState']({family: key}, '', url);
   app.reader = null;
   app.tree = null;
   // every family page opens in Read (brief 7.9, Mark): Mark is a tap away

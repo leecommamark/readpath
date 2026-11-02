@@ -487,6 +487,49 @@ p.in-text { cursor: default; }
 .fam-head-text { display: flex; flex-direction: column; gap: 2px; }
 .fam-head-text p { margin: 0; }
 .fam-members { margin: var(--s3) 0; gap: var(--s3) var(--s2); }
+/* how a part is used (brief 7.25 decided 10): sound / meaning / shape only */
+.role-bar-block .note { margin: 0 0 var(--s2); }
+.role-bar { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--tint); }
+.rb-sound { background: var(--accent); }
+.rb-meaning { background: var(--learn); }
+.rb-form { background: var(--muted); opacity: .45; }
+.role-key { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3); margin: var(--s1) 0 0; color: var(--muted); }
+.rk-item { display: inline-flex; align-items: center; gap: var(--s1); }
+.rk-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
+.family-link { margin: var(--s2) 0 0; }
+/* how a family is read (brief 7.25): boxes of readings that swap, by share */
+.fam-sounds { display: flex; flex-direction: column; gap: var(--s3); }
+.fam-sounds > .note { margin: 0; }
+.fam-sounds-h { margin-top: var(--s2); }
+.fam-box { display: flex; flex-direction: column; gap: var(--s3); padding: var(--s3);
+           border-radius: 10px; background: var(--tint); min-width: 0; }
+.fam-box-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); margin: 0; }
+.fam-box-head b { color: var(--accent); }
+.fam-chips { display: inline-flex; flex-wrap: wrap; gap: var(--s1); }
+.chip { font-size: var(--t-xs); color: var(--accent); border: 1px solid currentColor; border-radius: 99px;
+        padding: 0 var(--s2); white-space: nowrap; }
+.share-bar { display: flex; height: 6px; border-radius: 99px; overflow: hidden; background: var(--rule); }
+.share-bar.thin { height: 4px; margin-bottom: var(--s1); }
+.sb-0 { background: var(--accent); }
+.sb-1 { background: var(--accent); opacity: .65; }
+.sb-2 { background: var(--accent); opacity: .4; }
+.fam-row { display: grid; grid-template-columns: 3.6em minmax(0, 1fr); gap: var(--s2); align-items: start; min-width: 0; }
+.fam-row-head { display: flex; flex-direction: column; }
+.fam-syl { font-weight: 600; }
+.fam-syl.own { text-decoration: underline; text-underline-offset: 3px; }
+.fam-onset { color: var(--accent); }
+.fam-pct { color: var(--muted); }
+.fam-row-body { min-width: 0; }
+.fam-row-tiles { gap: var(--s2); }
+.fam-grid { display: grid; gap: var(--s1); align-items: stretch; }
+.fam-grid-h { font-size: var(--t-sm); font-weight: 600; color: var(--accent); text-align: center; }
+.fam-grid-h.side { align-self: center; text-align: left; }
+.fam-cell { background: var(--surface); border-radius: 8px; padding: var(--s2) var(--s1); min-width: 0; }
+.fam-cell .fam-row-tiles { gap: var(--s2) var(--s1); }
+.fam-cell .fam-row { grid-template-columns: minmax(0, 1fr); }
+.fam-cell .fam-row-head { flex-direction: row; gap: var(--s2); align-items: baseline; }
+/* a second reading: faded (its ring draws the dashes) */
+.fam-second .gt-form, .fam-second .gt-over { opacity: .55; }
 .study { gap: var(--s2); }
 .study-n { font-weight: 500; }
 .session-title { font: 600 var(--t-body) var(--head); color: var(--ink); }
