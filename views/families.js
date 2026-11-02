@@ -34,6 +34,7 @@
 //
 // Everything here but the drawing is pure, so a test reads it without a DOM.
 
+import {searchButton} from './search.js';
 import {h, clear, put, jpSpan} from './dom.js';
 import {isKnown} from '../core/state.js';
 import {soundId} from '../core/content.js';
@@ -150,7 +151,7 @@ const plural = (n, one, many = `${one}s`) => `${n.toLocaleString('en-GB')} ${n =
 const STATE_SAID = {known: 'known', learning: 'learning', ahead: 'not met yet'};
 export const FAMILY_HINT = {
   mark: 'Tap a character you know to mark it known, or a known one if you’ve forgotten it.',
-  read: 'Tap a character to trace its steps.',   // its tree since 7.7 (said so 7.8; worded so after 7.18)
+  read: 'Tap a character for its card.',   // a tree 7.7-7.25; its card since 7.26 (P4)
 };
 
 // known / total, as a ring (the mock-up's): its own colours, so a test of
@@ -318,7 +319,7 @@ export function roleBar(form, r) {
 
 const ONSET_SAID = o => o || '∅';
 // a box's title: what its readings share (decided 7; P3: the syllables)
-function boxTitle(b) {
+export function boxTitle(b) {
   const t = b.title;
   if (t.kind === 'ending') return `–${t.ending}`;
   if (t.kind === 'start') return `${t.start}–`;
@@ -339,7 +340,7 @@ function shareBar(parts, cls = '') {
     ...parts.map((x, i) => h('span', {class: `sb-${i % 3}`, style: `width: ${(100 * x).toFixed(2)}%`})));
 }
 
-function soundsSection(m, tileOf) {
+export function soundsSection(m, tileOf) {
   const s = m.sounds;
   const head = m.head;
   const rowLabel = row => `${pct(row.share)} of characters using ${head} are read ${row.syl} `
@@ -393,7 +394,7 @@ export function renderFamily(el, m, cb) {
     dashed: !!x.second, cls: x.second ? 'fam-second' : '',
     label: `${x.form}${x.jp ? ` ${x.jp}` : ''}${x.second ? ', a second reading' : ''}`
       + (x.state ? `: ${STATE_SAID[x.state]}` : '') + '; '
-      + (m.mode === 'read' ? 'open its tree' : !x.id ? 'nothing to mark' : x.state === 'known' ? 'tap if you’ve forgotten it' : 'mark known'),
+      + (m.mode === 'read' ? 'open its card' : !x.id ? 'nothing to mark' : x.state === 'known' ? 'tap if you’ve forgotten it' : 'mark known'),
     onTap: () => cb.onTap(x)});
   const modes = h('div', {class: 'modes', role: 'group', 'aria-label': 'Mode'},
     ...MODES.map(k => h('button', {
@@ -496,11 +497,11 @@ export function renderBrowse(el, m, cb) {
       h('span', {class: 'browse-meter', 'aria-hidden': 'true'},
         h('span', {style: `width:${(100 * r.known / r.total).toFixed(1)}%`}))));
   put(clear(el),
-    h('div', {class: 'top'}),
+    h('div', {class: 'top'}, h('span', {}), searchButton(cb.onSearch)),
     h('h1', {id: 'browse-h'}, 'Steps'),
     stepsSwitch('families', cb.onSwitch),
-    // a row opens the family; its tiles open trees (7.8)
-    h('p', {class: 'note'}, 'Open a family and tap a character to trace its steps.'),
+    // a row opens the family; its tiles open cards (7.26 P4)
+    h('p', {class: 'note'}, 'Open a family and tap a character for its card.'),
     // a dropdown, not chips: four didn't fit a phone's line (Mark, 7.8)
     h('label', {class: 'sort-by'}, 'Sort by ',
       h('select', {class: 'sort-select', onchange: e => e.target.value !== m.sort && cb.onSort(e.target.value)},

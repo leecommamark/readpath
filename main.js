@@ -19,11 +19,11 @@ import {deviceSeed, learnerFrom, composeRng, startRun, startPractice,
 import {todayModel, renderToday, placementOffered} from './views/today.js';
 import {libraryModel, previewOf, renderTexts, linkInput, NOT_A_SET} from './views/texts.js';
 import {fetchBundleIndex, fetchBundleTexts} from './core/bundle.js';
-import {h, clear, jpSpan} from './views/dom.js';
+import {h, clear, put, jpSpan} from './views/dom.js';
 import {applyJp, setJp} from './jp.js';
 import {settingsModel, renderSettings} from './views/settings.js';
 import {bodyOfFile, autoTitle} from './core/import.js';
-import {readerModel, renderReader, shownOfReader} from './views/reader.js';
+import {readerModel, renderReader, shownOfReader, wordBody} from './views/reader.js';
 import {wordsOf} from './core/lines.js';
 import {sectionsOf, sectionOfLine} from './core/sections.js';
 import {showSession} from './views/session.js';
@@ -42,8 +42,9 @@ import {startCheck, resumeCheck, answer as answerCheck, result as checkResult} f
 import {startPending, questionsPending, stageOf, toggle as toggleReview, toPage, resume as resumeReview, confirmReview,
         undoConfirm, placementHigh} from './core/review.js';
 import {makeRng} from './core/rng.js';
-import {search} from './core/search.js';
-import {renderFind} from './views/find.js';
+import {search, wordForms, familiesFor} from './core/search.js';
+import {renderSearch, renderResults} from './views/search.js';
+import {allOver} from './views/facts.js';
 import {partsModel, renderParts, stepsView, stepsUrl} from './views/parts.js';
 import {treeModel, renderTree} from './views/tree.js';
 import {makeReport, addReport, unsent} from './reports.js';
@@ -78,7 +79,7 @@ const app = {
   steps: 'families',        // the Steps tab's side: 'families' | 'meaning' (7.8)
   fromTab: 'path',          // the tab a family page or a tree was opened from (7.8)
   check: null,              // {check, rng, meaning, back} or {review, perPage}: the placement check on
-  pathQuery: '',            // Find a character's box, kept while the app is open
+  searchQuery: '',          // the search sheet's box, kept while the app is open (7.26)
   firstRun: false,          // first run is on (patch plan 7B)
   updateReady: false,       // a new build is waiting (7B Phase 2)
   applyUpdate: null,        // Reload: pwa.js's watchWorker()
@@ -124,6 +125,7 @@ function showToday() {
     practiceCount: practiceItems(app.store, app.today).length,
     onExport: () => exportProgress(),
     onImport: () => $('importFile').click(),
+    onSearch: () => openSearch(),
     onRef: openRef,
     kindOf,
     progressOf: progressFrom(app.learner.states),
@@ -200,7 +202,7 @@ window.addEventListener('appinstalled', () => {
 // A card opened from a card stacks, and "Back to 清" returns to it.
 const cards = createCardStack();
 const overlays = createOverlays({doc: document, history, win: window,
-                                 ids: ['ref', 'report', 'feedback'],
+                                 ids: ['search', 'word', 'ref', 'report', 'feedback'],
                                  onHidden: id => { if (id === 'ref') cards.clear(); }});
 const showOverlay = id => overlays.open(id);
 const hideOverlay = (id, opts) => overlays.close(id, opts);
@@ -210,7 +212,13 @@ window.addEventListener('popstate', () => {
   // the Reader is an entry in the history, so the phone's back gesture
   // leaves it (never during a session, which has its own ✕); during one,
   // it retraces the trees opened from it and then shows the session (7.18)
-  if (!app.run) return route();
+  if (!app.run) {
+    route();
+    // back to a search a screen was opened from (7.26): the sheet again, as
+    // it was left, on its own entry
+    if (history.state && history.state.overlay === 'search') openSearch({push: false, focus: false});
+    return;
+  }
   const tree = runTree(history.state);
   if (tree) showTree(tree, {push: false});
   else if (app.tree) backToSession();
@@ -257,7 +265,11 @@ const liveLearner = () => (app.run ? app.run.learner
 const refWordsAsked = new Set();
 // the reading a card was opened for, by form (a search row's; 7A 6b)
 const refFocus = new Map();
-function openRef(form, focus = null) {
+// where the card was opened from (brief 7.26 P3): the Reader, a session, or
+// anywhere else; a card opened from a card keeps the first one's
+let refFrom = 'other';
+function openRef(form, focus = null, from = null) {
+  if (!overlays.isOpen('ref')) refFrom = from || (app.run ? 'session' : 'other');
   showOverlay('ref');
   cards.open(form);
   if (focus) refFocus.set(form, focus); else refFocus.delete(form);
@@ -292,7 +304,7 @@ function drawRef() {
     onClose: () => hideOverlay('ref'),
     onBack: prev ? () => { cards.back(); drawRef(); sheet.scrollTop = 0; } : null,
     backTo: prev,
-    closeLabel: app.run && !(app.tree && app.tree.inRun) ? 'Back to the session' : 'Close',
+    closeLabel: app.run && !(app.tree && app.tree.inRun) ? 'Back to the session' : null,
     onRef: openRef,
     kindOf,
     progressOf: progressFrom(learner.states),
@@ -317,15 +329,25 @@ function drawRef() {
     onReport: () => openReport(shownOfRef(m), 'reference'),
     // under Built from, mid-session too (brief 7.18 Decided 3)
     onTree: f => showTree(f),
-    // its sound part's family, how it's read (brief 7.25 P1); not mid-session
+    // its sound part's family, how it's read (brief 7.25 P1); its family's
+    // page and Study this family (7.26); neither mid-session (decided 2)
     onFamily: app.run ? null : key => showFamily(key),
+    onStudy: app.run ? null : key => { hideOverlay('ref'); studyFamily(key); },
+    // which sections are open: by where it was opened from, until the
+    // learner opens or closes one, which sticks (P3, readpath.settings.card)
+    from: refFrom,
+    opened: app.store.load(KEYS.settings, {}).card || {},
+    onToggle(key, open) {
+      const settings = app.store.load(KEYS.settings, {});
+      app.store.save(KEYS.settings, {...settings, card: {...(settings.card || {}), [key]: open}});
+    },
     // In your texts opens the Reader at that line's section; not mid-session
     onOpenText: app.run ? null : (id, line) => {
       const lines = (app.library.heldLines().find(t => t.id === id) || {}).lines;
       if (lines) app.library.update(id, {section: sectionOfLine(sectionsOf(lines), line)});
       // the card's history entry becomes the Reader's: a history.back() to
       // close the card would land after the Reader's push and leave it
-      hideOverlay('ref', {fromPop: true});
+      leaveOverlays();
       showReader(id, {replace: true});
     },
   });
@@ -680,7 +702,7 @@ function drawReader() {
       window.scrollTo(0, 0);
     },
     onWord(key) { r.selected = key; drawReader(); },
-    onRef: openRef,
+    onRef: ch => openRef(ch, null, 'reader'),
     kindOf,
     progressOf: progressFrom(liveLearner().states),
     onReport: word => openReport(shownOfReader(m, word), 'reader'),
@@ -688,6 +710,7 @@ function drawReader() {
 }
 
 const textsActions = {
+  onSearch: () => openSearch(),
   onFeedback: () => openFeedback(),
   onOpen: id => showReader(id),
   preview: raw => previewOf(raw, app.library.list(), app.content),
@@ -823,22 +846,95 @@ function startSession({keepGoing = false, practice = false} = {}) {
 function showPath() {
   const nextUp = app.composed && app.composed.summary.next_up;
   renderPath($('path'), pathModel(app.content, app.store.load(KEYS.states, {}), nextUp), {
-    onTree: form => showTree(form),
+    // a stone opens its card, as a tile does everywhere (brief 7.26 P4)
+    onRef: openRef,
     kindOf,
     // a check left midway is finished from here too, not started again
     onCheck: () => resumePlacement(),
     placement: app.store.load(KEYS.placement, null),
     pending: !!app.store.load(KEYS.placementPending, null),
-    query: app.pathQuery,
-    onQuery(q, host) {
-      app.pathQuery = q;
-      renderFind(host, q, search(app.content, q, {states: app.store.load(KEYS.states, {}),
-                                                   offKnown: offKnownSet()}), form => showTree(form), kindOf,
-                 progressFrom(app.store.load(KEYS.states, {})));
-    },
+    onSearch: () => openSearch(),
     onDone: () => showDone(),
     onFeedback: openFeedback,
   });
+}
+
+// ---- search (brief 7.26 P5): one sheet, from the header of every tab.
+// Characters as Find had them, a word by the word table (exact form, one
+// file fetched through dict.js), a family by its head. Like the card it is
+// an overlay, so back closes it; a screen opened from it (a tree, a family's
+// page, the Reader) leaves its entry under the screen's, and back from the
+// screen opens it again as it was.
+
+function openSearch({push = true, focus = true} = {}) {
+  if (app.run) return;
+  // a word that couldn't be fetched is tried again each time the sheet opens
+  for (const [f, st] of wordAsked) if (st === 'offline') wordAsked.delete(f);
+  const sheet = overlays.open('search', {push});
+  renderSearch(sheet, {query: app.searchQuery || ''}, {
+    onClose: () => hideOverlay('search'),
+    onQuery: drawResults,
+    focus,
+  });
+}
+
+// the word lookups asked, by form: 'pending' | 'done' | 'offline' (once
+// each while the sheet is open: never again on the redraw its answer causes)
+const wordAsked = new Map();
+function drawResults(q, host) {
+  app.searchQuery = q;
+  const states = app.store.load(KEYS.states, {});
+  const forms = wordForms(app.content, q);
+  for (const f of forms) {
+    if (wordAsked.has(f)) continue;
+    wordAsked.set(f, 'pending');
+    app.dict.need([f]).then(() => wordAsked.set(f, 'done'), () => wordAsked.set(f, 'offline'))
+      .then(() => { if (app.searchQuery === q && overlays.isOpen('search')) drawResults(q, host); });
+  }
+  const found = forms.filter(f => wordAsked.get(f) === 'done').map(f => ({form: f, ...app.dict.wordOf(f)}))
+    .filter(w => w.jp);
+  const words = {forms, found: found.slice(0, 1),           // as typed and converted are one word
+                 status: forms.some(f => wordAsked.get(f) === 'pending') ? 'pending'
+                   : !found.length && forms.some(f => wordAsked.get(f) === 'offline') ? 'offline' : 'done'};
+  renderResults(host, q, {
+    results: search(app.content, q, {states, offKnown: offKnownSet()}),
+    words, families: familiesFor(app.content, q, familiesOf(app.content)),
+  }, {
+    // a row opens the card, on the reading it was found by (7A 6b)
+    onRef: (form, id) => openRef(form, id, 'other'),
+    onWord: w => openWord(w),
+    onFamily: key => showFamily(key),
+    kindOf,
+    progressOf: progressFrom(states),
+  });
+}
+
+// The word sheet (decided 3): the Reader's word panel over the search, its
+// characters opening their cards.
+function openWord(w) {
+  const sheet = overlays.open('word');
+  const word = {form: w.form, gloss: w.gloss, weak: false, layers: [],
+                chars: [...w.form].map((c, i) => ({char: c, shown: c, over: allOver(w.form, w.jp)[i] || ''}))};
+  const states = liveLearner().states;
+  put(clear(sheet), h('div', {class: 'word-sheet'}, ...wordBody(word, {
+    onClose: () => hideOverlay('word'),
+    onRef: ch => openRef(ch, null, 'other'),
+    onReport: () => openReport({item: w.form, task: 'search-word', rung: null,
+                                prompt: [w.form, w.jp, w.gloss].join(' | '), choices: [], answer: null},
+                               'search'),
+    kindOf,
+    progressOf: progressFrom(states),
+  })));
+}
+
+// Leaving the overlays for a screen (a tree, a family's page, the Reader):
+// a card or the word sheet gives the screen its history entry; the search's
+// stays under it, so back comes to the search again. -> whether an entry was
+// given (the screen replaces it rather than pushing its own).
+function leaveOverlays() {
+  const given = overlays.isOpen('ref') || overlays.isOpen('word');
+  for (const id of ['ref', 'word', 'search']) if (overlays.isOpen(id)) hideOverlay(id, {fromPop: true});
+  return given;
 }
 
 // ---- the Steps tab (Pavers, brief 7.8 decided 2; Steps since 7.12): a
@@ -866,6 +962,7 @@ function drawBrowse() {
   const b = app.browse;
   renderBrowse($('browse'), browseModel(app.content, app.store.load(KEYS.states, {}), b.sort), {
     onSwitch: view => showSteps(view),
+    onSearch: () => openSearch(),
     onSort: key => { b.sort = key; b.shown = 0; drawBrowse(); },
     onFamily: key => showFamily(key),
     onMore: () => { b.shown = (b.shown || BROWSE_CHUNK) + BROWSE_CHUNK; drawBrowse(); },
@@ -901,7 +998,8 @@ function drawDone() {
 function drawParts() {
   renderParts($('parts'), partsModel(app.content, app.store.load(KEYS.states, {})), {
     onSwitch: view => showSteps(view),
-    onRef: form => showTree(form),       // on Path's screens a tile opens its tree (7.7)
+    onSearch: () => openSearch(),
+    onRef: openRef,                      // a tile opens its card (7.26 P4; its tree 7.7-7.25)
     kindOf,
     onTestMe: id => testMe(id),
   });
@@ -1138,8 +1236,7 @@ function drawReview() {
 function showFamily(key, {push = true} = {}) {
   const url = `#path/family/${encodeURIComponent(key)}`;
   // from a card (7.25 P1) the page takes the card's history entry, as a tree does
-  const fromCard = overlays.isOpen('ref');
-  if (fromCard) hideOverlay('ref', {fromPop: true});
+  const fromCard = leaveOverlays();
   if (push) history[fromCard ? 'replaceState' : 'pushState']({family: key}, '', url);
   app.reader = null;
   app.tree = null;
@@ -1158,7 +1255,7 @@ function drawFamily() {
   renderFamily($('family'), m, {
     onBack: () => (history.state && history.state.family != null ? history.back() : showTab(app.fromTab)),
     onMode(mode) { f.mode = mode; drawFamily(); },
-    onRef: form => showTree(form),       // on Path's screens a tile opens its tree (7.7)
+    onRef: openRef,                      // a tile opens its card (7.26 P4; its tree 7.7-7.25)
     kindOf,
     onTestMe: id => testMe(id),
     onStudy: key => studyFamily(key),
@@ -1168,7 +1265,7 @@ function drawFamily() {
       const learner = learnerFrom(app.store, app.library.learnerTexts());
       const r = familyTap(app.content, learner, c, f.mode, systemDay());
       if (!r) return;
-      if (r.open) return showTree(r.open);
+      if (r.open) return openRef(r.open);
       const done = r.mark;
       app.store.save(KEYS.states, learner.states);
       statesChanged();
@@ -1206,8 +1303,7 @@ function showTree(form, {push = true} = {}) {
   const next = saved || [...trail, form];
   // from a card's "Trace this character’s steps" (its tree), the tree takes the card's history entry, so
   // back from the tree lands where the card was opened
-  const fromCard = overlays.isOpen('ref');
-  if (fromCard) hideOverlay('ref', {fromPop: true});
+  const fromCard = leaveOverlays();
   if (push) {
     history[fromCard ? 'replaceState' : 'pushState']({tree: form, trail: next, ...(inRun && {inRun})}, '',
                                                      `#char/${encodeURIComponent(form)}`);
@@ -1238,6 +1334,8 @@ function drawTree() {
     onMore: L => { t.expanded[L] = (t.expanded[L] || 0) + 1; drawTree(); },
     // no run starts from a tree while one is going (7.18)
     onStudy: t.inRun ? null : key => studyFamily(key),
+    // its family's page (brief 7.26 P6); a page leaves the session, so not in one
+    onFamily: t.inRun ? null : key => showFamily(key),
     kindOf,
   });
 }
@@ -1408,7 +1506,7 @@ async function boot() {
     e.target.value = '';
     if (f) importProgress(f);
   });
-  for (const id of ['ref', 'report', 'feedback']) {
+  for (const id of ['search', 'word', 'ref', 'report', 'feedback']) {
     $(id).addEventListener('click', e => { if (e.target === $(id)) hideOverlay(id); });
   }
   document.addEventListener('keydown', e => {

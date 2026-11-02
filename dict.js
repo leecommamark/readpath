@@ -1,11 +1,12 @@
 // dict.js — a word's jyutping and meaning, fetched as a text needs it
 // (patch plan 5, Phase 1).
 //
-// The full word table ships (Mark, decided 14): 210,386 forms in 1,024 files
-// under content/dict/, a form in file fnv1a(form) % 1024, hashed over CODE
+// The full word table ships (Mark, decided 14): 130,548 forms (since 7A; the
+// 210,386 here before had the Sinica list) in 1,024 files under content/dict/, a form in file fnv1a(form) % 1024, hashed over CODE
 // POINTS as export_content.py (build_dist.fnv1a) does. A text fetches only
 // the files its words hash to, eight at a time, the first time it needs
 // them; the device then keeps them (cache.js, keyed by content version).
+// The search sheet looks a typed word up the same way (brief 7.26, W1).
 //
 //   const d = createDict({index, version, cache, fetchFn});
 //   await d.need(['銀行', '行山']);

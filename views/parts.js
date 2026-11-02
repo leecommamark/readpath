@@ -11,6 +11,7 @@
 //
 // partsModel() is pure; renderParts() draws.
 
+import {searchButton} from './search.js';
 import {h, clear, put, jpSpan} from './dom.js';
 import {isKnown} from '../core/state.js';
 import {canTestMe} from '../runner.js';
@@ -94,10 +95,10 @@ export function renderParts(el, m, cb) {
   // the sound parts are the families on Path now (patch plan 7.5): this
   // lists the meaning parts
   put(clear(el),
-    h('div', {class: 'top'}),
+    h('div', {class: 'top'}, h('span', {}), searchButton(cb.onSearch)),
     h('h1', {id: 'parts-h'}, 'Steps'),
     stepsSwitch('meaning', cb.onSwitch),
-    h('p', {class: 'note'}, 'Tap a part to trace its steps.'),
+    h('p', {class: 'note'}, 'Tap a part for its card.'),
     h('p', {class: 'note'},
       'Each comes on the path just before the characters that need it. Once you’ve met it and '
       + 'passed its test, those characters unlock. Knowing characters doesn’t mark their parts known: '

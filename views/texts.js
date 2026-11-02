@@ -14,6 +14,7 @@
 // DOM. renderTexts() draws the screen; what happens on a tap is the shell's
 // (main.js), passed in as callbacks.
 
+import {searchButton} from './search.js';
 import {h, han, clear, put} from './dom.js';
 import {bodyOfFile, importProblem, autoTitle} from '../core/import.js';
 import {normalizeText} from '../core/normalize.js';
@@ -134,7 +135,7 @@ export function renderTexts(el, m, ui, cb) {
     h('ul', {class: 'text-list'}, ...m.rows.map(r => textRow(r, ui, cb))));
 
   put(clear(el),
-    h('div', {class: 'top'}, h('span', {}), h('span', {})),
+    h('div', {class: 'top'}, h('span', {}), searchButton(cb.onSearch) || h('span', {})),
     h('h1', {id: 'texts-h'}, 'Texts'),
     bundle || '', batch || '', list || '', add, picker,
     // Send feedback at the foot (patch plan 7B, Phase 3)

@@ -2,12 +2,12 @@
 // where you are on the path since 7.7, Phase 4; DESIGN *Screens*: Path).
 //
 // Top to bottom (brief 7.7 decided 1): where you are; the whole path as
-// one strip, the known share filled and a pin at Today's next item; Find a
-// character; "You are here", a short trail of path items on a rail (the
+// one strip, the known share filled and a pin at Today's next item; "You are here", a short trail of path items on a rail (the
 // last few met, Next, then what's ahead); then a row each for Done, the
 // placement check (Mark, 7.7 Phase 0: a row now) and Send feedback. Browse
 // families and Meaning parts are the Steps tab (Pavers, brief 7.8 decided 2; Steps since 7.12).
-// Every tile and stone here opens the character's tree.
+// Every tile and stone here opens the character's card (brief 7.26 P4); its
+// search is the header's, as on every tab (P5).
 //
 // Where you are: known characters (main reading in Maintain), known parts,
 // readings learning (met, not yet known), and "about N% of the characters in
@@ -16,6 +16,7 @@
 //
 // pathModel() is pure (a test reads it without a DOM); renderPath() draws it.
 
+import {searchButton} from './search.js';
 import {h, clear, put, jpSpan} from './dom.js';
 import {isKnown} from '../core/state.js';
 import {familyCards, stateOf} from './families.js';
@@ -139,20 +140,6 @@ export function pathModel(content, states, nextUp = null) {
 
 // ---- drawing
 
-// Find a character (Phase 5): the box, and a host its results are drawn into
-// (views/find.js) as the learner types, so the box keeps its focus.
-function findBlock(cb) {
-  const host = h('div', {class: 'find-results'});
-  const input = h('input', {type: 'search', class: 'note-input find-input', value: cb.query || '',
-                            placeholder: 'A character, jyutping or English',
-                            'aria-label': 'Find a character', autocomplete: 'off',
-                            autocapitalize: 'off', spellcheck: 'false',
-                            oninput: e => cb.onQuery(e.target.value, host)});
-  if (cb.query) cb.onQuery(cb.query, host);
-  return h('section', {class: 'block find'},
-    h('span', {class: 'label'}, 'Find a character'), input, host);
-}
-
 function stripBlock(s) {
   const pct = f => `${(100 * f).toFixed(2)}%`;
   return h('section', {class: 'block path-strip-block'},
@@ -176,8 +163,8 @@ function trailBlock(t, cb) {
     class: ['stone', `is-${st.state}`, st.next && 'is-next', i === 0 && 'is-first',
             i === t.stones.length - 1 && 'is-last'].filter(Boolean).join(' '),
     'aria-label': `${st.next ? 'Next: ' : ''}${st.form} ${st.jp}, ${st.gloss}, item ${n0(st.rank)}, `
-      + `${STATE_SAID[st.state]}: its tree`,
-    onclick: () => cb.onTree(st.form)},
+      + `${STATE_SAID[st.state]}: its card`,
+    onclick: () => cb.onRef(st.form)},
     h('span', {class: 'stone-rail', 'aria-hidden': 'true'}),
     glyphTile(st.form, kindOf(st.form), {size: 'sm', progress: st.progress}),
     h('span', {class: 'stone-text'},
@@ -208,21 +195,20 @@ function rowsBlock(m, cb) {
     cb.onFeedback && row('Send feedback', 'A note, and your reports, to Mark', cb.onFeedback));
 }
 
-// renderPath(el, model, cb)   cb: onTree(form), onDone, onCheck, placement (the last check's record, or null), query,
-// onQuery(q, host), onFeedback, kindOf
+// renderPath(el, model, cb)   cb: onRef(form), onDone, onCheck, placement (the last check's record, or null),
+// onSearch, onFeedback, kindOf
 export function renderPath(el, m, cb) {
   const w = m.where;
   put(clear(el),
-    h('div', {class: 'top'}),
+    h('div', {class: 'top'}, h('span', {}), searchButton(cb.onSearch)),
     h('h1', {id: 'path-h'}, 'Path'),
-    // every tile and stone here opens a tree, and nothing said so (7.8)
-    h('p', {class: 'note'}, 'Tap a character to trace its steps.'),
+    // every tile and stone here opens its card (7.26 P4; a tree until then)
+    h('p', {class: 'note'}, 'Tap a character for its card.'),
     h('section', {class: 'block first where'},
       h('p', {class: 'known'}, h('b', {}, plural(w.characters, 'character')), ' and ',
         h('b', {}, plural(w.parts, 'part')), ' known'),
       h('p', {class: 'note'}, `${plural(w.learning, 'reading')} learning · about ${w.share}% of the characters in written Chinese`)),
     stripBlock(m.strip),
-    findBlock(cb),
     trailBlock(m.trail, cb),
     rowsBlock(m, cb));
 }

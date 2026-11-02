@@ -88,6 +88,16 @@ export function familiesOf(content) {
   return out;
 }
 
+// The family a character's tree and card show (patch plan 7.7; 7.26 check
+// 6): its own, where it heads one (青), else its sound part's (清 -> 青);
+// null where neither is a family.
+export function familyKeyOf(content, form) {
+  const fam = familiesOf(content);
+  const sp = content.soundPartOf(form);
+  return fam.byKey.has(`f:${form}`) ? `f:${form}`
+    : sp && fam.byKey.has(`f:${sp}`) ? `f:${sp}` : null;
+}
+
 // ---- studying a family
 
 // familyPlan(content, states, card) -> [item id]: what's left to learn, in

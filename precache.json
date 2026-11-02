@@ -1,5 +1,5 @@
 {
- "build": "c6f9b98bcf777cc8",
+ "build": "7b5ec40a7c22d291",
  "files": [
   "actions.js",
   "app.css",
@@ -94,6 +94,7 @@
   "views/reader.js",
   "views/refcard.js",
   "views/report.js",
+  "views/search.js",
   "views/session.js",
   "views/settings.js",
   "views/task.js",

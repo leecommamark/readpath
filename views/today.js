@@ -7,6 +7,7 @@
 // reading the focus text (step 5); the export and import controls live here until a
 // settings screen exists.
 
+import {searchButton} from './search.js';
 import {h, han, clear, put} from './dom.js';
 import {isKnown} from '../core/state.js';
 import {glyphTile} from './glyph.js';
@@ -237,7 +238,7 @@ export function renderToday(el, m, opts) {
               `${plural(trouble.pending, 'item')} still pending. Export your progress to keep a copy.` : '');
 
   put(clear(el),
-    h('div', {class: 'top'}, h('span', {}, opts.date || ''), h('span', {})),
+    h('div', {class: 'top'}, h('span', {}, opts.date || ''), searchButton(opts.onSearch) || h('span', {})),
     h('h1', {id: 'today-h'}, 'Today'),
     update || '', warn, session, feedback || '', reading || '', next || '', place || '', resume || '', high || '', known, install || '', progress);
 }

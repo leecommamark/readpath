@@ -235,3 +235,31 @@ export function search(content, query, {states = {}, offKnown = new Set()} = {})
   return {path: cut(path), parts: cut(parts), off: cut(off),
           total: {path: path.length, parts: parts.length, off: off.length}};
 }
+
+// ---- the search sheet's two other groups (brief 7.26 P5; patch plan 7.26,
+// Phase 3)
+
+// Words (decided 3, W1): the forms a query is looked up as in the word table,
+// exact form only -- as typed and as s2t makes it (银行 -> 銀行), each two or
+// more characters, all Han. dict.js holds the table; this only names the forms.
+export function wordForms(content, query) {
+  const q = (query || '').trim();
+  const forms = [q, normalizeText(q, content).text];
+  return [...new Set(forms)].filter(f => Array.from(f).length >= 2 && Array.from(f).every(c => HAN.test(c)));
+}
+
+// Families (G10): each typed character, as typed or once converted, that
+// heads a family: {key, head, members}, in the order typed
+export function familiesFor(content, query, families) {
+  const q = (query || '').trim();
+  if (!HAN.test(q)) return [];
+  const out = [];
+  const typed = Array.from(q), norm = Array.from(normalizeText(q, content).text);
+  typed.forEach((a, i) => {
+    for (const ch of [a, norm[i]]) {
+      const card = ch && families.byKey.get(`f:${ch}`);
+      if (card && !out.some(f => f.key === card.key)) out.push({key: card.key, head: card.head, members: card.members.length});
+    }
+  });
+  return out;
+}

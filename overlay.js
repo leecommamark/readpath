@@ -30,8 +30,9 @@ export function keyboardUp(win) {
 }
 
 // createOverlays({doc, history, win, ids, onHidden(id)}) -> overlays
-//   open(id)            -> its .sheet, to draw into at once; shown now, or
-//                          once the keyboard has gone
+//   open(id, {push})    -> its .sheet, to draw into at once; shown now, or
+//                          once the keyboard has gone; push: false, on the
+//                          entry already there
 //   close(id, {fromPop}) closes it (and pops its history entry unless the
 //                          back gesture already did)
 //   isOpen(id)          shown, or about to be
@@ -43,24 +44,24 @@ export function createOverlays({doc, history, win = null, ids = ['ref', 'report'
   const pending = new Map();            // id -> cancel(), while waiting to show
   let skipPop = 0;
 
-  function reveal(id) {
+  function reveal(id, push = true) {
     pending.delete(id);
     const e = el(id);
-    if (e.hidden) history.pushState({overlay: id}, '');
+    if (e.hidden && push) history.pushState({overlay: id}, '');
     e.hidden = false;
     doc.body.classList.add('overlaid');
   }
 
   // Wait for the keyboard to finish closing: the viewport's next resize, or
   // SETTLE_MS, whichever is first; then re-sync hit-testing and show.
-  function afterKeyboard(id) {
+  function afterKeyboard(id, push) {
     const vv = win.visualViewport;
     let timer = null;
     const done = () => {
       if (!pending.has(id)) return;
       cancel();
       win.scrollTo(win.scrollX || 0, win.scrollY || 0);
-      reveal(id);
+      reveal(id, push);
     };
     const cancel = () => {
       vv.removeEventListener('resize', done);
@@ -72,15 +73,17 @@ export function createOverlays({doc, history, win = null, ids = ['ref', 'report'
     pending.set(id, cancel);
   }
 
-  function open(id) {
+  // push: false shows it on the history entry already there (the search
+  // sheet's, come back to: brief 7.26)
+  function open(id, {push = true} = {}) {
     const sheet = el(id).querySelector('.sheet');
     sheet.scrollTop = 0;
     if (pending.has(id)) return sheet;
     const up = el(id).hidden && keyboardUp(win);
     const active = doc.activeElement;
     if (active && active !== doc.body && typeof active.blur === 'function') active.blur();
-    if (up) afterKeyboard(id);
-    else reveal(id);
+    if (up) afterKeyboard(id, push);
+    else reveal(id, push);
     return sheet;
   }
 

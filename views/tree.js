@@ -13,7 +13,7 @@
 import {h, han, put, clear, jpSpan} from './dom.js';
 import {glyphTile, progressOf, stateItemOf} from './glyph.js';
 import {treeLayout, soundLine} from '../core/tree.js';
-import {familiesOf} from '../core/family.js';
+import {familyKeyOf} from '../core/family.js';
 import {stateOf} from './families.js';
 import {headSense, shortGloss} from '../core/gloss.js';
 import {formGloss, formJp, DICTIONARY_SENSE} from '../core/provenance.js';
@@ -48,10 +48,7 @@ export function tileOf(content, states, form) {
 // treeModel(content, states, form, {trail, expanded}) -> what renderTree draws
 export function treeModel(content, states, form, {trail = [form], expanded = {}} = {}) {
   const it = itemOfTile(content, form);
-  const fam = familiesOf(content);
-  const sp = content.soundPartOf(form);
-  const familyKey = fam.byKey.has(`f:${form}`) ? `f:${form}`
-    : sp && fam.byKey.has(`f:${sp}`) ? `f:${sp}` : null;
+  const familyKey = familyKeyOf(content, form);
   const parts = content.partsInOrder(form);
   const line = soundLine(form, content);
   const layout = treeLayout(form, content, expanded);
@@ -94,7 +91,7 @@ const DX = 76, DY = 108, PAD = 12;
 const SVG = 'http://www.w3.org/2000/svg';
 
 // renderTree(el, m, cb)   cb: onBack, onCrumb(i), onTree(form), onRef(form),
-// onMore(level), onStudy(key) (none during a session: no button), kindOf(form)
+// onMore(level), onStudy(key), onFamily(key) (neither during a session), kindOf(form)
 export function renderTree(el, m, cb) {
   const kindOf = f => (cb.kindOf ? cb.kindOf(f) : null);
   const crumbs = m.trail.length > 1 && h('nav', {class: 'tree-crumbs', 'aria-label': 'Trees you came through'},
@@ -104,6 +101,10 @@ export function renderTree(el, m, cb) {
         ? han(f, {class: 'tree-crumb here', 'aria-current': 'page'})
         : h('button', {type: 'button', class: 'link tree-crumb', lang: 'zh-Hant-HK',
                        onclick: () => cb.onCrumb(i)}, f)]));
+  // its family's page, how it's read (brief 7.26 P6); not during a session
+  const familyLink = m.familyKey && cb.onFamily && h('p', {class: 'family-link'},
+    h('button', {type: 'button', class: 'link', onclick: () => cb.onFamily(m.familyKey)},
+      han(m.familyHead), ' family: how it’s read ›'));
   const head = h('section', {class: 'block first'}, h('div', {class: 'tree-head'},
     glyphTile(m.form, kindOf(m.form), {size: 'lg', over: m.head.over, progress: m.head.progress,
                                        overWeak: m.head.jpWeak,
@@ -118,7 +119,8 @@ export function renderTree(el, m, cb) {
         han(m.written.parts.join(' · '))),
       m.soundLine && h('p', {class: 'note tree-soundline'}, 'Sound line: ',
         ...m.soundLine.flatMap((s, i) => [i ? h('span', {class: 'tree-arrow', 'aria-hidden': 'true'}, ' ← ') : '',
-                                           han(s.form), s.jp ? [' ', jpSpan(s.jp)] : ''])))));
+                                           han(s.form), s.jp ? [' ', jpSpan(s.jp)] : ''])),
+      familyLink)));
 
   // ---- the tree: columns of tiles, the lines in one SVG behind them
   const {columns, edges, more} = m.layout;

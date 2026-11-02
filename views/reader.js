@@ -152,6 +152,28 @@ export const MODE_HINT = {
   mark: 'Tap a character you know to mark it known, or a known one if you’ve forgotten it.',
 };
 
+// A word's meaning (the Reader's panel, and since brief 7.26 the search's
+// word sheet): the word with its jyutping over it, its meaning, which reading
+// each marked character has here, each character as a tile that opens its
+// card, and Report, last (Mark, 2026-09-29, 6b).
+//   word: {form, gloss, weak, chars: [{char, over, shown, off}], layers}
+//   cb: onClose, onRef(char), onReport, kindOf, progressOf
+export function wordBody(word, cb) {
+  return [h('div', {class: 'row'},
+      h('span', {class: 'rw big'}, ...word.chars.map(charCell)),
+      h('button', {type: 'button', class: 'icon-btn close-btn', 'aria-label': 'Close',
+                   onclick: cb.onClose}, '✕')),
+    h('p', {class: `gloss-line${word.weak ? ' weak' : ''}`}, word.gloss || 'No meaning in the dictionary for this one.'),
+    word.weak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE),
+    ...(word.layers || []).map(x => h('p', {class: 'note layer-note'},
+      han(x.char), ' here is ', jpSpan(x.jp), `, ${LAYER_TEXT[x.layer]} `, layerChip(x.layer, LAYER_TEXT[x.layer]))),
+    h('div', {class: 'links'},
+      ...word.chars.map(c => glyphTile(c.char, cb.kindOf ? cb.kindOf(c.char) : null,
+                                        {size: 'sm', progress: cb.progressOf ? cb.progressOf(c.char) : null,
+                                         onTap: ch => cb.onRef(ch)}))),
+    h('button', {type: 'button', class: 'link', onclick: cb.onReport}, 'Report a problem with this')];
+}
+
 // renderReader(el, model, cb)
 //   cb: onBack, onFocus, onAllJp(bool), onAsWritten(bool), onSection(i),
 //       onWord(key|null), onRef(char), onReport(word|null), onMode(mode),
@@ -184,21 +206,7 @@ export function renderReader(el, m, cb) {
 
   const word = selectedWord(m);
   const panel = word && h('aside', {class: 'word-panel', 'aria-label': `${word.form}: meaning`},
-    h('div', {class: 'row'},
-      h('span', {class: 'rw big'}, ...word.chars.map(charCell)),
-      h('button', {type: 'button', class: 'icon-btn close-btn', 'aria-label': 'Close',
-                   onclick: () => cb.onWord(null)}, '✕')),
-    h('p', {class: `gloss-line${word.weak ? ' weak' : ''}`}, word.gloss || 'No meaning in the dictionary for this one.'),
-    word.weak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE),
-    ...word.layers.map(x => h('p', {class: 'note layer-note'},
-      han(x.char), ' here is ', jpSpan(x.jp), `, ${LAYER_TEXT[x.layer]} `, layerChip(x.layer, LAYER_TEXT[x.layer]))),
-    h('div', {class: 'links'},
-      ...word.chars.map(c => glyphTile(c.char, cb.kindOf ? cb.kindOf(c.char) : null,
-                                        {size: 'sm', progress: cb.progressOf ? cb.progressOf(c.char) : null,
-                                         onTap: ch => cb.onRef(ch)}))),
-    // Report is the last thing on any card (Mark, 2026-09-29, 6b)
-    h('button', {type: 'button', class: 'link', onclick: () => cb.onReport(word)},
-      'Report a problem with this'));
+    ...wordBody(word, {...cb, onClose: () => cb.onWord(null), onReport: () => cb.onReport(word)}));
 
   put(clear(el),
     h('div', {class: 'top'},
