@@ -17,6 +17,7 @@ import {familyKeyOf} from '../core/family.js';
 import {stateOf} from './families.js';
 import {headSense, shortGloss} from '../core/gloss.js';
 import {formGloss, formJp, DICTIONARY_SENSE} from '../core/provenance.js';
+import {partRankOf, rankSaid} from './facts.js';
 
 const STATE_SAID = {known: 'known', learning: 'learning', ahead: 'not met yet'};
 
@@ -47,7 +48,11 @@ export function tileOf(content, states, form) {
 
 // treeModel(content, states, form, {trail, expanded}) -> what renderTree draws
 export function treeModel(content, states, form, {trail = [form], expanded = {}} = {}) {
-  const it = itemOfTile(content, form);
+  // its place on the path and its state are its main reading's, as on its
+  // card (brief 7.27, decided 2 and P3), a part only's its part item's; the
+  // head tile's border stays the tile's item's, as every tile's
+  const main = content.mainReading(form);
+  const it = main ? {id: main} : itemOfTile(content, form);
   const familyKey = familyKeyOf(content, form);
   const parts = content.partsInOrder(form);
   const line = soundLine(form, content);
@@ -61,6 +66,7 @@ export function treeModel(content, states, form, {trail = [form], expanded = {}}
     head: tileOf(content, states, form),
     readings: readings.length ? readings : [jpOf(content, form)].filter(Boolean),
     rank: it ? content.rank(it.id) : null,
+    partRank: main ? partRankOf(content, form) : null,
     state: it ? stateOf(states[it.id]) : null,
     written: parts.length > 1 ? {ordered: content.partsOrdered(form), parts} : null,
     soundLine: line.length >= 3 ? line.map(f => ({form: f, jp: jpOf(content, f)})) : null,
@@ -69,9 +75,10 @@ export function treeModel(content, states, form, {trail = [form], expanded = {}}
   };
 }
 
-// the line under the header: "#1,234 on the path · learning"
+// the line under the header: "#378 on the path · part #2,832 · learning",
+// the card's rank line (facts.js) and the state
 export const placeSaid = m => (m.rank == null ? 'Not on the path'
-  : `#${m.rank.toLocaleString('en-GB')} on the path · ${STATE_SAID[m.state]}`);
+  : `${rankSaid(m)} · ${STATE_SAID[m.state]}`);
 
 export const KEY_LINES = [
   {cls: 'sound', text: 'gives the sound'},

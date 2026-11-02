@@ -1,7 +1,7 @@
 // facts.js — small facts the cards show, looked up from the content (patch
 // plan 4, Phase 4). Pure: no DOM. The reference card (Phase 5) uses them too.
 
-import {readingId} from '../core/content.js';
+import {readingId, soundId, meaningId} from '../core/content.js';
 import {isKnown} from '../core/state.js';
 
 const WORDS_BY_FORM = new WeakMap();
@@ -159,6 +159,22 @@ export function wordsWithOver(content, id, n = 3) {
 // The words a reading item's card shows, and so every answer and Meet that
 // teaches it (patch plan 7.10, Mark 2026-10-03: "the literal exact same
 // example words as the card"): one list, picked once, by the export.
+// A character's place on the path (brief 7.27, decided 2): its main
+// reading's rank, with its part item's as a note where it is one too (the
+// earlier where it is both a sound and a meaning part: 門 s#65, m#2,744).
+export function partRankOf(content, form) {
+  const ranks = [soundId(form), meaningId(form)].filter(id => content.has(id)).map(id => content.rank(id));
+  return ranks.length ? Math.min(...ranks) : null;
+}
+// "#378 on the path · part #2,832"; short, beside the card's glyph, where
+// the part note leaves no room for "on the path" (P2): "#378 · part #2,832"
+export function rankSaid({rank, partRank = null}, {short = false} = {}) {
+  if (rank == null) return null;
+  const n = r => `#${r.toLocaleString('en-GB')}`;
+  if (partRank == null) return `${n(rank)} on the path`;
+  return short ? `${n(rank)} · part ${n(partRank)}` : `${n(rank)} on the path · part ${n(partRank)}`;
+}
+
 export const WORDS_SHOWN = 4;
 export function cardWords(content, id) {
   return wordsWithOver(content, id, WORDS_SHOWN);

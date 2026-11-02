@@ -15,7 +15,7 @@
 
 import {h, han, clear, put, rubyWord, jpSpan, layerChip} from './dom.js';
 import {builtFrom, relationOf, word as wordEntry, allOver, charJp, meaningWording,
-        cardWords, WORDS_SHOWN, LAYER_TEXT} from './facts.js';
+        cardWords, WORDS_SHOWN, LAYER_TEXT, partRankOf, rankSaid} from './facts.js';
 import {isKnown, MAINTAIN} from '../core/state.js';
 import {canMarkKnown, canForget, canKnowOff} from '../actions.js';
 import {canTestMe} from '../runner.js';
@@ -275,7 +275,7 @@ export function refModel(content, states, form, texts = [], opts = {}) {
             })(),
             canMarkKnown: canMarkKnown(content, states, main),
             canForget: canForget(content, states, main),
-            rank: content.rank(main), soundLine: soundLineOf(content, form),
+            rank: content.rank(main), partRank: partRankOf(content, form), soundLine: soundLineOf(content, form),
             familyCard: familyCardOf(content, states, form), usedIn: usedInOf(content, states, form)});
   }
   const roles = partRoles(content, states, form);
@@ -370,7 +370,7 @@ function alsoLine(m) {
 
 // Built from: each part in its dotted box with its reading or meaning and
 // role, Sounds like, the whole sound line (brief 7.26), the sound part's
-// family where it isn't the Family section's (青 -> 井), and its tree.
+// family where it isn't the Family section's (青 -> 井).
 function builtBody(m, cb) {
   const like = m.built.find(b => b.cousins && b.cousins.length);
   const family = m.family && !(m.familyCard && m.familyCard.key === m.family.key) ? m.family : null;
@@ -389,8 +389,7 @@ function builtBody(m, cb) {
     // how its sound part's family is read (brief 7.25 P1); not mid-session
     family && cb.onFamily && h('p', {class: 'family-link'},
       h('button', {type: 'button', class: 'link', onclick: () => cb.onFamily(family.key)},
-        `${family.head} family: how it’s read ›`)),
-    treeRow(m, cb)];
+        `${family.head} family: how it’s read ›`))];
 }
 
 // 讀 ← 賣 ← 買 (the tree's), where it is three or more long
@@ -419,17 +418,6 @@ function familyBody(m, cb) {
     cb.onFamily && h('p', {class: 'family-link'},
       h('button', {type: 'button', class: 'link', onclick: () => cb.onFamily(f.key)},
         `${f.head} family: how it’s read ›`))];
-}
-
-// its tree (patch plan 7.7): what it is built from and what is built from
-// it; in Built from, or after the sections where there is none
-function treeRow(m, cb) {
-  if (!cb.onTree || !(m.kind === 'char' || m.kind === 'part' || m.kind === 'offpath')) return null;
-  return h('div', {class: 'jumps'},
-    h('button', {type: 'button', class: 'jump', onclick: () => cb.onTree(m.glyph)},
-      h('span', {class: 'jump-text'}, h('b', {}, 'Trace this character’s steps'),
-        h('span', {class: 'sm'}, 'What it’s built from, and what’s built from it')),
-      h('span', {class: 'jump-go', 'aria-hidden': 'true'}, '›')));
 }
 
 // Used in (P2.6): what is built from it, as tiles; the rest are in its tree
@@ -480,6 +468,24 @@ export const SECTION_LABEL = {built: 'Built from', family: 'Family', words: 'Wor
 export const OPEN_FROM = {reader: ['words', 'inTexts'], session: ['built', 'looksLike'], other: []};
 export function isOpen(key, {from = 'other', opened = {}} = {}) {
   return key in opened ? !!opened[key] : (OPEN_FROM[from] || []).includes(key);
+}
+
+// Where a card is opened from (P3): the caller's word, else a session's or
+// anywhere else; a card opened from a card keeps the first one's, for what
+// it reads and what it writes (brief 7.27, decided 4).
+export const cardContext = ({stacked, prev, from, inRun}) =>
+  (stacked ? prev : from || (inRun ? 'session' : 'other'));
+
+// The learner's own open sections, one map per context (brief 7.27, decided
+// 4: readpath.settings.cardOpen = {reader, session, other}). The one map
+// saved before 7.27 (settings.card) is taken as elsewhere's (P1, Mark), and
+// a toggle saves the new shape and drops it.
+export const openedIn = (settings, from) =>
+  (settings.cardOpen || (settings.card ? {other: settings.card} : {}))[from] || {};
+export function withToggle(settings, from, key, open) {
+  const {card, ...rest} = settings;
+  const all = settings.cardOpen || (card ? {other: card} : {});
+  return {...rest, cardOpen: {...all, [from]: {...(all[from] || {}), [key]: open}}};
 }
 
 // a section's closed line, drawn: its characters as han, its jyutping as .jp
@@ -541,8 +547,17 @@ function sectionsOf(m, cb) {
   return out.map(([key, body]) => fold(key, m, cb, body));
 }
 
-// "#650 on the path" (the tree says it so)
-const rankLine = m => (m.rank != null ? h('p', {class: 'note ref-rank'}, `#${m.rank.toLocaleString('en-GB')} on the path`) : null);
+// "#650 on the path · Trace its steps ›", or "#378 · part #2,832 · Trace
+// its steps ›" (brief 7.27, decided 2-3 and P2): its tree, what it is built
+// from and what is built from it, a tap from every card, mid-session too;
+// the link alone where it has no rank
+function rankLine(m, cb) {
+  const said = rankSaid(m, {short: true});
+  const trace = cb.onTree && h('button', {type: 'button', class: 'link ref-trace',
+                                          onclick: () => cb.onTree(m.glyph)}, 'Trace its steps ›');
+  if (!said && !trace) return null;
+  return h('p', {class: 'note ref-rank'}, said || '', said && trace ? ' · ' : '', trace || '');
+}
 
 // renderRef(el, model, {onClose, onBack, backTo, closeLabel, onRef(form), kindOf(form),
 //                        onMarkKnown, onForgot, onReport, onOpenText(id, line),
@@ -575,7 +590,7 @@ export function renderRef(el, m, cb) {
       r.gloss && h('p', {class: 'gloss-line'}, r.gloss)];
     // a character that is a part (青 止) says what its border means, beside
     // it (Mark, 7.26 Phase 3 check: not down in As a part)
-    body.push(glance(...reading(main), rankLine(m), (m.asPart || []).length ? glyphKey() : null));
+    body.push(glance(...reading(main), rankLine(m, cb), (m.asPart || []).length ? glyphKey() : null));
     // each other reading on one line: its jyutping, meaning and relation
     const others = m.readings.filter(r => r !== main);
     if (others.length) {
@@ -591,17 +606,15 @@ export function renderRef(el, m, cb) {
       m.canForget && h('button', {type: 'button', class: 'btn', onclick: cb.onForgot},
         m.readings.length > 1 ? ['I forgot ', jpSpan(main.jp)] : 'I forgot this')));
     body.push(...sectionsOf(m, cb));
-    if (!m.built.length) body.push(treeRow(m, cb));
   } else if (m.kind === 'part') {
     body.push(glance(...m.roles.map(r => h('p', {class: 'ref-role-line'},
       r.reading ? jpSpan(r.reading) : h('span', {class: r.glossWeak ? 'weak' : ''}, r.wording ? r.wording.meaning : r.gloss),
-      h('span', {class: 'sm'}, ` · ${r.kind} part`))), rankLine(m), glyphKey()));
+      h('span', {class: 'sm'}, ` · ${r.kind} part`))), rankLine(m, cb), glyphKey()));
     body.push(...sectionsOf(m, cb));
-    body.push(treeRow(m, cb));
   } else if (m.kind === 'offpath') {
     body.push(glance(
       h('p', {class: `jp big-jp${m.readingsWeak ? ' weak' : ''}`}, m.readings.join(' · ')),
-      m.gloss && h('p', {class: `gloss-line${m.glossWeak ? ' weak' : ''}`}, m.gloss)));
+      m.gloss && h('p', {class: `gloss-line${m.glossWeak ? ' weak' : ''}`}, m.gloss), rankLine(m, cb)));
     if (m.gloss && m.glossWeak) body.push(h('p', {class: 'note weak-note'}, DICTIONARY_SENSE));
     body.push(h('p', {class: 'note center'}, 'Not on the learning path: it’s never taught or quizzed.'));
     body.push(alsoLine(m), simplifiedLine(m));
@@ -615,7 +628,6 @@ export function renderRef(el, m, cb) {
           : 'Its jyutping goes from the Reader. It’s still never taught, and doesn’t count in “readable”.'));
     }
     body.push(...sectionsOf(m, cb));
-    if (!m.built.length) body.push(treeRow(m, cb));
   } else {
     body.push(glyph, h('p', {class: 'note center'}, 'Not on your path.'));
     body.push(...sectionsOf(m, cb));

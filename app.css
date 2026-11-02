@@ -651,6 +651,10 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .ref-glance-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .ref-glance-text p { margin: 0; }
 .ref-glance-text .jp-line { justify-content: flex-start; }
+/* Trace its steps on the rank line (7.27): the line keeps its height, and
+   the padding, taken back by the margin, makes the tap target taller */
+.ref-rank .ref-trace { min-height: 0; font-size: inherit; padding: 12px 0; margin: -12px 0;
+                       vertical-align: baseline; white-space: nowrap; }
 .ref-others { display: flex; flex-direction: column; gap: var(--s1); }
 .ref-other, .ref-role-line { margin: 0; }
 .ref-other .jp { font-weight: 600; }
