@@ -2,10 +2,12 @@
 //
 // The name, the versions, what is (never) sent, the share-alike statement,
 // and every credit in readpath/ATTRIBUTIONS.md, as export_about.py wrote it
-// into content/about.json. Reached from Your progress on Today.
+// into content/about.json, and the tiles' border key (brief 7.28 P23).
+// Reached from its row at the foot of Today.
 
 import {h, clear, put} from './dom.js';
 import {NAME} from './welcome.js';
+import {BORDER_KEY} from './glyph.js';
 
 const CC4 = 'https://creativecommons.org/licenses/by-sa/4.0/';
 const WEB3FORMS = 'https://web3forms.com/';
@@ -36,6 +38,10 @@ export function renderAbout(el, m, cb) {
     h('section', {class: 'block first'},
       h('p', {class: 'lead-note'}, 'Learn to read the Cantonese you already speak.'),
       h('p', {class: 'sm'}, `App ${m.build} · Content ${m.version}`)),
+    // the border key, as a Meet shows it once (brief 7.28 P23)
+    h('section', {class: 'block'},
+      h('h2', {}, 'The tiles'),
+      ...Object.values(BORDER_KEY).map(t => h('p', {}, t))),
     h('section', {class: 'block'},
       h('h2', {}, 'Your data'),
       h('p', {}, 'Everything stays on this device. Nothing is sent except your reports and what '

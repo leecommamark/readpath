@@ -34,6 +34,29 @@ import {soundId, meaningId} from '../core/content.js';
 
 export const SIZES = ['sm', 'md', 'lg', 'xl', 'xxl'];
 
+// The border key (brief 7.28 P23): one line for each kind of tile, shown
+// under the tile the first Meet of that kind, and kept under Settings ›
+// About. Claude's wording for the circle and the tint, for Mark to change.
+// A dotted border says the glyph is a part of other characters, its shape
+// how; a part used both ways takes the way it's used more (Mark,
+// 2026-11-02: one shape inside another was too cluttered, and a third
+// shape between them, too).
+export const BORDER_KEY = {
+  sound: 'Dotted square: a part of other characters that gives them their sound. '
+    + 'A part used both ways takes the one it’s used for more.',
+  meaning: 'Dotted circle: a part of other characters that gives them their meaning. '
+    + 'A part used both ways takes the one it’s used for more.',
+  bound: 'Grey tint: a form only ever written inside other characters.',
+};
+// the key's kinds a tile of `kind` (glyphKind) shows: none for a plain one
+export function borderKinds(kind) {
+  if (!kind) return [];
+  const out = [];
+  if (kind.component) out.push(kind.shape === 'circle' ? 'meaning' : 'sound');
+  if (kind.bound) out.push('bound');
+  return out;
+}
+
 // glyphKind(content, form) -> {shape: 'square' | 'circle', component, bound}
 //   shape      a circle for a meaning part, else a square
 //   component  true for a dotted border: a sound or meaning part

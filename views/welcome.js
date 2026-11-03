@@ -13,7 +13,7 @@ export const NAME = 'Read Path · 一路睇';
 const LINES = [
   'Learn to read the Cantonese you already speak.',
   'Common characters first, and the parts that give away their sound.',
-  'A few minutes a day. Everything stays on this phone.',
+  'A few steps a day. Everything stays on this phone.',
 ];
 
 // Tones show as marks (brief 7.12 decided 6): the default, said once, with

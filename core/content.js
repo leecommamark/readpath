@@ -156,7 +156,8 @@ export function loadContent(tables) {
     const it = items.get(meaningId(m.part));
     if (!it) throw new Error(`meaning item not on the path: ${m.part}`);
     Object.assign(it, {part: m.part, gloss: m.gloss, meaning: m.meaning,
-                       standsFor: m.stands_for || null, resolves: m.resolves || [],
+                       standsFor: m.stands_for || null, written: m.written || null,
+                       resolves: m.resolves || [],
                        reliability: m.reliability || null, note: m.note || null});
     members.set(it.id, []);
   }

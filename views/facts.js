@@ -3,6 +3,9 @@
 
 import {readingId, soundId, meaningId} from '../core/content.js';
 import {isKnown} from '../core/state.js';
+import {soundFit, fitLabel} from '../core/soundfit.js';
+import {familiesOf} from '../core/family.js';
+import {han} from './dom.js';
 
 const WORDS_BY_FORM = new WeakMap();
 function wordsByForm(content) {
@@ -60,8 +63,16 @@ export function builtFrom(content, ch) {
     if (role === 'meaning') note = content.partGloss(part);
     const like = role === 'sound' && cousins
       ? cousins.map(c => ({ch: c, over: charJp(content, c)})) : [];
-    return {part, role, note, cousins: like};
+    // how well it gives the sound (brief 7.28 P4): the label says so
+    const fit = role === 'sound' ? soundFit(content, ch, part) : null;
+    return {part, role, note, cousins: like, fit};
   });
+}
+
+// the label after a part in Built from: "(meaning)", "(form)", "(sound)",
+// "(sound: rhymes)" ... "(possibly historic?)" (brief 7.28 P4)
+export function roleText(b) {
+  return b.role === 'sound' ? fitLabel(b.fit) : b.role;
 }
 
 // A meaning part's meaning as its reliability allows (CO-059, songpath's
@@ -178,4 +189,23 @@ export function rankSaid({rank, partRank = null}, {short = false} = {}) {
 export const WORDS_SHOWN = 4;
 export function cardWords(content, id) {
   return wordsWithOver(content, id, WORDS_SHOWN);
+}
+
+// A bound form and the character it is (brief 7.28 P24): "人, written on the
+// left" where curated/parts.tsv says where it sits, else "It stands for 人"
+// (月 sits in more than one place; 艹's 艸 isn't on the path). The pieces
+// of the line, the character as a han span.
+export function standsLine(standsFor, written) {
+  return written ? [han(standsFor), `, written ${written}`] : ['It stands for ', han(standsFor)];
+}
+
+// Why this Meet now, in one line under its gloss (brief 7.28 P17), the first
+// that applies: the focus text chose it ("In 《飲茶》, the text you're
+// reading"), else its place among the path's characters, which run most
+// common first ("#2 most common character"). A part's Meet says what it
+// unlocks already. No state: the task descriptor and the content.
+export function whyLine(content, task, char) {
+  if (task.focus) return `In 《${task.focus}》, the text you’re reading`;
+  const n = familiesOf(content).number.get(char);
+  return n ? `#${n.toLocaleString('en-GB')} most common character` : null;
 }

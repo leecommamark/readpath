@@ -44,7 +44,7 @@ export const ROTATION = Object.freeze([3, 4, 5]);
 const descriptor = fields => Object.freeze({
   task: null, item: null, rung: null, asked: null, fallback: [],
   inferred_from: null, pattern: null, word: null, sentence: null, target: null,
-  role: 'review', ...fields});
+  role: 'review', focus: null, ...fields});
 
 // The rung a character reading is asked at, and why it isn't its own.
 // `sentences` is sentenceIndex()'s map for the focus text, or null.
@@ -161,7 +161,7 @@ function wordEntry(content, form, i, jp) {
 
 export function taskFor(content, states, id, opts = {}) {
   const {role = 'review', rng = null, planned = null, assume = [],
-         exclude = null, sentences = null} = opts;
+         exclude = null, sentences = null, focus = null} = opts;
   const kind = content.kind(id);
   const s = states[id];
   const rung = s ? s.rung : planned;
@@ -174,6 +174,9 @@ export function taskFor(content, states, id, opts = {}) {
     const it = content.item(id);
     return descriptor({
       task: 'meet', item: id, rung: 'new', asked: 1, role,
+      // the focus text's title, where it is what chose this Meet (brief
+      // 7.28 P17: the Meet's why-this line)
+      focus,
       inferred_from: inferredFrom(content, states, id, assume),
       pattern: it.primary ? null
         : {main: it.unlockAfter, relation: it.relation, base: it.base},

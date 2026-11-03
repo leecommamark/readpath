@@ -75,7 +75,7 @@ const app = {
   reader: null,             // {id, lines, selected}: the text being read
   family: null,             // {key, mode}: the family page open (patch plan 7.5)
   tree: null,               // {trail, expanded}: the tree open (patch plan 7.7)
-  browse: {sort: 'text', shown: 0},  // Browse families' sort and rows drawn (7.7)
+  browse: {sort: 'text', show: 'taught', shown: 0},  // Browse families' sort, filter (7.28) and rows drawn (7.7)
   steps: 'families',        // the Steps tab's side: 'families' | 'meaning' (7.8)
   fromTab: 'path',          // the tab a family page or a tree was opened from (7.8)
   check: null,              // {check, rng, meaning, back} or {review, perPage}: the placement check on
@@ -546,6 +546,18 @@ function tipOnce() {
   return true;
 }
 
+// The border key (brief 7.28 P23): each kind of tile's line shows on the
+// first Meet of that kind, until its Continue. A flag in meta, like the tip:
+// not progress.
+function keyUnseen(kind) {
+  return !(app.store.load(KEYS.meta, {}).borderSeen || {})[kind];
+}
+function keySeen(kind) {
+  const meta = app.store.load(KEYS.meta, {});
+  meta.borderSeen = {...(meta.borderSeen || {}), [kind]: true};
+  app.store.save(KEYS.meta, meta);
+}
+
 // A short message at the foot of the screen; with an action (Undo), it
 // stays a little longer and the action closes it.
 let toastTimer = null;
@@ -853,9 +865,8 @@ function startSession({keepGoing = false, practice = false} = {}) {
   showSession($('session'), app.content, run, {
     onExit: () => { app.run = null; showToday(); showTab('today'); },
     onRef: openRef,
-    onTree: f => showTree(f),
     onReport: shown => openReport(shown, 'card'),
-    tipOnce,
+    tipOnce, keyUnseen, keySeen,
     lineOf: s => app.library.lineAt(s),
   });
 }
@@ -974,10 +985,11 @@ function showSteps(view = app.steps) {
 
 function drawBrowse() {
   const b = app.browse;
-  renderBrowse($('browse'), browseModel(app.content, app.store.load(KEYS.states, {}), b.sort), {
+  renderBrowse($('browse'), browseModel(app.content, app.store.load(KEYS.states, {}), b.sort, b.show), {
     onSwitch: view => showSteps(view),
     onSearch: () => openSearch(),
     onSort: key => { b.sort = key; b.shown = 0; drawBrowse(); },
+    onShow: key => { b.show = key; b.shown = 0; drawBrowse(); },
     onFamily: key => showFamily(key),
     onMore: () => { b.shown = (b.shown || BROWSE_CHUNK) + BROWSE_CHUNK; drawBrowse(); },
     shown: b.shown,
@@ -1042,7 +1054,7 @@ function testMe(id) {
     onRef: openRef,
     onTree: f => showTree(f),
     onReport: shown => openReport(shown, 'card'),
-    tipOnce,
+    tipOnce, keyUnseen, keySeen,
     lineOf: l => app.library.lineAt(l),
   });
 }
@@ -1069,7 +1081,7 @@ function studyFamily(key) {
     onRef: openRef,
     onTree: f => showTree(f),
     onReport: shown => openReport(shown, 'card'),
-    tipOnce,
+    tipOnce, keyUnseen, keySeen,
     lineOf: l => app.library.lineAt(l),
   });
 }

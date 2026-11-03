@@ -19,7 +19,7 @@
 //   standin   a part test with nothing to ask (no member left): passed
 
 import {h, han, clear, put, rubyWord, jpSpan, layerChip} from './dom.js';
-import {cardWords, word as wordEntry, builtFrom, relationOf, overOf, meaningWording,
+import {cardWords, word as wordEntry, builtFrom, roleText, standsLine, whyLine, relationOf, overOf, meaningWording,
         LAYER_TEXT} from './facts.js';
 import {kindOf} from '../core/content.js';
 import {readingChoices, characterChoices, meaningChoices,
@@ -29,7 +29,7 @@ import {WORD_MAX} from '../core/tasks.js';
 import {readingItemFor} from '../core/focus.js';
 import {sentenceSpans} from '../core/lines.js';
 import {wordChars} from './reader.js';
-import {glyphTile} from './glyph.js';
+import {glyphTile, BORDER_KEY, borderKinds} from './glyph.js';
 
 // Sound patterns taught at Predict (DESIGN *Sound patterns*), by the code
 // export_content.py records per member in sound_part.patterns.
@@ -56,6 +56,7 @@ function partCard(content, task, base, states = {}) {
     return {...base, kind: 'part', glyph: it.part, lead: 'A new meaning part',
             reveal: {gloss: w.meaning}, partLead: w.lead, partNote: w.note, quiet: w.quiet,
             standsFor: it.standsFor && it.standsFor !== it.part ? it.standsFor : null,
+            written: it.written || null,
             facts: [`It helps tell apart ${plural(it.resolves.length, 'family', 'families')} of characters that sound alike.`],
             choices: [], answer: null};
   }
@@ -138,6 +139,7 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
         relation: relationOf(it),
       };
       return {...base, kind: 'teach', glyph: it.char, reveal, pattern,
+              why: pattern ? null : whyLine(content, task, it.char),
               lead: pattern ? `A new reading of ${it.char}` : 'A new character',
               built: pattern ? [] : builtFrom(content, it.char),
               choices: [], answer: null};
@@ -294,7 +296,7 @@ function builtLine(built, cb) {
   const parts = built.map(b => h('span', {class: 'part'}, glyphButton(b.part, cb, 'sm'),
     h('span', {class: 'muted'},
         // a sound part's note is its reading, a meaning part's its gloss
-        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${b.role})`] : `(${b.role})`)));
+        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${roleText(b)})`] : `(${roleText(b)})`)));
   const joined = [];
   parts.forEach((p, i) => { if (i) joined.push(h('span', {class: 'built-plus'}, '+')); joined.push(p); });
   return h('p', {class: 'built'}, h('span', {class: 'label'}, 'Built from '), ...joined);
@@ -308,16 +310,6 @@ function likeLine(built, cb) {
   return like && h('p', {class: 'built like-line'}, h('span', {class: 'label'}, 'Sounds like '),
     ...like.cousins.map(({ch, over}) => glyphTile(ch, tileKind(cb, ch),
       {size: 'sm', over: over || '', onTap: cb.onRef ? c => cb.onRef(c) : null})));
-}
-
-// Its tree (patch plan 7.7), as the reference card's row; only where the
-// caller gives cb.onTree (brief 7.18)
-function treeRow(ch, cb) {
-  return cb.onTree && h('section', {class: 'block jumps'},
-    h('button', {type: 'button', class: 'jump', onclick: () => cb.onTree(ch)},
-      h('span', {class: 'jump-text'}, h('b', {}, 'Trace this character’s steps'),
-        h('span', {class: 'sm'}, 'What it’s built from, and what’s built from it')),
-      h('span', {class: 'jump-go', 'aria-hidden': 'true'}, '›')));
 }
 
 // A glyph as a tile by its kind (views/glyph.js), opening its reference
@@ -390,8 +382,10 @@ function revealBlock(m, ok, cb, given) {
 
 // renderTask(el, model, {onAnswer(ok), onNext(), onRef(char), onReport(shown),
 //                        kindOf(form): glyph.js glyphKind, for the tiles,
-//                        onTree(form): a Meet card's Its tree row, under Built
-//                        from; none, no row (brief 7.18)})
+//                        keyUnseen(kind), keySeen(kind): the border key's
+//                        once-only lines (brief 7.28 P23); none, no key})
+// A Meet has no Trace row since brief 7.28 P30: the tile opens the card,
+// whose rank line has it.
 // onAnswer is called once, the moment the answer is given (so it is saved
 // then); onNext when the learner moves on.
 export function renderTask(el, m, cb) {
@@ -412,23 +406,28 @@ export function renderTask(el, m, cb) {
 
   if (m.kind === 'teach' || m.kind === 'part') {
     const r = m.reveal;
+    // the border key, the first Meet of each kind of tile (brief 7.28 P23):
+    // seen once Continue is tapped
+    const keys = cb.keyUnseen ? borderKinds(tileKind(cb, m.glyph)).filter(cb.keyUnseen) : [];
+    const go = keys.length ? () => { keys.forEach(cb.keySeen); meetAndGo(); } : meetAndGo;
     put(el,
       h('p', {class: 'lead'}, m.lead),
       glyphButton(m.glyph, cb),
+      ...keys.map(k => h('p', {class: 'note center border-key'}, BORDER_KEY[k])),
       tipLine(cb),
       m.partLead && h('p', {class: 'note center part-lead'}, m.partLead),
       m.quiet ? h('div', {class: 'muted'}, readingBlock(r.jp, r.gloss, 'center', r.layer))
               : readingBlock(r.jp, r.gloss, 'center', r.layer),
+      m.why && h('p', {class: 'note center why'}, m.why),
       m.partNote && h('p', {class: 'note center'}, m.partNote),
-      m.standsFor && h('p', {class: 'note center'}, 'It stands for ', han(m.standsFor)),
+      m.standsFor && h('p', {class: 'note center'}, ...standsLine(m.standsFor, m.written)),
       m.pattern && h('p', {class: 'note center'}, 'Its main reading is ', jpSpan(m.pattern.main), '; ',
         jpSpan(r.jp), ` is ${m.pattern.relation}.`),
       ...(m.facts || []).map(f => h('p', {class: 'note center'}, f)),
       wordLines(r.words),
       builtLine(m.built, cb),
-      treeRow(m.glyph, cb),
       likeLine(m.built, cb),
-      h('div', {class: 'foot'}, cont(meetAndGo), report()));
+      h('div', {class: 'foot'}, cont(go), report()));
     return;
   }
 

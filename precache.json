@@ -1,5 +1,5 @@
 {
- "build": "53335e07771d3318",
+ "build": "b93c76457f270d03",
  "files": [
   "actions.js",
   "app.css",
@@ -44,6 +44,7 @@
   "core/sentences.js",
   "core/session.js",
   "core/soundfamily.js",
+  "core/soundfit.js",
   "core/state.js",
   "core/tasks.js",
   "core/today.js",

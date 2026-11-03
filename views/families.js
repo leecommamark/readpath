@@ -57,11 +57,23 @@ const readingOf = (content, head) =>
   content.partReading(head)
   || (content.mainReading(head) && content.item(content.mainReading(head)).jp) || null;
 
-// "about N‰ of text": one decimal, more under 0.1 so a small family shows
-export function permille(perMillion) {
-  const v = perMillion / 1000;
-  if (v === 0) return '0';
-  return v < 0.1 ? v.toPrecision(1) : v.toFixed(1).replace(/\.0$/, '');
+// How often a learner meets a family, in words (brief 7.28 P26; Mark,
+// 2026-11-02): four tiers, like trading cards, cut at round "1 in N"
+// figures over the 948 families measured then (73 / 143 / 243 / 489):
+// Super common, 1 in 300 characters or more; Common, to 1 in 1,000;
+// Uncommon, to 1 in 3,000; Rare, below. `perMillion` is the members' summed
+// share of text (content.valueOf).
+export const TIERS = [[1e6 / 300, 'Super common'], [1e6 / 1000, 'Common'],
+                      [1e6 / 3000, 'Uncommon'], [0, 'Rare']];
+export function tierOf(perMillion) {
+  return TIERS.find(([min]) => perMillion >= min)[1];
+}
+// "about 1 in 85 characters you'll read": two significant figures
+export function oneIn(perMillion) {
+  if (!(perMillion > 0)) return null;
+  const n = 1e6 / perMillion;
+  const k = 10 ** Math.max(0, Math.floor(Math.log10(n)) - 1);
+  return `about 1 in ${(Math.round(n / k) * k).toLocaleString('en-GB')} characters you’ll read`;
 }
 
 // familyCards(content, states) -> {open, done, total}
@@ -191,7 +203,7 @@ export const headKind = (cb, form) => (cb.kindOf
 
 export function familyCard(c, cb) {
   const sub = c.type === 'family'
-    ? [`${permille(c.value)}‰ of text · `, h('span', {class: 'han'}, c.preview.join(' '))]
+    ? [`${tierOf(c.value)} · `, h('span', {class: 'han'}, c.preview.join(' '))]
     : [`characters ${c.from.toLocaleString('en-GB')}–${c.to.toLocaleString('en-GB')} · `,
        h('span', {class: 'han'}, c.preview.join(' '))];
   return h('button', {type: 'button', class: `fam-card is-${c.state}`,
@@ -406,7 +418,7 @@ export function renderFamily(el, m, cb) {
                 {size: 'xl', progress: m.part ? m.part.progress : null, onTap: f => cb.onRef(f)}),
       h('div', {class: 'fam-head-text'},
         m.reading && h('p', {class: 'jp big-jp'}, m.reading),
-        h('p', {class: 'note'}, `${permille(m.value)}‰ of text`),
+        h('p', {class: 'note'}, [tierOf(m.value), oneIn(m.value)].filter(Boolean).join(' · ')),
         m.part && h('p', {class: 'note'},
           `Sound part · unlocks ${plural(m.part.unlocks, 'character')} · ${STATE_SAID[m.part.state]}`))),
     m.part && m.part.canTest && h('div', {class: 'btns'},
@@ -446,6 +458,17 @@ export const SORTS = [
   {key: 'size', label: 'Largest', note: 'Families with the most characters first.'},
   {key: 'path', label: 'Path order', note: 'In the order the path reaches them.'},
 ];
+// which families the list shows (brief 7.28 S1, Mark 2026-11-02: a filter
+// the learner arranges): the ones whose sound part the path teaches first
+// Mark 2026-11-02: a switch like Steps' own, not a dropdown; the count is in
+// the note under it so three fit a phone's line
+export const SHOWS = [
+  {key: 'taught', label: 'On the path',
+   note: n => `${n} families whose sound part the path teaches.`},
+  {key: 'others', label: 'Off the path',
+   note: n => `${n} families whose part doesn’t give the sound often enough to teach it.`},
+  {key: 'all', label: 'All', note: n => `All ${n} sound families.`},
+];
 export const BROWSE_CHUNK = 40;
 export const BROWSE_PREVIEW = 10;
 
@@ -459,8 +482,9 @@ export function textPct(perMillion) {
 
 // browseModel(content, states, sort) -> {sort, rows: [{key, head, reading,
 // members: [{form, state}], known, total, value, left, from}]}
-export function browseModel(content, states, sort = 'text') {
+export function browseModel(content, states, sort = 'text', show = 'taught') {
   const key = SORTS.some(x => x.key === sort) ? sort : 'text';
+  const which = SHOWS.some(x => x.key === show) ? show : 'taught';
   const fam = familiesOf(content);
   const rows = fam.cards.filter(c => c.type === 'family').map(card => {
     const members = card.members.map(c => ({form: c, state: stateOf(states[content.mainReading(c)])}));
@@ -468,23 +492,34 @@ export function browseModel(content, states, sort = 'text') {
     const left = members.filter(x => x.state !== 'known').reduce((n, x) => n + content.valueOf(x.form), 0);
     return {key: card.key, head: card.head, reading: readingOf(content, card.head),
             members, known: members.filter(x => x.state === 'known').length, total: members.length,
-            value, left, from: fam.number.get(card.members[0])};
+            value, left, from: fam.number.get(card.members[0]),
+            // its head is taught as a sound part (brief 7.28 S1)
+            taught: content.has(soundId(card.head))};
   });
   const by = {text: (a, b) => b.value - a.value || a.from - b.from,
               left: (a, b) => b.left - a.left || a.from - b.from,
               size: (a, b) => b.total - a.total || b.value - a.value || a.from - b.from,
               path: (a, b) => a.from - b.from}[key];
-  return {sort: key, rows: rows.sort(by)};
+  // the families taught as parts by default (brief 7.28 S1: 勺 者 戈 也
+  // topped the list and are not taught parts at all); the rest, or all, by
+  // the learner's choice. `counts` for the Show menu.
+  const counts = {taught: rows.filter(r => r.taught).length, all: rows.length};
+  counts.others = counts.all - counts.taught;
+  const kept = rows.filter(r => which === 'all' || r.taught === (which === 'taught'));
+  return {sort: key, show: which, counts, rows: kept.sort(by)};
 }
 
-// renderBrowse(el, m, cb)   cb: onSwitch(view) (the Steps tab's switch), onSort(key), onFamily(key), kindOf,
+// renderBrowse(el, m, cb)   cb: onSwitch(view) (the Steps tab's switch), onSort(key), onShow(key), onFamily(key), kindOf,
 // shown (how many rows to draw), onMore
 export function renderBrowse(el, m, cb) {
   const sort = SORTS.find(x => x.key === m.sort);
+  const show = SHOWS.find(x => x.key === m.show);
   const shown = Math.min(m.rows.length, cb.shown || BROWSE_CHUNK);
-  const figure = r => (m.sort === 'left' ? r.left : r.value);
+  // the share still to unlock as a %, which moves as you learn; otherwise
+  // the family's tier (brief 7.28 P26, Mark: the tier word on Steps' cards)
+  const figure = r => (m.sort === 'left' ? textPct(r.left) : tierOf(r.value));
   const row = r => h('button', {type: 'button', class: 'browse-row',
-                                'aria-label': `${r.head} family: ${textPct(figure(r))} of text, `
+                                'aria-label': `${r.head} family: ${m.sort === 'left' ? `${figure(r)} of text to unlock` : figure(r)}, `
                                   + `${r.known} of ${r.total} known. Open`,
                                 onclick: () => cb.onFamily(r.key)},
     glyphTile(r.head, headKind(cb, r.head), {size: 'md', progress: cb.progressOf ? cb.progressOf(r.head) : null}),
@@ -492,7 +527,7 @@ export function renderBrowse(el, m, cb) {
       ...r.members.slice(0, BROWSE_PREVIEW).map(x => h('span', {class: `bm is-${x.state}`}, x.form)),
       r.total > BROWSE_PREVIEW && h('span', {class: 'bm-more', lang: 'en'}, `+${r.total - BROWSE_PREVIEW}`)),
     h('span', {class: 'browse-figure'},
-      h('b', {}, textPct(figure(r))),
+      h('b', {class: m.sort === 'left' ? '' : 'tier'}, figure(r)),
       h('span', {class: 'sm'}, `${r.known}/${r.total} known`),
       h('span', {class: 'browse-meter', 'aria-hidden': 'true'},
         h('span', {style: `width:${(100 * r.known / r.total).toFixed(1)}%`}))));
@@ -502,6 +537,12 @@ export function renderBrowse(el, m, cb) {
     stepsSwitch('families', cb.onSwitch),
     // a row opens the family; its tiles open cards (7.26 P4)
     h('p', {class: 'note'}, 'Open a family and tap a character for its card.'),
+    // which families: the taught ones, the others, or all (brief 7.28 S1)
+    h('div', {class: 'modes show-switch', role: 'group', 'aria-label': 'Families'},
+      ...SHOWS.map(x => h('button', {
+        type: 'button', class: `mode-btn${x.key === m.show ? ' on' : ''}`, 'aria-pressed': String(x.key === m.show),
+        onclick: () => x.key !== m.show && cb.onShow(x.key)}, x.label))),
+    h('p', {class: 'note'}, show.note(m.counts[m.show].toLocaleString('en-GB'))),
     // a dropdown, not chips: four didn't fit a phone's line (Mark, 7.8)
     h('label', {class: 'sort-by'}, 'Sort by ',
       h('select', {class: 'sort-select', onchange: e => e.target.value !== m.sort && cb.onSort(e.target.value)},

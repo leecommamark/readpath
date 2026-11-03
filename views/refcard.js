@@ -14,7 +14,7 @@
 // refModel() is pure; renderRef() draws it into the overlay.
 
 import {h, han, clear, put, rubyWord, jpSpan, layerChip} from './dom.js';
-import {builtFrom, relationOf, word as wordEntry, allOver, charJp, meaningWording,
+import {builtFrom, roleText, standsLine, relationOf, word as wordEntry, allOver, charJp, meaningWording,
         cardWords, WORDS_SHOWN, LAYER_TEXT, partRankOf, rankSaid} from './facts.js';
 import {isKnown, MAINTAIN} from '../core/state.js';
 import {canMarkKnown, canForget, canKnowOff} from '../actions.js';
@@ -122,13 +122,14 @@ function withPart(content, part, role) {
 function partRoles(content, states, form, {itemsOnly = false} = {}) {
   const roles = [];
   for (const [kind, id] of [['sound', `s:${form}`], ['meaning', `m:${form}`]]) {
-    let members, reading, gloss, standsFor = null, status;
+    let members, reading, gloss, standsFor = null, written = null, status;
     if (content.has(id)) {
       const it = content.item(id);
       members = content.membersOf(id).map(r => content.item(r).char);
       reading = it.taughtReading || null;
       gloss = it.meaning || it.gloss || null;
       standsFor = it.standsFor && it.standsFor !== form ? it.standsFor : null;
+      written = standsFor && it.written;
       status = statusOf(content, states[id], id);
     } else {
       // a part that isn't a study item still has a reading or a meaning,
@@ -143,7 +144,7 @@ function partRoles(content, states, form, {itemsOnly = false} = {}) {
     // order, the known ones being the anchor for the part)
     const known = ch => isKnown(states[content.mainReading(ch)]);
     members = [...members.filter(known), ...members.filter(ch => !known(ch))];
-    roles.push({kind, id, reading, gloss, standsFor, status,
+    roles.push({kind, id, reading, gloss, standsFor, written, status,
                 // a meaning from Unihan's kDefinition, shown muted (7.10)
                 glossWeak: kind === 'meaning' && !!gloss && partGlossWeak(content, form),
                 wording: kind === 'meaning' ? meaningWording(content, form, gloss) : null,
@@ -380,7 +381,7 @@ function builtBody(m, cb) {
       h('span', {class: 'part'}, charBtn(b.part, cb),
         h('span', {class: 'muted'},
         // a sound part's note is its reading, a meaning part's its gloss
-        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${b.role})`] : `(${b.role})`))])),
+        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${roleText(b)})`] : `(${roleText(b)})`))])),
     // where the sound part's reading is no clue, the members that carry the
     // sound (CO-016: 當 <- 尚 soeng6, sounds like 黨 堂)
     like && h('p', {class: 'ref-row like-line'}, h('span', {class: 'sm'}, 'Sounds like '),
@@ -442,7 +443,7 @@ function roleBody(r, cb) {
       r.reading ? h('span', {class: 'jp big-jp'}, r.reading) : (r.wording ? r.wording.meaning : r.gloss)),
     !r.reading && r.glossWeak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE),
     r.wording && r.wording.note && h('p', {class: 'note'}, r.wording.note),
-    r.standsFor && h('p', {class: 'note'}, 'It stands for ', han(r.standsFor)),
+    r.standsFor && h('p', {class: 'note'}, ...standsLine(r.standsFor, r.written)),
     r.canTest && cb.onTestMe && h('div', {class: 'btns'},
       h('button', {type: 'button', class: 'btn', onclick: () => cb.onTestMe(r.id)}, 'Test me')),
     r.canTest && cb.onTestMe && h('p', {class: 'note'}, r.kind === 'sound'

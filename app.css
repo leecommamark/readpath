@@ -770,6 +770,8 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 /* ---- Browse families (7.7, Phase 4) */
 /* the Steps tab's switch, Sound families | Meaning parts (7.8, as Pavers) */
 .steps-switch { align-self: flex-start; margin: 0 0 var(--s2); }
+/* Steps' families: On the path | Off the path | All (7.28) */
+.show-switch { align-self: flex-start; margin: var(--s2) 0 0; }
 /* Browse families' sort: a native select, so a phone shows its own picker
    (16px, or iOS zooms the page on focus) */
 .sort-by { display: flex; align-items: center; gap: var(--s2); color: var(--muted); font-size: var(--t-sm); }
@@ -777,6 +779,8 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
                padding: 0 var(--s3); border: 1px solid var(--rule); border-radius: var(--r);
                background: var(--surface); }
 .browse-list { display: flex; flex-direction: column; margin-top: var(--s2); }
+/* brief 7.28 P26: a tier word is a label, not a figure */
+.browse-figure b.tier { font-size: var(--t-sm); white-space: nowrap; }
 .browse-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--s3); align-items: center;
               width: 100%; border: 0; border-bottom: 1px solid var(--rule); background: none; margin: 0;
               padding: var(--s2) 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
@@ -824,7 +828,7 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .key-rows dt { display: flex; gap: var(--s2); align-items: baseline; font-size: var(--t-lg); }
 .key-rows dd { margin: 0; color: var(--muted); }
 .key-n { font-size: var(--t-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
-.settings-links .gear { width: 18px; height: 18px; margin-right: 6px; vertical-align: -3px; }
+.settings-links .gear, .jump .gear { width: 18px; height: 18px; margin-right: 6px; vertical-align: -3px; }
 /* first run's "Tones show as marks" (7.12 decided 6): si1 .. si6, each over its number */
 .marks-card .note { margin: 0; }
 /* first run's install screen, in a browser on a phone (patch plan 7.14) */

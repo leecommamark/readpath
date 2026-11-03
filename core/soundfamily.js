@@ -97,7 +97,7 @@ function titleOf(rows) {
 
 export function soundFamily(content, key) {
   const fam = familiesOf(content);
-  const card = fam.byKey.get(key);
+  const card = fam.byKey.get(key) || fam.folded.get(key);
   if (!card || card.type !== 'family') return null;
   const head = card.head;
   const order = ch => fam.number.get(ch) ?? Infinity;

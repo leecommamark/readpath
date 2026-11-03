@@ -188,12 +188,14 @@ export function compose(content, learner, today, rng) {
   const sentences = sentenceIndex(content, states, text);
   // tasks, built in a fixed order so the rng's draws are too
   const reviews = cappedReviews.map(id => taskFor(content, states, id, {role: 'review', rng, sentences}));
+  // the focus text's title on a Meet it chose (brief 7.28 P17)
+  const focusOf = u => (u.source === 'focus' && text ? text.title || null : null);
   const payoffOf = new Map(units.filter(u => u.kind === 'payoff').map(u => [u.of, u]));
   const chains = [];
   for (const u of units) {
     if (u.kind === 'char') {
       chains.push({
-        tasks: [taskFor(content, states, u.item, {role: 'new', rng, sentences}),
+        tasks: [taskFor(content, states, u.item, {role: 'new', rng, sentences, focus: focusOf(u)}),
                 taskFor(content, states, u.item, {role: 'quiz', planned: 2, rng, sentences})],
         gaps: [0, QUIZ_GAP]});
     } else if (u.kind === 'part') {
@@ -203,7 +205,8 @@ export function compose(content, learner, today, rng) {
                                                        exclude: pay ? pay.item : null})];
       const gaps = [0, QUIZ_GAP];
       if (pay) {
-        tasks.push(taskFor(content, states, pay.item, {role: 'payoff', assume: [u.item], rng, sentences}),
+        tasks.push(taskFor(content, states, pay.item, {role: 'payoff', assume: [u.item], rng, sentences,
+                                                       focus: focusOf(pay)}),
                    taskFor(content, states, pay.item, {role: 'quiz', planned: 2, rng, sentences}));
         gaps.push(1, QUIZ_GAP);
       }

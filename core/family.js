@@ -6,9 +6,11 @@
 // them). A character with no sound part that others have as theirs heads
 // that family and is its member (止); one with a sound part of its own (青,
 // under 井) is a member of that family, and only the head of its own.
-// Families of 2+ members get a card (674); the rest go into "Characters on
-// their own" cards of 20, in path order (27). Every path character is in
-// exactly one card.
+// Families of 2+ members get a card, but for the tiny ones (tiny(), brief
+// 7.28 P27); the rest go into "Characters on their own" cards of 20, in path
+// order. Every path character is in exactly one card. A folded family is
+// kept in `folded`, so its sound boxes (soundfamily.js) still read the
+// same for the labels (soundfit.js).
 //
 // Family study is its own session, separate from Today (Mark, 2026-10-01):
 //   * familyPlan() is what a card has left to learn: its sound part if it's
@@ -70,11 +72,15 @@ export function familiesOf(content) {
     groups.get(s).push(c);
   }
   for (const c of chars) if (!content.soundPartOf(c) && groups.has(c)) groups.get(c).push(c);
-  const cards = [], loose = [];
+  const cards = [], loose = [], folded = new Map();
   for (const [head, members] of groups) {
     members.sort(byPath);
-    if (members.length >= MIN_MEMBERS) cards.push({key: `f:${head}`, type: 'family', head, members});
-    else loose.push(...members);
+    const card = {key: `f:${head}`, type: 'family', head, members};
+    if (members.length >= MIN_MEMBERS && !tiny(content, head, members)) cards.push(card);
+    else {
+      loose.push(...members);
+      if (members.length >= MIN_MEMBERS) folded.set(card.key, card);
+    }
   }
   for (const c of chars) if (!content.soundPartOf(c) && !groups.has(c)) loose.push(c);
   loose.sort(byPath);
@@ -83,9 +89,23 @@ export function familiesOf(content) {
   }
   const cardOf = new Map();
   for (const card of cards) for (const c of card.members) cardOf.set(c, card.key);
-  const out = {cards, chars, number, cardOf, byKey: new Map(cards.map(c => [c.key, c]))};
+  const out = {cards, chars, number, cardOf, byKey: new Map(cards.map(c => [c.key, c])), folded};
   made.set(content, out);
   return out;
+}
+
+// A family too small to be one (brief 7.28 P27, Mark 2026-11-02): two
+// members in all (要: 要 腰), whose head is no part item, folds into
+// "Characters on their own" -- unless a member is the head with a meaning
+// part added and read the same (腰 is 要 plus 月, both jiu): that pattern
+// is worth a card. Tone aside.
+const toneOf = jp => jp.replace(/[1-6]$/, '');
+function tiny(content, head, members) {
+  if (members.length > MIN_MEMBERS) return false;
+  if (content.has(soundId(head)) || content.has(`m:${head}`)) return false;
+  const heads = new Set(content.readingsOf(head).filter(r => r.item).map(r => toneOf(r.jp)));
+  return !members.some(m => m !== head
+    && content.readingsOf(m).some(r => r.item && heads.has(toneOf(r.jp))));
 }
 
 // The family a character's tree and card show (patch plan 7.7; 7.26 check
