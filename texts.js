@@ -14,12 +14,18 @@
 //   await lib.warmFocus()         the focus text's tokens, before compose
 //   lib.learnerTexts()            [{id, title, tokens, focus}] for today.js:
 //                                 every text whose tokens are held
+//   lib.forecastOf(text, learner, today)   readable in about N days (brief
+//                                 7.29 F1): the days, null past the limit,
+//                                 undefined until worked out
+//   await lib.warmForecasts(learner, today) works them out, a text at a time
 
 import {KEYS} from './store.js';
 import {makeText, splitTitled, setFocus, rename, remove, update, bodyOfFile,
         autoTitle, unifySaved} from './core/import.js';
 import {linesOf, tokensOf, wordsOf} from './core/lines.js';
 import {coverage} from './core/coverage.js';
+import {readableIn} from './core/forecast.js';
+import {isKnown} from './core/state.js';
 import {fnv1aCp} from './dict.js';
 
 export const SAMPLE_URL = 'starter/jamcaa.txt';
@@ -54,6 +60,15 @@ export function createLibrary({store, content, dict, cache = null, version}) {
     return v;
   }
   const tokensHeld = t => (held.get(keyOf(t)) || {}).tokens || null;
+  // The forecast simulates the days ahead (core/forecast.js), too slow to
+  // run on every draw (F2): kept per text, day, pace and learner -- the
+  // states' count and known count, which any answer, Meet or mark moves
+  const forecasts = new Map();             // key -> days | null
+  const forecastKey = (t, learner, today) => {
+    const ss = Object.values(learner.states || {});
+    return `${keyOf(t)}|${today}|${(learner.settings || {}).new_per_day ?? ''}|`
+      + `${ss.length}|${ss.filter(isKnown).length}`;
+  };
 
   return {
     list, find, linesFor,
@@ -82,6 +97,26 @@ export function createLibrary({store, content, dict, cache = null, version}) {
     coverageOf(t, states, opts) {
       const tokens = tokensHeld(t);
       return tokens ? coverage(content, states, tokens, opts) : null;
+    },
+    forecastOf(t, learner, today) {
+      return forecasts.get(forecastKey(t, learner, today));
+    },
+    // Works out every held text's forecast not yet known, yielding between
+    // texts so the screen stays live; true when it worked any out. Figures
+    // for another day or learner are dropped.
+    async warmForecasts(learner, today, pause = () => new Promise(r => setTimeout(r, 0))) {
+      const keys = new Map(list().map(t => [t, forecastKey(t, learner, today)]));
+      const live = new Set(keys.values());
+      for (const k of [...forecasts.keys()]) if (!live.has(k)) forecasts.delete(k);
+      let any = false;
+      for (const [t, k] of keys) {
+        const tokens = tokensHeld(t);
+        if (!tokens || forecasts.has(k)) continue;
+        await pause();
+        forecasts.set(k, readableIn(content, learner, tokens, today));
+        any = true;
+      }
+      return any;
     },
     add(raw, {title = '', day}) {
       const texts = list();

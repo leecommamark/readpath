@@ -25,17 +25,21 @@ const plural = (n, one, many = `${one}s`) => `${n.toLocaleString('en')} ${n === 
 const CJK = new RegExp(CJK_RUN_SOURCE.replace(/\+$/, ''), 'gu');
 export const SCRIPT_BADGE = {simp: 'Simplified', mixed: 'Mixed script'};
 
-// libraryModel(texts, coverageOf) -> {rows, focus}
+// libraryModel(texts, coverageOf, forecastOf) -> {rows, focus}
 //   coverageOf(text) is texts.js's (null while its tokens are being worked
-//   out). The focus text comes first, then the newest.
-export function libraryModel(texts, coverageOf) {
+//   out); forecastOf(text) the library's forecast (brief 7.29 F1: days,
+//   null past its limit, undefined while being worked out). The focus text
+//   comes first, then the newest.
+export function libraryModel(texts, coverageOf, forecastOf = () => undefined) {
   const rows = texts.map((t, i) => {
     const c = coverageOf(t);
     return {id: t.id, title: t.title, focus: !!t.focus, order: i,
             chars: (t.body.match(CJK) || []).length,
             badge: SCRIPT_BADGE[t.script] || null,
             pct: c ? c.pct : null, toLearn: c ? c.toLearn : null,
-            offPath: c ? c.offPath.length : null};
+            learningPct: c ? c.learningPct : null,
+            offPath: c ? c.offPath.length : null,
+            days: c ? forecastOf(t) : undefined};
   });
   rows.sort((a, b) => (b.focus - a.focus) || (b.order - a.order));
   return {rows, focus: rows.find(r => r.focus) || null};
@@ -85,8 +89,25 @@ export const BUNDLE_NOTE = {
   android: 'Using Read Path from your home screen and the texts aren’t there? Copy this link and use Get texts from a link in the app.',
 };
 
-const readable = r => (r.pct === null ? 'Working out how readable…'
-  : `${r.pct}% readable` + (r.toLearn ? ` · ${plural(r.toLearn, 'reading')} to learn` : ''));
+// "12% readable · 9% in progress · 31 readings to learn" (brief 7.29 K1):
+// known and in progress side by side, neither replacing the other. Texts,
+// Continue reading and the Reader all say it so. `c` is a coverage.
+export const readableLine = c => [`${c.pct}% readable`,
+  c.learningPct ? `${c.learningPct}% in progress` : null,
+  c.toLearn ? `${plural(c.toLearn, 'reading')} to learn` : null].filter(Boolean).join(' · ');
+const readable = r => (r.pct === null ? 'Working out how readable…' : readableLine(r));
+// one bar, two bands: known (jade) then in progress (mustard)
+export const progressBar = (pct, learningPct) => h('span', {class: 'bar read', 'aria-hidden': 'true'},
+  h('i', {style: `width:${pct || 0}%`}), learningPct ? h('b', {style: `width:${learningPct}%`}) : '');
+// how far away a text is (F1): "Readable in about 31 days", or nothing
+// while it is being worked out
+export function forecastLine(r) {
+  if (r.pct === null) return null;
+  if (!r.toLearn) return 'Ready to read';
+  if (r.days === undefined) return null;
+  if (r.days === null) return 'More than two years away at your pace';
+  return `Readable in about ${plural(r.days, 'day')} at your pace`;
+}
 
 // renderTexts(el, model, ui, cb)
 //   ui: {pasting, draft: {raw, title, titleAuto}, renaming, batch, bundle}
@@ -154,8 +175,8 @@ function textRow(r, ui, cb) {
       r.focus && h('span', {class: 'tag accent'}, 'Focus')),
     h('p', {class: 'text-meta'}, readable(r),
       r.badge && h('span', {class: 'badge'}, r.badge)),
-    h('div', {class: 'bar', 'aria-hidden': 'true'},
-      h('i', {style: `width:${r.pct || 0}%`})),
+    forecastLine(r) && h('p', {class: 'text-meta'}, forecastLine(r)),
+    progressBar(r.pct, r.learningPct),
     ui.renaming !== r.id && h('div', {class: 'links'},
       !r.focus && h('button', {type: 'button', class: 'link', onclick: () => cb.onFocus(r.id)}, 'Make focus'),
       h('button', {type: 'button', class: 'link', onclick: () => cb.onRename(r.id)}, 'Rename'),

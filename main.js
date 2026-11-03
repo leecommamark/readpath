@@ -60,6 +60,7 @@ import {renderFeedback} from './views/feedback.js';
 import {createOutbox, relaySend, askName, saveName} from './outbox.js';
 import {budget} from './core/relay.js';
 import {renderAbout} from './views/about.js';
+import {markerVisit, markerDismissed} from './core/markers.js';
 
 const $ = id => document.getElementById(id);
 // Steps (Pavers in brief 7.8 decided 2; Steps since 7.12) is a tab with two
@@ -112,8 +113,23 @@ function showToday() {
                          composeRng(deviceSeed(app.store), app.today));
   const focus = app.library.focus();
   const cov = focus && app.library.coverageOf(focus, app.learner.states);
-  const reading = cov && {id: focus.id, title: focus.title, pct: cov.pct, toLearn: cov.toLearn};
-  renderToday($('today'), todayModel(app.content, app.learner.states, app.composed.summary, reading), {
+  const reading = cov && {id: focus.id, title: focus.title, pct: cov.pct, toLearn: cov.toLearn,
+                          learningPct: cov.learningPct};
+  const model = todayModel(app.content, app.learner.states, app.composed.summary, reading);
+  // a marker passed since the last visit (brief 7.29 M4): meta.marker
+  const meta = app.store.load(KEYS.meta, {});
+  const visit = markerVisit(meta.marker || null, model.trail.at, app.today);
+  if (JSON.stringify(visit.record) !== JSON.stringify(meta.marker)) {
+    app.store.save(KEYS.meta, {...meta, marker: visit.record});
+  }
+  const passedAt = visit.passed && app.content.markers[visit.passed.at];
+  renderToday($('today'), model, {
+    passed: passedAt && {name: passedAt.name, gloss: passedAt.gloss, yesterday: visit.passed.yesterday},
+    onPassedSeen: () => {
+      const mt = app.store.load(KEYS.meta, {});
+      app.store.save(KEYS.meta, {...mt, marker: markerDismissed(mt.marker)});
+      showToday();
+    },
     onRead: id => showReader(id),
     date: dateLabel(),
     version: app.version,
@@ -578,20 +594,29 @@ function toast(text, {action = null, onAction = null} = {}) {
 const freshDraft = () => ({raw: '', title: '', titleAuto: true});
 const textsUi = {pasting: false, draft: freshDraft(), renaming: null, batch: null, bundle: null};
 let warming = false;
+let forecasting = false;       // the forecasts being worked out (7.29)
 
 function showTexts() {
   const lib = app.library;
   const states = app.store.load(KEYS.states, {});
-  const model = libraryModel(lib.list(), t => lib.coverageOf(t, states));
+  const learner = learnerFrom(app.store), today = systemDay();
+  const model = libraryModel(lib.list(), t => lib.coverageOf(t, states),
+                             t => lib.forecastOf(t, learner, today));
   renderTexts($('texts'), model, textsUi, textsActions);
+  const redraw = () => {
+    if (!$('texts').hidden && !$('texts').contains(document.activeElement)) showTexts();
+  };
   // a text's coverage needs its tokens: work them out, then draw again
   // (not over the paste box while it's being typed in)
   if (!warming && model.rows.some(r => r.pct === null)) {
     warming = true;
-    lib.warmAll().then(() => {
-      warming = false;
-      if (!$('texts').hidden && !$('texts').contains(document.activeElement)) showTexts();
-    }, e => { warming = false; console.warn('readpath: texts', e); });
+    lib.warmAll().then(() => { warming = false; redraw(); },
+                       e => { warming = false; console.warn('readpath: texts', e); });
+  } else if (!forecasting && model.rows.some(r => r.toLearn && r.days === undefined)) {
+    // then how far away each is (brief 7.29 F1), simulated after the draw
+    forecasting = true;
+    lib.warmForecasts(learner, today).then(any => { forecasting = false; if (any) redraw(); },
+                                           e => { forecasting = false; console.warn('readpath: forecast', e); });
   }
 }
 
@@ -687,11 +712,19 @@ function drawReader() {
     mode: readerSettings().mode || 'read',
     selected: r.selected, wordOf: app.dict.wordOf, charOf: app.content.char,
     offKnown: new Set(app.store.load(KEYS.offKnown, []))});
+  // the underline's note, the first time one shows (brief 7.29 K4): said
+  // for as long as this text stays open, then never again
+  const meta = app.store.load(KEYS.meta, {});
+  if (m.learningHere && !meta.learnNote) {
+    app.store.save(KEYS.meta, {...meta, learnNote: true});
+    r.learnNote = true;
+  }
   const saveReader = fields => {
     const settings = app.store.load(KEYS.settings, {});
     app.store.save(KEYS.settings, {...settings, reader: {...(settings.reader || {}), ...fields}});
   };
   renderReader($('reader'), m, {
+    learnNote: !!r.learnNote,
     onBack: () => (history.state && history.state.reader ? history.back() : showTab('texts')),
     async onFocus() {
       app.library.setFocus(t.id);

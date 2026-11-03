@@ -11,11 +11,14 @@ import {searchButton} from './search.js';
 import {h, han, clear, put} from './dom.js';
 import {isKnown} from '../core/state.js';
 import {glyphTile} from './glyph.js';
+import {toNextMarker} from '../core/markers.js';
+import {readableLine, progressBar} from './texts.js';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-// `reading` is the focus text's coverage, {id, title, pct, toLearn}, or
-// null: Continue reading (patch plan 5).
+// `reading` is the focus text's coverage, {id, title, pct, learningPct,
+// toLearn}, or null: Continue reading (patch plan 5; in progress, 7.29 K1).
+// `trail` is where the learner is among the trail markers (brief 7.29 M3).
 export function todayModel(content, states, summary, reading = null) {
   const s = summary;
   const parts = [];
@@ -47,10 +50,15 @@ export function todayModel(content, states, summary, reading = null) {
               note: `${it.gloss || 'a meaning part'} · in ${plural(n, 'character')} on your path`};
     }
   }
-  let characters = 0, partsKnown = 0;
+  // characters: main readings; in progress: met, not yet known (K3)
+  let characters = 0, partsKnown = 0, learning = 0;
   for (const st of Object.values(states)) {
-    if (!isKnown(st) || !content.has(st.item)) continue;
+    if (!content.has(st.item)) continue;
     const it = content.item(st.item);
+    if (!isKnown(st)) {
+      if (it.kind === 'reading' && it.primary) learning++;
+      continue;
+    }
     if (it.kind !== 'reading') partsKnown++;
     else if (it.primary) characters++;
   }
@@ -64,8 +72,15 @@ export function todayModel(content, states, summary, reading = null) {
     dropped: s.dropped_new,
     next,
     reading,
-    known: {characters, parts: partsKnown},
+    known: {characters, parts: partsKnown, learning},
+    trail: toNextMarker(content, states),
   };
+}
+
+// "開步 · 18 more to 行開" (M3): the marker, and the characters to the next
+export function trailLine(t) {
+  return t.next ? `${t.marker.name} · ${t.more.toLocaleString('en-GB')} more to ${t.next.name}`
+    : `${t.marker.name} · ${t.marker.gloss}`;
 }
 
 // The placement check's card on Today (brief 7.8 decided 3): until a check
@@ -145,9 +160,8 @@ export function renderToday(el, m, opts) {
     h('span', {class: 'label'}, 'Continue reading'),
     h('button', {type: 'button', class: 'continue', onclick: () => opts.onRead && opts.onRead(r.id)},
       h('span', {class: 'text-title'}, han(r.title)),
-      h('span', {class: 'text-meta'}, `${r.pct}% readable` +
-        (r.toLearn ? ` · ${plural(r.toLearn, 'reading')} to go` : ' · every reading known')),
-      h('span', {class: 'bar', 'aria-hidden': 'true'}, h('i', {style: `width:${r.pct}%`}))));
+      h('span', {class: 'text-meta'}, r.toLearn ? readableLine(r) : `${r.pct}% readable · every reading known`),
+      progressBar(r.pct, r.learningPct)));
 
   const place = opts.placementOffer && !opts.placementPending && h('section', {class: 'block', 'aria-labelledby': 'place-h'},
     h('h2', {id: 'place-h'}, 'Already read some Chinese?'),
@@ -178,12 +192,23 @@ export function renderToday(el, m, opts) {
       opts.onStartOver && h('button', {type: 'button', class: 'btn quiet', onclick: opts.onStartOver},
         'Start over')));
 
+  // a marker passed (M4): one line, the day after, until tapped away
+  const p = opts.passed;
+  const passed = p && h('section', {class: 'block passed', role: 'status'},
+    h('button', {type: 'button', class: 'passed-line', onclick: opts.onPassedSeen,
+                 'aria-label': 'Dismiss'},
+      h('span', {}, 'You passed ', h('b', {lang: 'zh-Hant-HK'}, p.name), p.yesterday ? ' yesterday.' : '.'),
+      h('span', {class: 'sm'}, p.gloss),
+      h('span', {class: 'passed-x', 'aria-hidden': 'true'}, '✕')));
+
   const known = h('section', {class: 'block'},
-    h('span', {class: 'label'}, 'Known'),
+    h('span', {class: 'label'}, 'So far'),
     h('p', {class: 'known', style: 'margin:0'},
-      h('b', {}, String(m.known.characters)), ` ${m.known.characters === 1 ? 'character' : 'characters'}`,
+      // characters known, those in progress, then parts (Mark, 7.29 Phase 2)
+      h('b', {}, String(m.known.characters)), ` ${m.known.characters === 1 ? 'character' : 'characters'} known`,
+      m.known.learning > 0 && [' · ', h('b', {}, String(m.known.learning)), ' in progress'],
       ' · ',
-      h('b', {}, String(m.known.parts)), ` ${m.known.parts === 1 ? 'part' : 'parts'}`));
+      h('b', {}, String(m.known.parts)), ` ${m.known.parts === 1 ? 'part' : 'parts'} known`));
 
   const update = opts.update && h('section', {class: 'block first update', role: 'status'},
     h('div', {class: 'row'},
@@ -239,8 +264,12 @@ export function renderToday(el, m, opts) {
               `${plural(trouble.pending, 'item')} still pending. Export your progress to keep a copy.` : '');
 
   put(clear(el),
-    h('div', {class: 'top'}, h('span', {}, opts.date || ''), searchButton(opts.onSearch) || h('span', {})),
+    h('div', {class: 'top'},
+      h('span', {class: 'top-date'}, opts.date || '',
+        m.trail && h('span', {class: 'trail-line', lang: 'zh-Hant-HK'}, trailLine(m.trail))),
+      searchButton(opts.onSearch) || h('span', {})),
     h('h1', {id: 'today-h'}, 'Today'),
+    passed || '',
     // brief 7.28 P29: an unfinished placement first, then the session, the
     // search, the learning, feedback, and the device's rows at the foot
     update || '', warn, resume || '', session, find || '', reading || '', next || '',

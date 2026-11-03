@@ -12,7 +12,7 @@
 
 export const TABLES = ['glyph', 'reading', 'part_role', 'sound_part',
                        'meaning_part', 'tellapart', 'word', 'path', 'syllable',
-                       'decomp', 'sound_sim'];
+                       'decomp', 'sound_sim', 'marker'];
 // The Reader's (patch plan 5, Phase 1), loaded at boot too, but optional
 // here: a caller that only composes Today needs none of them. `lexicon` is a
 // flat array, `variants` one object (s2t), `char` rows as above. `offchar`
@@ -230,6 +230,10 @@ export function loadContent(tables) {
     // curated/holerisk.tsv (7.13 P1): a literary character a heritage
     // learner may not know; only ever true on a ranked main reading
     holeRiskOf: ch => holeRisk.has(ch),
+    // the trail markers (brief 7.29; curated/markers.tsv), by share: {name,
+    // gloss, share (a whole percent), rank (where the path's shares cross
+    // it; 0 for the start), chars (main readings by then)}
+    markers: Object.freeze(T.marker.map(m => Object.freeze(m))),
     // its share of word tokens, per million, both lists (patch plan 7.5):
     // a family card's "N‰ of text" sums it
     valueOf: ch => value.get(ch) ?? 0,

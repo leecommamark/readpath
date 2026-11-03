@@ -26,6 +26,7 @@ import {tokensOf} from '../core/lines.js';
 import {sectionsOf, entryLine, entryIndex} from '../core/sections.js';
 import {glyphTile} from './glyph.js';
 import {charGloss, DICTIONARY_SENSE} from '../core/provenance.js';
+import {readableLine, progressBar} from './texts.js';
 
 // A word's meaning: the dictionary's for a word of 2+ characters; for one
 // character, its lone reading's (brief 7.16; the content's curated gloss), else the
@@ -38,12 +39,13 @@ export function wordGloss(content, form, {wordOf, charOf}) {
 export const glossOf = (content, form, opts) => wordGloss(content, form, opts).text;
 
 // One word part -> its characters as the Reader shows them:
-//   {char, shown, over, id, known, off, offKnown, layer}
+//   {char, shown, over, id, known, learning, off, offKnown, layer}
 //   shown  the form on the page: as written when asked for and s2t changed it
 //   over   the jyutping over it, or null where it's known in that reading
 //          (`all`: the syllable even then, brief 7.18; known, offKnown, off
 //          and id keep their values, so Mark mode still tells them apart)
 //   id     its reading item (the word's jyutping decides it), null off the path
+//   learning  its reading is in progress: met, not yet known (brief 7.29 K4)
 //   offKnown  off the path, and in the learner's offKnown set: no jyutping
 //   layer  文 or 白: the mark on the reading it has here (brief 7.16), or null
 export function wordChars(content, states, part, {asWritten = false, charOf, offKnown, all = false} = {}) {
@@ -56,7 +58,8 @@ export function wordChars(content, states, part, {asWritten = false, charOf, off
     const known = !!id && isKnown(states[id]);
     const offK = !id && !!offKnown && offKnown.has(c.char);
     return {char: c.char, shown: asWritten && c.src ? c.src : c.char,
-            over: !all && (known || offK) ? null : (syl || null), id, known, off: !id, offKnown: offK,
+            over: !all && (known || offK) ? null : (syl || null), id, known,
+            learning: !!id && !known && !!states[id], off: !id, offKnown: offK,
             layer: (id && content.item(id).layer) || null};
   });
 }
@@ -64,6 +67,10 @@ export function wordChars(content, states, part, {asWritten = false, charOf, off
 // readerModel(content, states, text, lines, opts) -> what the Reader shows
 //   opts: {section, asWritten, allJp, selected ('line:part'), mode ('read' |
 //          'mark'), wordOf, charOf, offKnown (a Set of characters)}
+//   `underline`: characters in progress get a mustard rule (brief 7.29 K4),
+//   in Read mode with Show all jyutping off only (with it on, every
+//   character has its jyutping and the rule adds nothing); `learningHere`:
+//   this section has one, for the note that says what the rule is
 export function readerModel(content, states, text, lines, opts = {}) {
   const {asWritten = false, allJp = false, mode = 'read'} = opts;
   const selected = mode === 'read' ? opts.selected || null : null;
@@ -86,12 +93,14 @@ export function readerModel(content, states, text, lines, opts = {}) {
     })};
   });
   const here = coverage(content, states, words);
+  const underline = mode === 'read' && !allJp;
   return {
     id: text.id, title: text.title, focus: !!text.focus,
-    pct: whole.pct, toLearn: whole.toLearn,
+    pct: whole.pct, toLearn: whole.toLearn, learningPct: whole.learningPct,
+    underline, learningHere: underline && here.learning > 0,
     offPath: whole.offPath.filter(ch => !(opts.offKnown && opts.offKnown.has(ch))),
     canAsWritten: !!text.src, asWritten, allJp, mode,
-    section: {i, n: sections.length, pct: here.pct},
+    section: {i, n: sections.length, pct: here.pct, learningPct: here.learningPct},
     lines: shownLines,
   };
 }
@@ -131,8 +140,8 @@ export function shownOfReader(m, word = null) {
 
 // ---- drawing
 
-function charCell(c) {
-  return h('span', {class: `rc${c.off ? ' off' : ''}`},
+function charCell(c, underline = false) {
+  return h('span', {class: `rc${c.off ? ' off' : ''}${underline && c.learning ? ' learning' : ''}`},
     h('span', {class: 'rt jp', lang: 'en'}, c.over || ' '),
     h('span', {class: 'rb'}, c.shown));
 }
@@ -142,10 +151,16 @@ function sectionNav(m, cb, where) {
   return h('nav', {class: `section-nav ${where}`, 'aria-label': 'Sections'},
     h('button', {type: 'button', class: 'btn quiet sec-btn', disabled: m.section.i === 0,
                  'aria-label': 'Previous section', onclick: () => cb.onSection(m.section.i - 1)}, '‹'),
-    h('span', {class: 'sm'}, `Section ${m.section.i + 1} of ${m.section.n} · ${m.section.pct}% readable here`),
+    h('span', {class: 'sm'}, sectionLine(m.section)),
     h('button', {type: 'button', class: 'btn quiet sec-btn', disabled: m.section.i === m.section.n - 1,
                  'aria-label': 'Next section', onclick: () => cb.onSection(m.section.i + 1)}, '›'));
 }
+
+// "Section 2 of 5 · 40% readable · 15% in progress here" (brief 7.29 K5)
+export const sectionLine = s => `Section ${s.i + 1} of ${s.n} · ${s.pct}% readable`
+  + (s.learningPct ? ` · ${s.learningPct}% in progress here` : ' here');
+
+export const LEARN_NOTE = 'Underlined: characters you’re learning.';
 
 export const MODE_HINT = {
   read: 'Tap a word for its meaning.',
@@ -160,7 +175,7 @@ export const MODE_HINT = {
 //   cb: onClose, onRef(char), onReport, kindOf, progressOf
 export function wordBody(word, cb) {
   return [h('div', {class: 'row'},
-      h('span', {class: 'rw big'}, ...word.chars.map(charCell)),
+      h('span', {class: 'rw big'}, ...word.chars.map(c => charCell(c))),
       h('button', {type: 'button', class: 'icon-btn close-btn', 'aria-label': 'Close',
                    onclick: cb.onClose}, '✕')),
     h('p', {class: `gloss-line${word.weak ? ' weak' : ''}`}, word.gloss || 'No meaning in the dictionary for this one.'),
@@ -177,7 +192,8 @@ export function wordBody(word, cb) {
 // renderReader(el, model, cb)
 //   cb: onBack, onFocus, onAllJp(bool), onAsWritten(bool), onSection(i),
 //       onWord(key|null), onRef(char), onReport(word|null), onMode(mode),
-//       onMark(char cell)
+//       onMark(char cell), learnNote (bool: say what the underline is, the
+//       first time one shows; brief 7.29 K4)
 export function renderReader(el, m, cb) {
   const toggle = (label, checked, on) => h('label', {class: 'toggle'},
     h('input', {type: 'checkbox', checked: checked || false, onchange: e => on(e.target.checked)}),
@@ -197,7 +213,7 @@ export function renderReader(el, m, cb) {
           : h('button', {type: 'button', class: `rword${p.selected ? ' sel' : ''}`,
                          'aria-label': `${p.form}: its meaning`,
                          onclick: () => cb.onWord(p.selected ? null : p.key)},
-              h('span', {class: 'rw'}, ...p.chars.map(charCell)))))))));
+              h('span', {class: 'rw'}, ...p.chars.map(c => charCell(c, m.underline))))))))));
 
   const modes = h('div', {class: 'modes', role: 'group', 'aria-label': 'Mode'},
     ...['read', 'mark'].map(k => h('button', {
@@ -214,10 +230,10 @@ export function renderReader(el, m, cb) {
       h('span', {})),
     h('h1', {id: 'reader-h', class: 'reader-title'}, han(m.title)),
     h('div', {class: 'reader-meta'},
-      h('span', {}, `${m.pct}% readable` + (m.toLearn ? ` · ${m.toLearn} ${m.toLearn === 1 ? 'reading' : 'readings'} to learn` : '')),
+      h('span', {}, readableLine(m)),
       m.focus ? h('span', {class: 'tag accent'}, 'Focus')
         : h('button', {type: 'button', class: 'link', onclick: cb.onFocus}, 'Make focus')),
-    h('div', {class: 'bar', 'aria-hidden': 'true'}, h('i', {style: `width:${m.pct}%`})),
+    progressBar(m.pct, m.learningPct),
     h('div', {class: 'reader-controls'},
       modes,
       toggle('Show all jyutping', m.allJp, cb.onAllJp),
@@ -225,6 +241,7 @@ export function renderReader(el, m, cb) {
     m.canAsWritten && h('p', {class: 'note'},
       m.asWritten ? 'Shown as it was pasted, in simplified.' : 'Shown in traditional; it was pasted in simplified.'),
     h('p', {class: 'note mode-hint'}, MODE_HINT[m.mode]),
+    cb.learnNote && m.learningHere && h('p', {class: 'note learn-note'}, LEARN_NOTE),
     sectionNav(m, cb, 'top'),
     body,
     sectionNav(m, cb, 'foot'),

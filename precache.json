@@ -1,5 +1,5 @@
 {
- "build": "b93c76457f270d03",
+ "build": "6a8d163fd2e6feba",
  "files": [
   "actions.js",
   "app.css",
@@ -11,6 +11,7 @@
   "content/dict/index.json",
   "content/glyph.json",
   "content/lexicon.json",
+  "content/marker.json",
   "content/meaning_part.json",
   "content/offchar.json",
   "content/part_role.json",
@@ -29,9 +30,11 @@
   "core/coverage.js",
   "core/family.js",
   "core/focus.js",
+  "core/forecast.js",
   "core/gloss.js",
   "core/import.js",
   "core/lines.js",
+  "core/markers.js",
   "core/normalize.js",
   "core/placement.js",
   "core/provenance.js",

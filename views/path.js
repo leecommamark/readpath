@@ -9,16 +9,19 @@
 // Every tile and stone here opens the character's card (brief 7.26 P4); its
 // search is the header's, as on every tab (P5).
 //
-// Where you are: known characters (main reading in Maintain), known parts,
-// readings learning (met, not yet known), and "about N% of the characters in
-// written Chinese" -- the summed written share of the known characters
-// (decided 6; it counts characters, so like "N% readable" it flatters).
+// Where you are: the trail marker and the characters to the next (brief
+// 7.29 M3), known characters (main reading in Maintain) and characters in
+// progress (met, not yet known; K2), the same for parts, and "about N% of the
+// characters in written Chinese" -- the summed written share of the known
+// characters (decided 6; it counts characters, so like "N% readable" it
+// flatters). The strip carries the markers as stones along it.
 //
 // pathModel() is pure (a test reads it without a DOM); renderPath() draws it.
 
 import {searchButton} from './search.js';
 import {h, clear, put, jpSpan} from './dom.js';
 import {isKnown} from '../core/state.js';
+import {knownShare, toNextMarker} from '../core/markers.js';
 import {familyCards, stateOf} from './families.js';
 import {glyphTile, progressOf} from './glyph.js';
 import {shortGloss} from '../core/gloss.js';
@@ -35,22 +38,22 @@ export function sharePct(perMillion) {
   return pct < 10 ? pct.toFixed(1).replace(/\.0$/, '') : String(Math.round(pct));
 }
 
+// {characters, learning, parts, partsLearning, share}: `learning` counts
+// characters (main readings), as `characters` does
 export function whereYouAre(content, states) {
-  let characters = 0, parts = 0, learning = 0, share = 0;
+  let characters = 0, parts = 0, learning = 0, partsLearning = 0;
   for (const s of Object.values(states)) {
     if (!content.has(s.item)) continue;
     const it = content.item(s.item);
     if (!isKnown(s)) {
-      if (it.kind === 'reading') learning++;
+      if (it.kind !== 'reading') partsLearning++;
+      else if (it.primary) learning++;
       continue;
     }
     if (it.kind !== 'reading') parts++;
-    else if (it.primary) {
-      characters++;
-      share += content.wshareOf(it.char) || 0;
-    }
+    else if (it.primary) characters++;
   }
-  return {characters, parts, learning, share: sharePct(share)};
+  return {characters, parts, learning, partsLearning, share: sharePct(knownShare(content, states))};
 }
 
 export const TRAIL_BEHIND = 4;
@@ -119,22 +122,30 @@ export function trailModel(content, states, nextUp = null) {
           behind: metBefore - before.length, ahead: unmetAfter, next};
 }
 
-// stripModel(content, states, next) -> {total, known, pin}: the whole path
-// as one bar, 1 to its last item; `known` the share of items known, `pin`
-// where Today's next item is (a fraction), or null
-export function stripModel(content, states, next) {
+// stripModel(content, states, next, at) -> {total, known, pin, stones}: the
+// whole path as one bar, 1 to its last item; `known` the share of items
+// known, `pin` where Today's next item is (a fraction), or null; `stones`
+// the trail markers past the start where the path's shares cross them
+// (brief 7.29 M3), each {name, at (a fraction), passed}, `next` naming the
+// learner's next one (`at`: their marker's index), the one labelled
+export function stripModel(content, states, next, at = 0) {
   const total = content.path.length;
   const known = content.path.filter(id => isKnown(states[id])).length;
   const rank = next ? content.rank(next) : null;
+  const stones = content.markers.map((m, i) => ({name: m.name, rank: m.rank, at: (m.rank - 0.5) / total,
+                                                 passed: i <= at, next: i === at + 1}))
+    .filter(s => s.rank > 0);
   return {total, known: known / total, knownN: known, nextRank: rank,
-          pin: rank == null ? null : (rank - 0.5) / total};
+          pin: rank == null ? null : (rank - 0.5) / total, stones};
 }
 
 // pathModel(content, states, nextUp) -> {where, strip, trail, families:
-// {done}}: nextUp is Today's summary.next_up
+// {done}}: nextUp is Today's summary.next_up; where.marker is toNextMarker's
 export function pathModel(content, states, nextUp = null) {
   const trail = trailModel(content, states, nextUp);
-  return {where: whereYouAre(content, states), strip: stripModel(content, states, trail.next),
+  const marker = toNextMarker(content, states);
+  return {where: {...whereYouAre(content, states), marker},
+          strip: stripModel(content, states, trail.next, marker.at),
           trail, families: {done: familyCards(content, states).done.length}};
 }
 
@@ -147,11 +158,16 @@ function stripBlock(s) {
               'aria-label': `${n0(s.knownN)} of ${n0(s.total)} path items known`
                 + (s.nextRank ? `; next is item ${n0(s.nextRank)}` : '')},
       h('span', {class: 'path-strip-known', style: `width:${pct(s.known)}`}),
+      ...s.stones.map(st => h('span', {class: `path-strip-stone${st.passed ? ' is-passed' : ''}`,
+                                       style: `left:${pct(st.at)}`})),
       s.pin != null && h('span', {class: 'path-strip-pin', style: `left:${pct(s.pin)}`})),
+    // the next marker named at its stone (the rest sit too close to label at
+    // 360 px), and the path's length only at its end (M3)
     h('div', {class: 'path-strip-scale sm'},
-      h('span', {}, '1'),
-      s.nextRank ? h('span', {}, `next: item ${n0(s.nextRank)}`) : h('span', {}, 'all met'),
-      h('span', {}, n0(s.total))));
+      ...s.stones.filter(st => st.next).map(st => h('span', {
+        class: 'path-strip-label', lang: 'zh-Hant-HK',
+        style: `left:clamp(0px, calc(${pct(st.at)} - 1.5em), calc(100% - 3em))`}, st.name)),
+      h('span', {class: 'path-strip-end'}, n0(s.total))));
 }
 
 const STATE_SAID = {known: 'known', learning: 'learning', ahead: 'not met yet'};
@@ -205,9 +221,14 @@ export function renderPath(el, m, cb) {
     // every tile and stone here opens its card (7.26 P4; a tree until then)
     h('p', {class: 'note'}, 'Tap a character for its card.'),
     h('section', {class: 'block first where'},
-      h('p', {class: 'known'}, h('b', {}, plural(w.characters, 'character')), ' and ',
-        h('b', {}, plural(w.parts, 'part')), ' known'),
-      h('p', {class: 'note'}, `${plural(w.learning, 'reading')} learning · about ${w.share}% of the characters in written Chinese`)),
+      h('p', {class: 'marker-head'}, h('b', {lang: 'zh-Hant-HK'}, w.marker.marker.name), ` · ${w.marker.marker.gloss}`),
+      w.marker.next && h('p', {class: 'note'}, `${n0(w.marker.more)} more ${w.marker.more === 1 ? 'character' : 'characters'} to `,
+        h('span', {lang: 'zh-Hant-HK', class: 'han'}, w.marker.next.name)),
+      h('p', {class: 'known'}, h('b', {}, plural(w.characters, 'character')), ' known',
+        w.learning > 0 && [' · ', h('b', {}, n0(w.learning)), ' in progress']),
+      h('p', {class: 'note'}, `${plural(w.parts, 'part')} known`
+        + (w.partsLearning ? ` · ${n0(w.partsLearning)} in progress` : '')),
+      h('p', {class: 'note'}, `About ${w.share}% of the characters in written Chinese`)),
     stripBlock(m.strip),
     trailBlock(m.trail, cb),
     rowsBlock(m, cb));

@@ -9,10 +9,13 @@
 // 100% with names or rare characters still in it.
 //
 // coverage(content, states, tokens, {line}) ->
-//   {pct, known, total, readings, toLearn, offPath}
+//   {pct, known, total, readings, toLearn, offPath, learning, learningPct}
 //   pct       known / total as a whole percent, rounded DOWN, so 100% means
 //             every counted token is readable; 100 when nothing counts
 //   known, total   character tokens (occurrences), off-path ones excluded
+//   learning  tokens whose reading is in progress: met, not yet known
+//             (brief 7.29 K1); known + learning <= total
+//   learningPct    learning / total, rounded down; 0 when nothing counts
 //   readings  distinct reading items in the text
 //   toLearn   distinct reading items not yet known
 //   offPath   the characters not on the path, distinct, in text order
@@ -24,7 +27,7 @@ import {isKnown} from './state.js';
 
 export function coverage(content, states, tokens, {line = null} = {}) {
   const toks = line ? tokens.filter(t => line.has(t.line)) : tokens;
-  let known = 0, total = 0;
+  let known = 0, learning = 0, total = 0;
   const readings = new Set(), unknown = new Set(), offPath = [];
   for (const {ch, id} of charItems(content, toks)) {
     if (!id) {
@@ -34,8 +37,13 @@ export function coverage(content, states, tokens, {line = null} = {}) {
     total++;
     readings.add(id);
     if (isKnown(states[id])) known++;
-    else unknown.add(id);
+    else {
+      unknown.add(id);
+      if (states[id]) learning++;
+    }
   }
   const pct = total ? Math.floor((100 * known) / total) : 100;
-  return {pct, known, total, readings: readings.size, toLearn: unknown.size, offPath};
+  const learningPct = total ? Math.floor((100 * learning) / total) : 0;
+  return {pct, known, total, readings: readings.size, toLearn: unknown.size, offPath,
+          learning, learningPct};
 }
