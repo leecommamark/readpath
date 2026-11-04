@@ -278,6 +278,26 @@ mark.rb { background: none; color: inherit;
    never inside it */
 .jp-line { display: flex; justify-content: center; align-items: baseline; gap: var(--s2); }
 .jp-line > p { margin: 0; }
+/* the speaker (brief 7.31 A5): a 44 px tap, a small muted icon, beside a
+   reading, at a word's end, or beside the Reader's word */
+.speaker {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  min-width: var(--tap); min-height: var(--tap); padding: 0; margin: -10px 0;
+  border: 0; background: none; color: var(--muted); cursor: pointer; vertical-align: middle;
+}
+.speaker:active { color: var(--accent); }
+.speaker:focus-visible { outline: 2px solid var(--accent); outline-offset: -6px; border-radius: var(--r); }
+.speaker-icon { width: 22px; height: 22px; }
+.word-line .speaker { margin: -10px -10px -10px -4px; }
+.word-head { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
+.tap-say { margin: 0 0 var(--s2); }
+/* Start and today's On / Quiet (A6) */
+.start-row { display: flex; gap: var(--s2); }
+.start-row .btn.primary { flex: 1; width: auto; }
+.audio-toggle { flex: none; min-height: 52px; padding: 0 var(--s3); border-color: var(--rule);
+                color: var(--ink); font-weight: 500; }
+.audio-toggle.quiet { color: var(--muted); }
+.audio-toggle .speaker-icon { width: 20px; height: 20px; }
 .layer-chip {
   display: inline-block; font-family: var(--han); font-size: var(--t-sm);
   line-height: 1; padding: 3px 5px; border: 1px solid var(--rule); border-radius: 4px;
@@ -862,6 +882,7 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .opt-group legend { padding: 0; }
 .opt-group .note { margin: 0; }
 .opt-cards { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+.opt-cards.three { grid-template-columns: 1fr 1fr 1fr; }
 .opt-card {
   display: flex; flex-direction: column; align-items: center; gap: var(--s1);
   min-height: var(--tap); padding: var(--s3) var(--s2); cursor: pointer; position: relative;
@@ -892,6 +913,26 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .install h2 { font-size: var(--t-h); }
 .install-steps { margin: 0; padding-left: var(--s5); font-family: var(--body);
                  font-size: var(--t-lg); line-height: 1.4; display: flex; flex-direction: column; gap: var(--s2); }
+/* How jyutping works (brief 7.31 J1-J5): each example a tile-like button,
+   its jyutping over its character, a small speaker under them */
+.jp-tones { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); }
+.jp-ex {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 64px; min-height: var(--tap); padding: var(--s2) var(--s3);
+  border: 1px solid var(--rule); border-radius: var(--r); background: var(--surface);
+  color: var(--ink); font: inherit; cursor: pointer;
+}
+span.jp-ex { cursor: default; }
+.jp-ex:active { border-color: var(--accent); }
+.jp-ex:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.jp-ex .jp { font-size: var(--t-sm); line-height: 1.4; }
+.jp-ex .ex-han { font-family: var(--han); font-size: 32px; line-height: 1.1; }
+.jp-ex .ex-gloss { font-size: var(--t-sm); color: var(--muted); line-height: 1.2; }
+.jp-ex .speaker-icon { width: 16px; height: 16px; color: var(--muted); }
+.jp-letters { margin: 0; display: grid; grid-template-columns: 1fr; gap: var(--s2); }
+.jp-letters dt { margin-top: var(--s2); }
+.jp-letters dt .mono { font-weight: 600; }
+.jp-letters dd { margin: 0; display: flex; flex-wrap: wrap; gap: var(--s2); }
 .tone-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--s1);
             padding: var(--s3) var(--s2); border-radius: var(--r); background: var(--surface);
             border: 1px solid var(--rule); }

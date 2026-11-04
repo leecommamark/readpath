@@ -13,9 +13,9 @@
 //
 // refModel() is pure; renderRef() draws it into the overlay.
 
-import {h, han, clear, put, rubyWord, jpSpan, layerChip} from './dom.js';
+import {h, han, clear, put, rubyWord, jpSpan, layerChip, speaker} from './dom.js';
 import {builtFrom, roleText, standsLine, relationOf, word as wordEntry, allOver, charJp, meaningWording,
-        cardWords, WORDS_SHOWN, LAYER_TEXT, partRankOf, rankSaid} from './facts.js';
+        cardWords, WORDS_SHOWN, LAYER_TEXT, partRankOf, rankSaid, sayFor, sayWord} from './facts.js';
 import {isKnown, MAINTAIN} from '../core/state.js';
 import {canMarkKnown, canForget, canKnowOff} from '../actions.js';
 import {canTestMe} from '../runner.js';
@@ -255,7 +255,7 @@ export function refModel(content, states, form, texts = [], opts = {}) {
     const readings = content.readingsOf(form).filter(r => r.item).map(r => {
       const id = `r:${form}:${r.jp}`;
       return {id, jp: r.jp, gloss: r.gloss, main: !!r.primary,
-              layer: r.layer || null,
+              layer: r.layer || null, say: sayFor(content, id),
               relation: r.primary ? null : relationOf(r),
               status: statusOf(content, states[id], id)};
     });
@@ -430,8 +430,10 @@ function usedInBody(m, cb) {
       : h('span', {class: 'sm'}, ` and ${u.more} more`)) : '')];
 }
 
-function wordsBody(m) {
-  return m.words.map(w => h('p', {class: 'word-line'}, rubyWord(w.form, w.over), w.gloss ? ` ${w.gloss}` : ''));
+// each word with its speaker at the end (brief 7.31 A5), when there is one
+function wordsBody(m, cb) {
+  return m.words.map(w => h('p', {class: 'word-line'}, rubyWord(w.form, w.over), w.gloss ? ` ${w.gloss}` : '',
+    speaker(sayWord(w.form), cb.speech)));
 }
 
 // A part role: its reading or meaning, what it stands for, and Test me (not
@@ -538,7 +540,7 @@ function sectionsOf(m, cb) {
   const has = key => !!(m.summaries || {})[key];
   if (m.built && m.built.length) out.push(['built', builtBody(m, cb)]);
   if (m.familyCard) out.push(['family', familyBody(m, cb)]);
-  if (m.words && m.words.length) out.push(['words', wordsBody(m)]);
+  if (m.words && m.words.length) out.push(['words', wordsBody(m, cb)]);
   if (m.looksLike && m.looksLike.length) out.push(['looksLike', [h('p', {class: 'ref-row'}, ...m.looksLike.map(x => rubyBtn(x, cb)))]]);
   if (m.inTexts && m.inTexts.length) out.push(['inTexts', textLines(m, cb)]);
   if (m.usedIn && m.usedIn.total) out.push(['usedIn', usedInBody(m, cb)]);
@@ -587,7 +589,9 @@ export function renderRef(el, m, cb) {
 
   if (m.kind === 'char') {
     const main = m.readings.find(r => r.main) || m.readings[0];
-    const reading = r => [h('div', {class: 'jp-line'}, h('p', {class: 'jp big-jp'}, r.jp), layerChip(r.layer, LAYER_TEXT[r.layer])),
+    // the head's reading, with its speaker (brief 7.31 A5; cb.speech null: none)
+    const reading = r => [h('div', {class: 'jp-line'}, h('p', {class: 'jp big-jp'}, r.jp), layerChip(r.layer, LAYER_TEXT[r.layer]),
+      speaker(r.say, cb.speech)),
       r.gloss && h('p', {class: 'gloss-line'}, r.gloss)];
     // a character that is a part (青 止) says what its border means, beside
     // it (Mark, 7.26 Phase 3 check: not down in As a part)

@@ -9,7 +9,8 @@ import {glyphKind} from './glyph.js';
 
 // showSession(el, content, run, {onExit(), onRef(char), onReport(shown),
 //                                tipOnce(), lineOf({text, line}),
-//                                keyUnseen(kind), keySeen(kind)})
+//                                keyUnseen(kind), keySeen(kind),
+//                                speech, auto: audio.js audioFor's, brief 7.31})
 // ‹ Back takes back the last answer and asks it again (Mark, 2026-09-29);
 // a check is no answer, so Back steps over it (brief 7.30). The counter
 // counts no checks (runner.js progress).
@@ -63,6 +64,7 @@ export function showSession(el, content, run, cb) {
       tipOnce: cb.tipOnce,
       keyUnseen: cb.keyUnseen, keySeen: cb.keySeen,
       kindOf: form => glyphKind(content, form),
+      speech: cb.speech || null, auto: !!cb.auto,
     });
     window.scrollTo(0, 0);
   }

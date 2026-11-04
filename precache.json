@@ -1,8 +1,9 @@
 {
- "build": "991a54609bc6f98e",
+ "build": "5de228429dc08e96",
  "files": [
   "actions.js",
   "app.css",
+  "audio.js",
   "build.js",
   "cache.js",
   "content/about.json",
@@ -82,6 +83,7 @@
   "pwa.js",
   "reports.js",
   "runner.js",
+  "speech.js",
   "starter/jamcaa.txt",
   "store.js",
   "texts.js",
@@ -93,6 +95,7 @@
   "views/feedback.js",
   "views/find.js",
   "views/glyph.js",
+  "views/jyutping.js",
   "views/parts.js",
   "views/path.js",
   "views/reader.js",

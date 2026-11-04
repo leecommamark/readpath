@@ -17,8 +17,8 @@
 // readerModel() is pure (a test reads it without a DOM); renderReader()
 // draws it. What a tap does is the shell's (main.js).
 
-import {h, han, clear, put, jpSpan, layerChip} from './dom.js';
-import {LAYER_TEXT} from './facts.js';
+import {h, han, clear, put, jpSpan, layerChip, speaker} from './dom.js';
+import {LAYER_TEXT, sayWord} from './facts.js';
 import {readingItemFor} from '../core/focus.js';
 import {isKnown} from '../core/state.js';
 import {coverage} from '../core/coverage.js';
@@ -172,10 +172,12 @@ export const MODE_HINT = {
 // each marked character has here, each character as a tile that opens its
 // card, and Report, last (Mark, 2026-09-29, 6b).
 //   word: {form, gloss, weak, chars: [{char, over, shown, off}], layers}
-//   cb: onClose, onRef(char), onReport, kindOf, progressOf
+//   cb: onClose, onRef(char), onReport, kindOf, progressOf, speech (brief
+//   7.31 A5: the word's speaker beside it; null, none)
 export function wordBody(word, cb) {
   return [h('div', {class: 'row'},
-      h('span', {class: 'rw big'}, ...word.chars.map(c => charCell(c))),
+      h('span', {class: 'word-head'}, h('span', {class: 'rw big'}, ...word.chars.map(c => charCell(c))),
+        speaker(sayWord(word.form), cb.speech)),
       h('button', {type: 'button', class: 'icon-btn close-btn', 'aria-label': 'Close',
                    onclick: cb.onClose}, '✕')),
     h('p', {class: `gloss-line${word.weak ? ' weak' : ''}`}, word.gloss || 'No meaning in the dictionary for this one.'),

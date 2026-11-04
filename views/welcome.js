@@ -1,7 +1,8 @@
-// welcome.js — first run's two screens (patch plan 7B, Phase 1).
+// welcome.js — first run's screens (patch plan 7B, Phase 1).
 //
 // The welcome (what Read Path does, Start, and Import for someone moving
-// from another phone), then the placement offer. In a Safari tab on iOS, and
+// from another phone), then How jyutping works, offered (brief 7.31 J1),
+// then the placement offer. In a Safari tab on iOS, and
 // in a browser on Android, an install screen comes first and is all there
 // is: the steps (or Android's Install button), and a quiet way to carry on
 // in the browser (Mark, 7B Phase 0; install-only, 7.14).
@@ -78,6 +79,21 @@ export function renderWelcome(el, cb) {
     h('section', {class: 'block quiet'},
       h('p', {class: 'note'}, 'Moving from another phone?'),
       h('button', {type: 'button', class: 'link', onclick: cb.onImport}, 'Import progress')));
+}
+
+// renderJpOffer(el, cb)   cb: onShow, onSkip (brief 7.31 J1, Mark: an
+// optional step, as the check is, and in Settings afterwards)
+export function renderJpOffer(el, cb) {
+  put(clear(el),
+    h('div', {class: 'top'}),
+    h('h1', {id: 'welcome-h'}, 'New to jyutping?'),
+    h('section', {class: 'block first'},
+      h('p', {class: 'note'},
+        'Jyutping is how Read Path writes each character’s sound. A short page shows the tones '
+        + 'and the letters to know, with sounds to hear. It’s optional, and it’s in Settings later.'),
+      h('div', {class: 'btns stack'},
+        h('button', {type: 'button', class: 'btn primary', onclick: cb.onShow}, 'Show me how it works'),
+        h('button', {type: 'button', class: 'btn quiet', onclick: cb.onSkip}, 'Skip'))));
 }
 
 // renderOffer(el, cb)   cb: onCheck, onNo

@@ -8,8 +8,9 @@
 // settings screen exists.
 
 import {searchButton} from './search.js';
-import {h, han, clear, put} from './dom.js';
+import {h, han, clear, put, speakerIcon} from './dom.js';
 import {isKnown} from '../core/state.js';
+import {DEFAULTS} from '../core/today.js';
 import {glyphTile} from './glyph.js';
 import {toNextMarker} from '../core/markers.js';
 import {readableLine, progressBar} from './texts.js';
@@ -109,16 +110,29 @@ function gear() {
   return svg;
 }
 
+// Today's audio, beside Start (brief 7.31 A6): one button, On or Quiet,
+// that turns to the other; Keep going and Practise again follow it.
+function audioToggle(value, onChange) {
+  const quiet = value === 'quiet';
+  return h('button', {type: 'button', class: `btn audio-toggle${quiet ? ' quiet' : ''}`,
+                      'aria-pressed': String(!quiet), 'aria-label': quiet ? 'Audio: quiet. Turn on' : 'Audio: on. Make quiet',
+                      onclick: () => onChange(quiet ? 'on' : 'quiet')},
+    speakerIcon(quiet), quiet ? 'Quiet' : 'On');
+}
+
 // renderToday(el, model, {date, onStart, onExport, onImport, onRef, trouble,
 //                         version, loadedMs, unsent, practiceCount, onPractice,
 //                         onKeepGoing, onRead(textId),
 //                         build, update, onUpdate, install, onInstall, exportDue,
 //                         onFeedback, onAbout, onSettings, placementOffer, onCheck, onNotNow,
 //                         placementPending ('questions' | 'review' | falsy), onResume,
-//                         onStartOver, placementHigh, onPlacementNoted})
+//                         onStartOver, placementHigh, onPlacementNoted, newPerDay})
 //   update: a new build is waiting ("Update ready · Reload", patch plan 7B);
 //   install: 'ios' (the Add to Home Screen steps) | 'prompt' (the browser's
-//   Install) | null; exportDue: pwa.js's exportReminder(), {days, never}
+//   Install) | null; exportDue: pwa.js's exportReminder(), {days, never};
+//   newPerDay: the learner's new items a day, for Keep going's note (7.31);
+//   dayAudio: 'on' | 'quiet', today's audio beside Start, or null for no
+//   toggle (audio Off, or no Cantonese voice; brief 7.31 A6); onDayAudio(v)
 export function renderToday(el, m, opts) {
   // Done for the day: practise what was answered (it doesn't count), or keep
   // going into tomorrow's session early (it does). Mark, 2026-09-29.
@@ -131,7 +145,8 @@ export function renderToday(el, m, opts) {
             `Practise again (${opts.practiceCount})`),
           h('button', {type: 'button', class: 'btn primary', onclick: opts.onKeepGoing}, 'Keep going')),
         h('p', {class: 'note'},
-          'Practice doesn’t change your schedule. Keep going starts tomorrow’s reviews early, then 10 new.'))
+          'Practice doesn’t change your schedule. Keep going starts tomorrow’s reviews early, then '
+            + `${opts.newPerDay ?? DEFAULTS.new_per_day} new.`))
     : h('section', {class: 'block first', 'aria-labelledby': 'session-h'},
         h('div', {class: 'row'},
           h('h2', {id: 'session-h'}, 'Today’s session'),
@@ -140,8 +155,12 @@ export function renderToday(el, m, opts) {
           m.from && [m.line ? ' · ' : '', h('span', {class: 'nowrap'}, m.from)]),
         m.backlog && h('p', {class: 'note'},
           'Lots of reviews are due, so there are no new items today. They come back once the reviews are down.'),
-        h('button', {type: 'button', class: 'btn primary wide', onclick: opts.onStart},
-          'Start'));
+        opts.dayAudio
+          ? h('div', {class: 'start-row'},
+              h('button', {type: 'button', class: 'btn primary wide', onclick: opts.onStart}, 'Start'),
+              audioToggle(opts.dayAudio, opts.onDayAudio))
+          : h('button', {type: 'button', class: 'btn primary wide', onclick: opts.onStart},
+              'Start'));
 
   const next = m.next && h('section', {class: 'block', 'aria-label': 'Next up'},
     h('div', {class: 'row'}, h('span', {class: 'label'}, 'Next up'),

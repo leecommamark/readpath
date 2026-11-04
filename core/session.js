@@ -42,7 +42,7 @@ export function skipCheck(session) {
 //   rng:     seeded; compose draws from it, and so does a recomposition
 //   asOf:    compose as if it were this day (Keep going, step 4 6b: the next
 //            day with anything due, so its reviews are done early and it has
-//            its own 10 new); answers are still recorded on `today`
+//            its own new items); answers are still recorded on `today`
 export function openSession(content, learner, today, rng, {asOf = today} = {}) {
   const composed = compose(content, learner, asOf, rng);
   return {today, asOf, rng, composed, summary: composed.summary,

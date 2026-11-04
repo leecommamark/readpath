@@ -51,6 +51,34 @@ export function rubyWord(form, over, {cls = '', mark = -1} = {}) {
 }
 
 
+// A speaker that says `text` (brief 7.31 A5), or null when there is
+// nothing to say or no Cantonese voice to say it (speech.js): then no
+// speaker is drawn at all. Its label says what it will say ("Hear 銀行").
+export const canSay = speech => !!(speech && typeof speech.canSpeak === 'function' && speech.canSpeak());
+export function speaker(text, speech) {
+  if (!text || !canSay(speech)) return null;
+  return h('button', {type: 'button', class: 'speaker', 'aria-label': `Hear ${text}`, title: `Hear ${text}`,
+                      onclick: e => { e.stopPropagation(); speech.say(text); }}, speakerIcon());
+}
+
+// The speaker drawn here (no icon set), as the gear is: a cone, then two
+// sound waves, or, quiet, a cross.
+const SVG = 'http://www.w3.org/2000/svg';
+export function speakerIcon(quiet = false) {
+  const el = (tag, attrs) => {
+    const e = document.createElementNS(SVG, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+    return e;
+  };
+  const line = {fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round'};
+  const svg = el('svg', {class: 'speaker-icon', viewBox: '0 0 24 24', 'aria-hidden': 'true'});
+  svg.append(el('path', {d: 'M4 9h4l5-4v14l-5-4H4z', fill: 'currentColor'}),
+    ...(quiet ? [el('path', {...line, d: 'M16 9l5 6M21 9l-5 6'})]
+              : [el('path', {...line, d: 'M16 9.5a3.5 3.5 0 0 1 0 5'}),
+                 el('path', {...line, d: 'M18.5 7a7 7 0 0 1 0 10'})]));
+  return svg;
+}
+
 // el.append(), skipping false, null and undefined as h() does.
 export function put(el, ...children) {
   append(el, children);

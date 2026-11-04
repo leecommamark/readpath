@@ -11,7 +11,7 @@
 //  1. Due reviews: every state due today or earlier, most overdue first, then
 //     by path rank.
 //  2. New items, unless more than `backlog` (100) reviews are due: up to
-//     `new_per_day` (10), less the items already met today. With a focus
+//     `new_per_day` (7; brief 7.31), less the items already met today. With a focus
 //     text that isn't done, its available items come first, and the path
 //     fills any slots left (Mark, 2026-09-28). Available means unmet with
 //     every prerequisite met (unlock.js).
@@ -56,7 +56,7 @@ export const SECONDS_PER_TASK = 7;         // DESIGN: 100 tasks ≈ 12 minutes
 export const SECONDS_PER_CHECK = 2;        // brief 7.30 C6
 export const MEET_RUN = 2;                 // the most Meets in a row (7.30)
 export const MIN_GAP = 2;                  // the least a quiz comes after its Meet, to break a run
-export const DEFAULTS = Object.freeze({new_per_day: 10, session_cap: 100, backlog: 100});
+export const DEFAULTS = Object.freeze({new_per_day: 7, session_cap: 100, backlog: 100});
 
 // ---- 1. reviews
 

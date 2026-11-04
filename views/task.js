@@ -23,10 +23,17 @@
 //             outlined) and Continue straight under the tiles -- no
 //             verdict, no score (Mark's iPhone check: a right tap moving on
 //             by itself after 0.6 s was too quick).
+//
+// Audio (brief 7.31 A5): `say` on a reveal (and a check) is what its
+// speaker says (facts.js sayFor). A speaker sits under the tile with the
+// 文/白 chip on a Meet and on every answer, and under a check's tiles once
+// tapped; never on a question before it is answered. cb.speech is null
+// when there is to be no speaker (audio.js audioFor); cb.auto speaks a
+// Meet and an answer once as they appear.
 
-import {h, han, clear, put, rubyWord, jpSpan, layerChip} from './dom.js';
+import {h, han, clear, put, rubyWord, jpSpan, layerChip, speaker, canSay} from './dom.js';
 import {cardWords, word as wordEntry, builtFrom, roleText, standsLine, whyLine, relationOf, overOf, meaningWording,
-        LAYER_TEXT} from './facts.js';
+        LAYER_TEXT, sayFor} from './facts.js';
 import {kindOf} from '../core/content.js';
 import {readingChoices, characterChoices, meaningChoices,
         tellApartChoices, checkChoices} from '../core/choices.js';
@@ -79,7 +86,7 @@ function partCard(content, task, base, states = {}) {
             // the meaning and the card's words with the reading, as the
             // inferred Meet shows them, so the answer teaches without a tap
             // (brief 7.9; the card's words since 7.10)
-            reveal: {glyph: m.char, jp: m.jp, gloss: m.gloss,
+            reveal: {glyph: m.char, jp: m.jp, gloss: m.gloss, say: sayFor(content, task.target),
                      words: cardWords(content, task.target),
                      pattern: pat ? PATTERN_TEXT[pat.split(':')[1]] || null : null}};
   }
@@ -95,7 +102,7 @@ function partCard(content, task, base, states = {}) {
             // sound part (CO-048), then a line per choice: the character, its
             // reading and meaning, then its meaning part and what that part
             // means (CO-049; Mark, 2026-09-29: 清 cing1 clear · 氵 water)
-            reveal: {glyph: t.answer, jp: a.jp, gloss: a.gloss,
+            reveal: {glyph: t.answer, jp: a.jp, gloss: a.gloss, say: sayFor(content, content.mainReading(t.answer)),
                      // and the answer's card words under them (7.9, 7.10),
                      // of 4 characters at most (brief 7.20 P1: not
                      // 黔東南苗族侗族自治州)
@@ -125,8 +132,9 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
                 fallback: task.fallback, role: task.role};
   if (task.task === 'check') {
     const c = checkChoices(content, task, rng, session);
+    const main = content.mainReading(c.answer);
     return {...base, kind: 'check', lead: c.part ? 'Which has' : 'Tap', ask: c.part || c.answer,
-            tail: c.part ? 'in it?' : '',
+            tail: c.part ? 'in it?' : '', say: main ? sayFor(content, main) : null,
             choices: c.choices.map(ch => ({value: ch, label: ch, type: 'han'})), answer: c.answer};
   }
   if (content.kind(task.item) !== 'reading') {
@@ -138,7 +146,7 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
   }
   const it = content.item(task.item);
   const reveal = {glyph: it.char, jp: it.jp, gloss: it.gloss, layer: it.layer || null,
-                  words: cardWords(content, task.item)};
+                  say: sayFor(content, task.item), words: cardWords(content, task.item)};
   // a question's answer teaches as a part test's does: the reading, its
   // meaning and the card's words (brief 7.9, Mark: "all of the tests"; the
   // card's words, all of them, since 7.10)
@@ -286,11 +294,12 @@ function wordLines(ws) {
 
 // The reading, then the meaning on a line of its own (Mark's iPhone check:
 // "the english gloss and reading appeared in the same line").
-// With no `jp` (a Meet's, which sits over its tile), the 文/白 chip alone.
-function readingBlock(jp, gloss, cls = '', layer = null) {
+// With no `jp` (a Meet's, which sits over its tile), the 文/白 chip alone,
+// and the speaker beside it (brief 7.31 A5).
+function readingBlock(jp, gloss, cls = '', layer = null, spk = null) {
   return h('div', {class: `reading-block ${cls}`.trim()},
-    (jp || layer) && h('div', {class: 'jp-line'}, jp && h('p', {class: 'jp big-jp'}, jp),
-      layerChip(layer, LAYER_TEXT[layer])),
+    (jp || layer || spk) && h('div', {class: 'jp-line'}, jp && h('p', {class: 'jp big-jp'}, jp),
+      layerChip(layer, LAYER_TEXT[layer]), spk),
     gloss && h('p', {class: 'gloss-line'}, gloss));
 }
 
@@ -389,7 +398,7 @@ function revealBlock(m, ok, cb, given) {
   const top = h('div', {class: 'answer-block'},
     r.glyph ? h('p', {class: 'answer-line center'}, glyphButton(r.glyph, cb, 'xl', null, r.jp))
             : readingBlock(r.jp, null, 'center'),
-    readingBlock(null, r.gloss, 'center', r.layer));
+    readingBlock(null, r.gloss, 'center', r.layer, speaker(r.say, cb.speech)));
   if (m.kind === 'question' && m.task === 'tell_apart') {
     main = top;
   } else {
@@ -469,7 +478,7 @@ export function renderTask(el, m, cb) {
       glyphButton(m.glyph, cb, 'xl', null, r.jp || null),
       m.partLead && h('p', {class: 'note center part-lead'}, m.partLead),
       m.quiet ? h('div', {class: 'muted'}, readingBlock(null, r.gloss, 'center', r.layer))
-              : readingBlock(null, r.gloss, 'center', r.layer),
+              : readingBlock(null, r.gloss, 'center', r.layer, speaker(r.say, cb.speech)),
       builtLine(m.built, cb),
       ...keys.map(k => h('p', {class: 'note center border-key'}, BORDER_KEY[k])),
       tipLine(cb),
@@ -482,6 +491,7 @@ export function renderTask(el, m, cb) {
       wordLines(r.words),
       likeLine(m.built, cb),
       h('div', {class: 'foot'}, cont(go), report()));
+    autoSay(cb, r.say);
     return;
   }
 
@@ -539,7 +549,13 @@ export function renderTask(el, m, cb) {
     put(foot, answer, tipLine(cb), next);
     put(clear(footReport), report(value));
     showNext(el, next, answer);
+    autoSay(cb, m.reveal && m.reveal.say);
   }
+}
+
+// Auto (brief 7.31 A5): a Meet, and an answer, speak once as they appear.
+function autoSay(cb, text) {
+  if (cb.auto === true && canSay(cb.speech) && text) cb.speech.say(text);
 }
 
 // The check (brief 7.30): three tiles, no jyutping or gloss. onAnswer(ok) is
@@ -568,7 +584,8 @@ function renderCheck(el, m, cb, report) {
     cb.onAnswer(ok);
     const next = h('button', {type: 'button', class: 'btn primary wide', onclick: () => cb.onNext()},
                    'Continue');
-    put(foot, next);
+    const spk = speaker(m.say, cb.speech);
+    put(foot, spk && h('p', {class: 'center tap-say'}, spk), next);
     showNext(el, next);
   }
 }

@@ -21,6 +21,8 @@ import {libraryModel, previewOf, renderTexts, linkInput, NOT_A_SET} from './view
 import {fetchBundleIndex, fetchBundleTexts} from './core/bundle.js';
 import {h, clear, put, jpSpan} from './views/dom.js';
 import {applyJp, setJp} from './jp.js';
+import {createSpeech} from './speech.js';
+import {audioMode, setAudio, dayAudio, setDayAudio, audioFor} from './audio.js';
 import {settingsModel, renderSettings} from './views/settings.js';
 import {bodyOfFile, autoTitle} from './core/import.js';
 import {readerModel, renderReader, shownOfReader, wordBody} from './views/reader.js';
@@ -51,7 +53,8 @@ import {makeReport, addReport, unsent} from './reports.js';
 import {createOverlays, createCardStack, createLayer, LAYER, runTree} from './overlay.js';
 import {glyphKind, tileProgress} from './views/glyph.js';
 import {needsWelcome, installContext, starterFocus, finishWelcome, sayNo} from './firstrun.js';
-import {renderWelcome, renderOffer, renderInstall, installFirst} from './views/welcome.js';
+import {renderWelcome, renderOffer, renderJpOffer, renderInstall, installFirst} from './views/welcome.js';
+import {renderJyutping, toneGlosses} from './views/jyutping.js';
 import {BUILD} from './build.js';
 import {watchWorker, installOffer, exportReminder, askPersist} from './pwa.js';
 import {feedbackDoc, deviceOf, mailtoUrl, toSend, markSent, undoSent,
@@ -67,11 +70,12 @@ const $ = id => document.getElementById(id);
 // screens of its own, Browse families (#steps) and Meaning parts (#steps/meaning)
 const TABS = ['today', 'texts', 'path', 'steps'];
 const SCREENS = ['today', 'texts', 'path', 'reader', 'family', 'check', 'parts', 'done', 'browse', 'tree',
-                 'session', 'welcome', 'about', 'settings'];
+                 'session', 'welcome', 'about', 'settings', 'jyutping'];
 
 const app = {
   store: null, content: null, version: null, today: null,
   learner: null, composed: null, run: null,
+  speech: null,             // the Cantonese voice (speech.js; brief 7.31)
   dict: null, cache: null, loadedMs: null, library: null,
   reader: null,             // {id, lines, selected}: the text being read
   family: null,             // {key, mode}: the family page open (patch plan 7.5)
@@ -98,6 +102,16 @@ const kindOf = form => glyphKind(app.content, form);
 // a tile's state, for its border (every tile but a question's: Mark, after
 // patch plan 7.7): progressFrom(states)(form)
 const progressFrom = states => form => tileProgress(app.content, states, form);
+// What audio the screen now has (brief 7.31 A5, A6): {speech, auto}; speech
+// null means no speaker anywhere (Off, no voice, or a quiet run).
+const audioNow = () => audioFor({mode: audioMode(app.store.load(KEYS.settings, {})),
+                                 speech: app.speech, run: app.run});
+// A run carries the day's On / Quiet from its start (A6).
+function begin(run) {
+  run.audio = dayAudio(app.store, systemDay());
+  app.run = run;
+  return run;
+}
 
 
 function dateLabel() {
@@ -138,6 +152,11 @@ function showToday() {
     onStart: () => startSession(),
     onKeepGoing: () => startSession({keepGoing: true}),
     onPractice: () => startSession({practice: true}),
+    newPerDay: app.learner.settings.new_per_day,
+    // On / Quiet beside Start (brief 7.31 A6): with a voice and audio not Off
+    dayAudio: audioFor({mode: audioMode(app.learner.settings), speech: app.speech}).speech
+      ? dayAudio(app.store, app.today) : null,
+    onDayAudio: v => { setDayAudio(app.store, app.today, v); showToday(); },
     practiceCount: practiceItems(app.store, app.today).length,
     onExport: () => exportProgress(),
     onImport: () => $('importFile').click(),
@@ -276,6 +295,7 @@ function route(st = history.state) {
   else if (hash === 'path/done') showDone({push: false});
   else if (hash === 'about') showAbout({push: false});
   else if (hash === 'settings') showSettings({push: false});
+  else if (hash === 'jyutping') showJyutping({push: false});
   else showTab(hash);
 }
 
@@ -344,6 +364,7 @@ function drawRef() {
     onRef: openRef,
     kindOf,
     progressOf: progressFrom(learner.states),
+    speech: audioNow().speech,
     onMarkKnown: act(markKnown),
     onForgot: act(forgot),
     // Test me: a part's own test, now; not from inside a session
@@ -521,12 +542,34 @@ function showSettings({push = true} = {}) {
   app.family = null;
   showScreen('settings');
   markTab('today');
-  const draw = () => renderSettings($('settings'), settingsModel(app.store.load(KEYS.settings, {})), {
+  const draw = () => renderSettings($('settings'), settingsModel(app.store.load(KEYS.settings, {}),
+                                                                 {voice: !!(app.speech && app.speech.canSpeak())}), {
     onBack: () => (history.state && history.state.settings ? history.back() : showTab('today')),
     onJp: mode => { setJp(document.documentElement, app.store, mode); draw(); },
     onName: name => saveName(app.store, name),
+    onHowJp: () => showJyutping(),
+    // Off · Tap · Auto (brief 7.31 A5)
+    onAudio: mode => { setAudio(app.store, mode); draw(); },
+    // Today composes from it when next shown (brief 7.31 D2)
+    onPace: n => { app.store.save(KEYS.settings, {...app.store.load(KEYS.settings, {}), new_per_day: n}); draw(); },
   });
   draw();
+  window.scrollTo(0, 0);
+}
+
+// How jyutping works (brief 7.31 J1-J5): from Settings, Back as Settings';
+// in first run, Continue to the placement offer, and no history of its own
+function showJyutping({push = true} = {}) {
+  if (push && !app.firstRun) history.pushState({jyutping: true}, '', '#jyutping');
+  app.reader = null;
+  app.family = null;
+  showScreen('jyutping');
+  if (!app.firstRun) markTab('today');
+  renderJyutping($('jyutping'), {firstRun: app.firstRun, glosses: toneGlosses(app.content)}, {
+    onBack: () => (history.state && history.state.jyutping ? history.back() : showSettings()),
+    onContinue: showOffer,
+    speech: audioNow().speech,
+  });
   window.scrollTo(0, 0);
 }
 
@@ -725,6 +768,7 @@ function drawReader() {
   };
   renderReader($('reader'), m, {
     learnNote: !!r.learnNote,
+    speech: audioNow().speech,
     onBack: () => (history.state && history.state.reader ? history.back() : showTab('texts')),
     async onFocus() {
       app.library.setFocus(t.id);
@@ -893,9 +937,10 @@ function startSession({keepGoing = false, practice = false} = {}) {
                                        {texts: app.library.learnerTexts()})
                        : startRun(app.content, app.store, app.today,
                                   {keepGoing, texts: app.library.learnerTexts()});
-  app.run = run;
+  begin(run);
   showScreen('session');
   showSession($('session'), app.content, run, {
+    ...audioNow(),
     onExit: () => { app.run = null; showToday(); showTab('today'); },
     onRef: openRef,
     onReport: shown => openReport(shown, 'card'),
@@ -992,6 +1037,7 @@ function drawWord(w) {
                                'search'),
     kindOf,
     progressOf: progressFrom(states),
+    speech: audioNow().speech,
   })));
 }
 
@@ -1071,9 +1117,10 @@ function testMe(id) {
   app.today = systemDay();
   const before = app.store.load(KEYS.states, {})[id] || null;
   const run = startTestMe(app.content, app.store, app.today, id);
-  app.run = run;
+  begin(run);
   showScreen('session');
   showSession($('session'), app.content, run, {
+    ...audioNow(),
     onExit: () => {
       app.run = null;
       route();
@@ -1102,9 +1149,10 @@ function studyFamily(key) {
   app.today = systemDay();
   const run = startFamily(app.content, app.store, app.today, card,
                           {texts: app.library.learnerTexts()});
-  app.run = run;
+  begin(run);
   showScreen('session');
   showSession($('session'), app.content, run, {
+    ...audioNow(),
     onExit: () => {
       app.run = null;
       route();
@@ -1434,7 +1482,8 @@ async function importProgress(file) {
 
 function showScreen(name) {
   for (const t of SCREENS) $(t).hidden = t !== name;
-  $('tabs').hidden = name === 'session' || name === 'check' || name === 'welcome';
+  $('tabs').hidden = name === 'session' || name === 'check' || name === 'welcome'
+    || (name === 'jyutping' && app.firstRun);
 }
 
 function markTab(name) {
@@ -1489,10 +1538,18 @@ function showWelcome() {
     });
   } else {
     renderWelcome($('welcome'), {
-      onStart: showOffer,
+      onStart: showJpOffer,
       onImport: () => $('importFile').click(),
     });
   }
+  window.scrollTo(0, 0);
+}
+
+// How jyutping works, offered (brief 7.31 J1): Show me, then Continue to
+// the placement offer; Skip goes straight there
+function showJpOffer() {
+  showScreen('welcome');
+  renderJpOffer($('welcome'), {onShow: () => showJyutping(), onSkip: showOffer});
   window.scrollTo(0, 0);
 }
 
@@ -1549,6 +1606,14 @@ async function boot() {
   if (carry.carried.length) app.store.save(KEYS.states, carry.states);
   // tones as marks or numbers (7.12): before any jyutping is drawn
   applyJp(document.documentElement, app.store);
+  // the Cantonese voice (brief 7.31): Today and Settings draw again once
+  // it is known, since a browser may list its voices late
+  app.speech = createSpeech();
+  app.speech.ready.then(() => {
+    if (!$('today').hidden && !app.run) showToday();
+    if (!$('settings').hidden) showSettings({push: false});
+    if (!$('jyutping').hidden) showJyutping({push: false});
+  });
   $('loading').hidden = true;
   app.applyUpdate = watchWorker({build: BUILD, onReady: updateReady});
   if (installContext(navigator, globalThis.matchMedia).standalone) {

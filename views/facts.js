@@ -40,6 +40,30 @@ export function firstWord(content, id) {
   return null;
 }
 
+// What a speaker says for a reading item (brief 7.31 A2): the voice takes
+// text, not jyutping, and picks its own reading, so a character is said
+// alone only for the reading it takes alone -- its main one, unless the
+// data gives it another lone reading (生 saang1, 行 haang4) -- and only if
+// Mark's ear didn't find it wrong alone (SAID_WRONG_ALONE). Any other reading
+// says the card's first word (行 hong4 → 銀行). Mark, 2026-11-03: option 1,
+// after all 88 multi-reading characters saying a word in Phase 2. null when
+// there is nothing to say: no word, or one the voice can't say (UNSPOKEN).
+// Here and not in core/ because the card's first word is firstWord's.
+export function sayFor(content, id) {
+  if (!content.has(id) || content.kind(id) !== 'reading') return null;
+  const ch = content.item(id).char;
+  if (content.loneReading(ch) === id && !SAID_WRONG_ALONE.has(ch)) return sayWord(ch);
+  const w = firstWord(content, id);
+  return w ? sayWord(w.form) : null;
+}
+// Characters the voice says wrong alone, so they say their word: Mark's ear
+// on the Mac's voice (Sinji, Firefox), the first 200 main readings, 2026-11-03.
+export const SAID_WRONG_ALONE = new Set(['相']);
+// Words the Cantonese voice can't say at all, never offered (A4). None yet:
+// 噉, said wrong alone, has another reading, so says 係噉.
+export const UNSPOKEN = new Set();
+export const sayWord = form => (form && !UNSPOKEN.has(form) ? form : null);
+
 // built from: a character's parts with their roles, each with what the
 // learner can know of it: a sound part's reading, a meaning part's gloss,
 // study item or not. A sound part shows its reading nearest this character
