@@ -21,7 +21,8 @@
 //     *Unlocking*), so one isn't taught with its main reading.
 //   * composeFamily() makes the tasks for what is available now: a part's
 //     Meet and test, a character's Meet and its rung-2 quiz QUIZ_GAP later
-//     (Today's chains, through Today's interleave()). A member waits for its
+//     (Today's chains and checks, through Today's interleave(), so never
+//     more than 2 Meets in a row: brief 7.30). A member waits for its
 //     part to UNLOCK (met, and its test passed), so the session runs in
 //     stages: after every part test it composes again, and a passed test
 //     brings its members in (an inferred Meet, as Today's payoff). A part
@@ -40,9 +41,9 @@
 import {isKnown, transition, INTERVALS} from './state.js';
 import {taskFor} from './tasks.js';
 import {isAvailable, partUnlocked} from './unlock.js';
-import {interleave, QUIZ_GAP} from './today.js';
+import {interleave, withChecks, QUIZ_GAP} from './today.js';
 import {soundId, readingId} from './content.js';
-import {isMeet} from './session.js';
+import {isMeet, isCheck, skipCheck} from './session.js';
 
 export const MIN_MEMBERS = 2;
 export const OWN_SIZE = 20;
@@ -174,25 +175,28 @@ export function composeFamily(content, learner, today, rng, card, {tried = [], q
   }
   const pending = quizzes.filter(id => states[id] && !isKnown(states[id]))
     .map(id => taskFor(content, states, id, {role: 'quiz', rng}));
-  const tasks = interleave(pending, chains);
-  return {tasks, summary: {key: card.key, to_learn: plan.length, tasks: tasks.length,
-                           new: chains.filter(c => c.tasks[0].role === 'new').length}};
+  const tasks = interleave(pending, chains.map(c => withChecks(content, states, c)));
+  const checks = tasks.filter(isCheck).length;
+  return {tasks, summary: {key: card.key, to_learn: plan.length, tasks: tasks.length - checks,
+                           checks, new: chains.filter(c => c.tasks[0].role === 'new').length}};
 }
 
 // openFamily(content, learner, today, rng, card) -> a family session
 export function openFamily(content, learner, today, rng, card) {
   const composed = composeFamily(content, learner, today, rng, card);
   return {today, rng, card, composed, queue: composed.tasks.slice(), answered: 0, passed: 0,
-          recomposed: 0, tried: [], quizzes: [], metHere: []};
+          recomposed: 0, checked: 0, tried: [], quizzes: [], metHere: []};
 }
 
 // answerFamily(content, learner, fs, ok) -> {task, state, recomposed}
-//   As core/session.js's answer(): atomic, a Meet is met whatever `ok` is.
+//   As core/session.js's answer(): atomic, a Meet is met whatever `ok` is,
+//   and a check is passed over (skipCheck), changing nothing.
 //   A part's test composes the session again (its members come in if it
 //   passed; it isn't asked again either way).
 export function answerFamily(content, learner, fs, ok) {
   const task = fs.queue[0];
   if (!task) throw new Error('answerFamily: the session is over');
+  if (isCheck(task)) return {task: skipCheck(fs), state: null, recomposed: null};
   const before = learner.states[task.item] || null;
   const meet = isMeet(task);
   const state = transition(before, meet ? {type: 'meet', item: task.item}

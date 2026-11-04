@@ -17,13 +17,19 @@
 //   question  also a part's test: Predict (a member's reading from its sound
 //             part) and Tell apart (a member of a family, from its meaning)
 //   standin   a part test with nothing to ask (no member left): passed
+//   check     after a taught Meet (brief 7.30): "Tap 我" among look-alikes,
+//             or "Which has 青 in it?" after a part's; unscored, recorded
+//             nowhere. A tap shows the right tile in jade (and a wrong one
+//             outlined) and Continue straight under the tiles -- no
+//             verdict, no score (Mark's iPhone check: a right tap moving on
+//             by itself after 0.6 s was too quick).
 
 import {h, han, clear, put, rubyWord, jpSpan, layerChip} from './dom.js';
 import {cardWords, word as wordEntry, builtFrom, roleText, standsLine, whyLine, relationOf, overOf, meaningWording,
         LAYER_TEXT} from './facts.js';
 import {kindOf} from '../core/content.js';
 import {readingChoices, characterChoices, meaningChoices,
-        tellApartChoices} from '../core/choices.js';
+        tellApartChoices, checkChoices} from '../core/choices.js';
 import {toneless} from '../core/content.js';
 import {WORD_MAX} from '../core/tasks.js';
 import {readingItemFor} from '../core/focus.js';
@@ -89,7 +95,7 @@ function partCard(content, task, base, states = {}) {
             // sound part (CO-048), then a line per choice: the character, its
             // reading and meaning, then its meaning part and what that part
             // means (CO-049; Mark, 2026-09-29: 清 cing1 clear · 氵 water)
-            reveal: {glyph: t.answer, jp: a.jp,
+            reveal: {glyph: t.answer, jp: a.jp, gloss: a.gloss,
                      // and the answer's card words under them (7.9, 7.10),
                      // of 4 characters at most (brief 7.20 P1: not
                      // 黔東南苗族侗族自治州)
@@ -108,14 +114,21 @@ const reading = jp => ({value: jp, label: jp, type: 'jp'});
 // "1 family", not "1 families" (patch plan 6.5, CO-083)
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-// cardModel(content, task, rng, pool, states, {lineOf}): `pool` is the toned
-// readings of the session's other items, which reading choices draw from
-// (runner.js); `states` the learner's, for which characters of a word are
-// known; `lineOf({text, line})` the focus text's line for a sentence task
-// (texts.js lineAt), null when it's gone.
-export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = null} = {}) {
+// cardModel(content, task, rng, pool, states, {lineOf, session}): `pool` is
+// the toned readings of the session's other items, which reading choices
+// draw from (runner.js); `states` the learner's, for which characters of a
+// word are known; `lineOf({text, line})` the focus text's line for a
+// sentence task (texts.js lineAt), null when it's gone; `session` the
+// characters met this session, a check's look-alikes after its own tiers.
+export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = null, session = []} = {}) {
   const base = {task: task.task, item: task.item, rung: task.rung, asked: task.asked,
                 fallback: task.fallback, role: task.role};
+  if (task.task === 'check') {
+    const c = checkChoices(content, task, rng, session);
+    return {...base, kind: 'check', lead: c.part ? 'Which has' : 'Tap', ask: c.part || c.answer,
+            tail: c.part ? 'in it?' : '',
+            choices: c.choices.map(ch => ({value: ch, label: ch, type: 'han'})), answer: c.answer};
+  }
   if (content.kind(task.item) !== 'reading') {
     const m = partCard(content, task, {...base, rng, pool, met: !!states[task.item]}, states);
     delete m.rng;
@@ -273,9 +286,10 @@ function wordLines(ws) {
 
 // The reading, then the meaning on a line of its own (Mark's iPhone check:
 // "the english gloss and reading appeared in the same line").
+// With no `jp` (a Meet's, which sits over its tile), the 文/白 chip alone.
 function readingBlock(jp, gloss, cls = '', layer = null) {
   return h('div', {class: `reading-block ${cls}`.trim()},
-    jp && h('div', {class: 'jp-line'}, h('p', {class: 'jp big-jp'}, jp),
+    (jp || layer) && h('div', {class: 'jp-line'}, jp && h('p', {class: 'jp big-jp'}, jp),
       layerChip(layer, LAYER_TEXT[layer])),
     gloss && h('p', {class: 'gloss-line'}, gloss));
 }
@@ -291,15 +305,27 @@ function tipLine(cb) {
 
 const tileKind = (cb, ch) => (cb.kindOf ? cb.kindOf(ch) : null);
 
+// On a Meet it sits straight under the character's tile, as the tree puts
+// parts under a character (Mark's iPhone checks, 7.30): "Built from" on a
+// line of its own, then the parts side by side: a sound part's reading over
+// its tile, as everywhere a tile has one (Mark, 7.30), a meaning part's
+// gloss beneath it, and the role under that. Where any part has a reading,
+// every tile keeps the line over it, so the tiles stay level.
 function builtLine(built, cb) {
   if (!built || !built.length) return null;
-  const parts = built.map(b => h('span', {class: 'part'}, glyphButton(b.part, cb, 'sm'),
-    h('span', {class: 'muted'},
-        // a sound part's note is its reading, a meaning part's its gloss
-        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${roleText(b)})`] : `(${roleText(b)})`)));
+  const level = built.some(b => b.role === 'sound' && b.note);
+  const overOf = b => (b.role === 'sound' && b.note ? b.note : level ? '' : null);
+  const parts = built.map(b => h('span', {class: 'built-part'}, glyphButton(b.part, cb, 'sm', null, overOf(b)),
+    b.note && b.role !== 'sound' && h('span', {class: 'built-note'}, b.note),
+    h('span', {class: 'built-role muted'}, roleText(b))));
   const joined = [];
-  parts.forEach((p, i) => { if (i) joined.push(h('span', {class: 'built-plus'}, '+')); joined.push(p); });
-  return h('p', {class: 'built'}, h('span', {class: 'label'}, 'Built from '), ...joined);
+  // the + built as a tile is, its line over it too, so it sits level with
+  // the tiles' middles
+  const plus = () => h('span', {class: 'gs-sm built-plus', 'aria-hidden': 'true'},
+    level && h('span', {class: 'gt-over jp'}, '\u00a0'), h('span', {class: 'gt plus-gt'}, '+'));
+  parts.forEach((p, i) => { if (i) joined.push(plus()); joined.push(p); });
+  return h('div', {class: 'built-under'}, h('p', {class: 'label'}, 'Built from'),
+           h('div', {class: `built-parts${level ? ' with-over' : ''}`}, ...joined));
 }
 
 // Where the sound part's reading is no clue, members that carry the sound
@@ -315,8 +341,10 @@ function likeLine(built, cb) {
 // A glyph as a tile by its kind (views/glyph.js), opening its reference
 // card. `locked()` holds it shut while true: a question's glyph until it's
 // answered, since the card shows the answer.
-function glyphButton(ch, cb, size = 'xl', locked = null) {
-  return glyphTile(ch, tileKind(cb, ch), {size, locked, cls: size === 'xl' ? 'task-glyph' : '',
+// `over`: jyutping over the tile, as the Reader puts it over a character
+// (a Meet's reading, 7.30).
+function glyphButton(ch, cb, size = 'xl', locked = null, over = null) {
+  return glyphTile(ch, tileKind(cb, ch), {size, locked, over, cls: size === 'xl' ? 'task-glyph' : '',
                                         onTap: cb.onRef ? c => cb.onRef(c) : null});
 }
 
@@ -353,22 +381,25 @@ function revealBlock(m, ok, cb, given) {
   // always did (brief 7.9, Mark: "all of the tests"). A character question
   // leads with the character; tell apart's lines carry the meanings, its
   // word comes after them.
-  const answerLine = () => h('p', {class: 'answer-line'}, glyphButton(r.glyph, cb, 'md'),
-                             ' ', jpSpan(r.jp));
+  // Every answer alike (Mark's iPhone checks, 7.30): the character again,
+  // centred, the tile that opens its card (the section is scrolled to the
+  // top, the prompt's glyph off screen), its reading over it as on a Meet,
+  // then its meaning centred under it; the words after (tell apart's after
+  // its lines).
+  const top = h('div', {class: 'answer-block'},
+    r.glyph ? h('p', {class: 'answer-line center'}, glyphButton(r.glyph, cb, 'xl', null, r.jp))
+            : readingBlock(r.jp, null, 'center'),
+    readingBlock(null, r.gloss, 'center', r.layer));
   if (m.kind === 'question' && m.task === 'tell_apart') {
-    main = answerLine();
-  } else if (m.kind === 'question' && m.task === 'meaning') {
-    main = h('div', {class: 'answer-block'}, answerLine(),
-             h('p', {class: 'gloss-line'}, r.gloss), wordLines(r.words));
+    main = top;
   } else {
-    main = h('div', {class: 'answer-block'}, readingBlock(r.jp, r.gloss), wordLines(r.words));
+    main = h('div', {class: 'answer-block'}, top, wordLines(r.words));
   }
   // the shared sound part first (CO-048), then each choice with its reading
   // and meaning, its meaning part and what that part means, the answer's
   // first (Mark, step 6 iPhone check; patch plan 6.5, CO-049)
   const head = r.head && h('p', {class: 'mark-head'}, 'They all have ',
-    glyphButton(r.head.char, cb, 'sm'),
-    r.head.jp ? [' ', jpSpan(r.head.jp)] : '');
+    glyphButton(r.head.char, cb, 'sm', null, r.head.jp || null));
   const marks = r.marks && h('div', {class: 'marks mark-lines'}, head,
     ...[...r.marks].sort((a, b) => (b.char === r.glyph) - (a.char === r.glyph))
       .map(k => h('p', {class: `mark-line${k.char === r.glyph ? ' is-answer' : ''}`},
@@ -388,8 +419,24 @@ function revealBlock(m, ok, cb, given) {
 // whose rank line has it.
 // onAnswer is called once, the moment the answer is given (so it is saved
 // then); onNext when the learner moves on.
+// Once a tap shows Continue (Mark's iPhone check, 7.30): the answer's
+// section scrolled to the top of the screen, and Continue never lower than
+// NEXT_AT of the screen's height, so Safari's bottom bar doesn't take the
+// tap. The answered card gets room below it to scroll into (.answered).
+const NEXT_AT = 0.7;
+function showNext(el, btn, top = null) {
+  el.classList.add('answered');
+  if (typeof window === 'undefined' || !btn.getBoundingClientRect) return;
+  btn.focus({preventScroll: true});
+  const y = window.scrollY, vh = window.innerHeight;
+  const bottom = btn.getBoundingClientRect().bottom + y;
+  const want = Math.max(top ? top.getBoundingClientRect().top + y - 8 : y, bottom - vh * NEXT_AT);
+  if (Math.abs(want - y) > 1) window.scrollTo({top: Math.max(0, want), behavior: 'smooth'});
+}
+
 export function renderTask(el, m, cb) {
   clear(el);
+  el.classList.remove('answered');
   // Report sits at the very foot of every card, below Continue (Mark,
   // 2026-09-29); after an answer it carries the answer given
   const report = (given = null) => reportLink(cb.onReport && (() => cb.onReport(shownOf(m, given))));
@@ -404,6 +451,11 @@ export function renderTask(el, m, cb) {
     return;
   }
 
+  if (m.kind === 'check') {
+    renderCheck(el, m, cb, report);
+    return;
+  }
+
   if (m.kind === 'teach' || m.kind === 'part') {
     const r = m.reveal;
     // the border key, the first Meet of each kind of tile (brief 7.28 P23):
@@ -412,12 +464,15 @@ export function renderTask(el, m, cb) {
     const go = keys.length ? () => { keys.forEach(cb.keySeen); meetAndGo(); } : meetAndGo;
     put(el,
       h('p', {class: 'lead'}, m.lead),
-      glyphButton(m.glyph, cb),
+      // the reading over the tile, as in the Reader (Mark's iPhone check, 7.30)
+      // then its meaning, then Built from (Mark: reading, tile, gloss, parts)
+      glyphButton(m.glyph, cb, 'xl', null, r.jp || null),
+      m.partLead && h('p', {class: 'note center part-lead'}, m.partLead),
+      m.quiet ? h('div', {class: 'muted'}, readingBlock(null, r.gloss, 'center', r.layer))
+              : readingBlock(null, r.gloss, 'center', r.layer),
+      builtLine(m.built, cb),
       ...keys.map(k => h('p', {class: 'note center border-key'}, BORDER_KEY[k])),
       tipLine(cb),
-      m.partLead && h('p', {class: 'note center part-lead'}, m.partLead),
-      m.quiet ? h('div', {class: 'muted'}, readingBlock(r.jp, r.gloss, 'center', r.layer))
-              : readingBlock(r.jp, r.gloss, 'center', r.layer),
       m.why && h('p', {class: 'note center why'}, m.why),
       m.partNote && h('p', {class: 'note center'}, m.partNote),
       m.standsFor && h('p', {class: 'note center'}, ...standsLine(m.standsFor, m.written)),
@@ -425,7 +480,6 @@ export function renderTask(el, m, cb) {
         jpSpan(r.jp), ` is ${m.pattern.relation}.`),
       ...(m.facts || []).map(f => h('p', {class: 'note center'}, f)),
       wordLines(r.words),
-      builtLine(m.built, cb),
       likeLine(m.built, cb),
       h('div', {class: 'foot'}, cont(go), report()));
     return;
@@ -440,7 +494,8 @@ export function renderTask(el, m, cb) {
         m.from.verb || (m.from.kind === 'sound' ? 'Guess:' : 'Which meaning fits?'))
     : h('p', {class: 'lead'}, m.lead)];
   // The reference card would give the answer away, so the glyph opens it only
-  // once the question is answered.
+  // once the question is answered (Mark, 7.30: a tile is always tappable in
+  // the end, so this one is too, as the answer's copy).
   let answered = false;
   const glyphBtn = m.glyph && glyphButton(m.glyph, cb, 'xl', () => !answered);
   if (glyphBtn) prompt.push(glyphBtn);
@@ -480,8 +535,40 @@ export function renderTask(el, m, cb) {
     if (idk) idk.remove();
     cb.onAnswer(ok);
     const next = cont(() => cb.onNext());
-    put(foot, revealBlock(m, ok, cb, value), tipLine(cb), next);
+    const answer = revealBlock(m, ok, cb, value);
+    put(foot, answer, tipLine(cb), next);
     put(clear(footReport), report(value));
-    next.focus();
+    showNext(el, next, answer);
+  }
+}
+
+// The check (brief 7.30): three tiles, no jyutping or gloss. onAnswer(ok) is
+// called at the tap, as for any card; the session passes the check over.
+function renderCheck(el, m, cb, report) {
+  let tapped = false;
+  const grid = h('div', {class: 'choices han-choices tap-choices'});
+  const buttons = m.choices.map(c => h('button', {
+    type: 'button', class: 'choice glyph', lang: 'zh-Hant-HK', onclick: () => pick(c.value)}, c.label));
+  grid.append(...buttons);
+  const foot = h('div', {class: 'tap-foot'});
+  put(el,
+    h('p', {class: 'lead'}, `${m.lead} `, han(m.ask, {class: 'lead-part'}), m.tail ? ` ${m.tail}` : ''),
+    grid, foot, h('div', {class: 'foot-report'}, report()));
+
+  function pick(value) {
+    if (tapped) return;
+    tapped = true;
+    const ok = value === m.answer;
+    buttons.forEach((b, i) => {
+      b.disabled = true;
+      const v = m.choices[i].value;
+      if (v === m.answer) b.classList.add('is-answer');
+      else if (v === value) b.classList.add('is-tapped');
+    });
+    cb.onAnswer(ok);
+    const next = h('button', {type: 'button', class: 'btn primary wide', onclick: () => cb.onNext()},
+                   'Continue');
+    put(foot, next);
+    showNext(el, next);
   }
 }

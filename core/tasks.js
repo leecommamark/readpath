@@ -4,7 +4,7 @@
 // and layout are step 4's. Every descriptor has the same fields:
 //
 //   task           meet | reading | meaning | word | sentence
-//                  | part_meet | predict | tell_apart
+//                  | part_meet | predict | tell_apart | check
 //   item           the item being graded
 //   rung           the state's rung (2-5, "M"), or "new" for a Meet
 //   asked          the rung actually shown, after rotation and fallback
@@ -17,8 +17,9 @@
 //   sentence       the sentence rung: {text, line}, the focus text's line
 //                  (core/sentences.js; patch plan 5)
 //   target         predict: the member asked about (a reading item);
-//                  tell_apart: the family asked about (its head)
-//   role           review | new | quiz | test | payoff (the composer's)
+//                  tell_apart: the family asked about (its head);
+//                  check: the member a part's check shows
+//   role           review | new | quiz | test | payoff | check (the composer's)
 //
 // The character ladder (DESIGN): 1 Meet, 2 reading, 3 meaning, 4 word,
 // 5 sentence, then Maintain rotating [3, 4, 5][step % 3]. The fallbacks, in
@@ -31,6 +32,8 @@
 //     (43 before patch plan 6.5 gave 22 of them dictionary words).
 // A part: Meet, then its test task at every later rung (Predict for a sound
 // part, Tell apart for a meaning part), Maintained at the test task.
+// A check (brief 7.30) follows a taught Meet: an unscored tap, at no rung,
+// that is never answered through transition() (core/session.js skipCheck).
 
 import {readingId} from './content.js';
 import {tellApartPool} from './choices.js';
@@ -45,6 +48,14 @@ const descriptor = fields => Object.freeze({
   task: null, item: null, rung: null, asked: null, fallback: [],
   inferred_from: null, pattern: null, word: null, sentence: null, target: null,
   role: 'review', focus: null, ...fields});
+
+// checkFor(meet, target) -> the check after a Meet: "Tap 我" for a
+// character, "Which has 青 in it?" for a part, its member in `target`.
+export function checkFor(meet, target = null) {
+  return descriptor({task: 'check', item: meet.item, rung: 'new', asked: null,
+                     target, role: 'check'});
+}
+export const isCheck = t => !!t && t.task === 'check';
 
 // The rung a character reading is asked at, and why it isn't its own.
 // `sentences` is sentenceIndex()'s map for the focus text, or null.

@@ -249,9 +249,23 @@ mark.rb { background: none; color: inherit;
 .choice:disabled { cursor: default; opacity: .55; }
 .choice.is-answer { opacity: 1; border-color: var(--known); background: var(--known-soft); color: var(--known); }
 .choice.is-wrong { opacity: 1; border-color: var(--bad); background: var(--bad-soft); color: var(--bad); }
+/* the check after a Meet (brief 7.30): three tiles in a row, a wrong tap
+   outlined, never red -- it isn't scored */
+.tap-choices { grid-template-columns: repeat(3, 1fr); }
+.choice.is-tapped { opacity: 1; border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+/* its Continue straight under the tiles, not at the foot (Mark, 7.30) */
+.tap-foot { display: flex; flex-direction: column; }
+.tap-foot:empty { display: none; }
+.tap-foot + .foot-report { margin-top: auto; }   /* Report stays at the very foot */
 .idk { margin-top: var(--s2); }
 
 .foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--s3); padding-top: var(--s4); }
+/* answered (7.30): the answer straight under the choices, and room below
+   so it can be scrolled to the top of the screen, Continue clear of the
+   browser's bottom bar */
+.card-host.answered { padding-bottom: 60vh; }
+.card-host.answered .foot { margin-top: 0; }
+.card-host.answered .foot-report { margin-top: 0; }
 .feedback { border-top: 1px solid var(--rule); padding-top: var(--s3);
             display: flex; flex-direction: column; gap: var(--s1); }
 .verdict { margin: 0; font: 600 var(--t-lg)/1.2 var(--head); }
@@ -649,6 +663,9 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 /* its jyutping, above the tile (brief 7.6 decided 5) */
 .gt-over { font-size: var(--t-xs); line-height: 1.2; color: var(--muted); min-height: 1.2em; }
 .gs-lg .gt-over, .gs-xl .gt-over { font-size: var(--t-sm); }
+/* a Meet's reading over its tile (7.30), as big as the reading it replaces */
+.task-glyph .gt-over { font-size: var(--t-lg); font-weight: 600; color: var(--ink); }
+:root[data-jp="marks"] .task-glyph .gt-over { font-size: var(--t-lg); }
 /* with tone marks on, the jyutping over characters and tiles is 14px: 11px
    was too small to read a mark (7.12 P3, measured at 360 and 390px: a mark
    clears the character and the line above as before, and line-height stays
@@ -696,6 +713,21 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .built { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); }
 .built .part { display: inline-flex; align-items: center; gap: var(--s1); }
 .built-plus { color: var(--muted); }
+/* Built from under a Meet's tile (7.30): the label, then the parts side by
+   side, each with its note and role beneath it */
+.built-under { display: flex; flex-direction: column; align-items: center; gap: var(--s1); }
+.built-under .label { margin: 0; }
+.built-parts { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start;
+               gap: var(--s1) var(--s2); }
+.built-part { display: flex; flex-direction: column; align-items: center; gap: 2px;
+              max-width: 7.5em; text-align: center; line-height: 1.25; }
+.built-note { font-size: var(--t-sm); color: var(--ink); }
+.built-role { font-size: var(--t-sm); }
+/* the + shaped as a tile (button.glyph-tile's box, its line over it), so it
+   sits at the tiles' middles; not a .glyph-tile, which it isn't */
+.built-plus { display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+              gap: 3px; padding: 2px; min-height: var(--tap); }
+.plus-gt { font-family: var(--body); color: var(--muted); }
 .answer-line .glyph-tile, .mark-head .glyph-tile { margin-right: var(--s1); }
 
 /* ---- a character's tree (views/tree.js; patch plan 7.7, Phase 3) -------
@@ -883,3 +915,4 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
                               border-top: 2px solid var(--bad); transform: rotate(-20deg); }
 .review-summary { margin: 0; }
 .review-btns { margin-top: var(--s2); }
+.answer-line.center .glyph-tile { margin-right: 0; }   /* the answer's tile, centred (7.30) */

@@ -21,12 +21,21 @@
 //       away the payoff: an inferred Meet of its next unmet member (a
 //       focus-text member first), which counts as one of the N, then that
 //       member's quiz. The member must be available apart from this part.
+//     * A taught Meet (not inferred, not a secondary reading's) and a
+//       part's Meet are followed straight away by a check (brief 7.30): an
+//       unscored tap that is never recorded (withChecks()).
 //  3. Interleave: each new group's first task spread evenly through the
 //     reviews, its later tasks as soon as their gap allows, never two tasks
-//     for one item side by side unless nothing else is left.
-//  4. Cap at `session_cap` (100). New groups go from the end first, a part's
-//     payoff before the part; reviews are cut only when they alone exceed it.
-//  5. The summary the Today screen shows.
+//     for one item side by side unless nothing else is left (a Meet and its
+//     check excepted). Never more than MEET_RUN (2) Meets in a row (brief
+//     7.30, Mark's decided 1): a check neither ends a run nor adds to one,
+//     and after two the next slot is a review, a follow-up whose gap is met,
+//     one at least MIN_GAP after its Meet, and only then a third Meet.
+//  4. Cap at `session_cap` (100) counted tasks; checks aren't counted. New
+//     groups go from the end first, a part's payoff before the part;
+//     reviews are cut only when they alone exceed it.
+//  5. The summary the Today screen shows: its tasks are the counted ones,
+//     and the minutes count a check at SECONDS_PER_CHECK.
 //
 // A session can be recomposed. Meeting an item writes its state (rung 2, due
 // today), so a planned quiz or test comes back as a due review, and an item
@@ -34,15 +43,19 @@
 // which drops the payoff: the member is not unlocked yet.
 //
 // Deterministic: the same content, learner, day and seed give the same
-// output. The rng draws only the words and targets inside tasks.
+// output. The rng draws only the words and targets inside tasks; a check
+// draws nothing here (its tiles are the card's, choices.js checkChoices).
 
-import {taskFor} from './tasks.js';
+import {taskFor, checkFor, isCheck} from './tasks.js';
 import {sentenceIndex} from './sentences.js';
 import {isAvailable} from './unlock.js';
 import {focusNeeds} from './focus.js';
 
 export const QUIZ_GAP = 5;
 export const SECONDS_PER_TASK = 7;         // DESIGN: 100 tasks ≈ 12 minutes
+export const SECONDS_PER_CHECK = 2;        // brief 7.30 C6
+export const MEET_RUN = 2;                 // the most Meets in a row (7.30)
+export const MIN_GAP = 2;                  // the least a quiz comes after its Meet, to break a run
 export const DEFAULTS = Object.freeze({new_per_day: 10, session_cap: 100, backlog: 100});
 
 // ---- 1. reviews
@@ -94,7 +107,7 @@ function chooseNew(content, states, slots, focusItems) {
 
 // ---- 4. the cap, on units before they become tasks
 
-const UNIT_SIZE = 2;                       // every unit is two tasks
+const UNIT_SIZE = 2;                       // every unit is two counted tasks
 
 function capUnits(units, budget) {
   const kept = units.slice();
@@ -109,48 +122,114 @@ function capUnits(units, budget) {
   return kept;
 }
 
+// ---- the checks (brief 7.30)
+
+const isMeetTask = t => t.task === 'meet' || t.task === 'part_meet';
+
+// A Meet that teaches something new to look at gets a check: a part's Meet,
+// and a character's Meet that is neither inferred (the guess was the task)
+// nor a secondary reading's (the glyph is already known).
+export const needsCheck = t => t.task === 'part_meet'
+  || (t.task === 'meet' && !t.inferred_from && !t.pattern);
+
+// withChecks(content, states, chain) -> the chain with a check straight
+// after each Meet that needs one; the next task's gap is still counted from
+// the Meet. A part's check shows one of its members (checkMember).
+export function withChecks(content, states, chain) {
+  const tasks = [], gaps = [];
+  const payoff = chain.tasks.find(t => t.role === 'payoff');
+  let shrink = false;
+  chain.tasks.forEach((t, i) => {
+    tasks.push(t);
+    gaps.push(shrink && chain.gaps[i] > 1 ? chain.gaps[i] - 1 : chain.gaps[i]);
+    shrink = false;
+    if (!needsCheck(t)) return;
+    const target = t.task === 'part_meet'
+      ? checkMember(content, states, t.item, payoff ? payoff.item : null) : null;
+    if (t.task === 'part_meet' && !target) return;
+    tasks.push(checkFor(t, target));
+    gaps.push(1);
+    shrink = true;
+  });
+  return {tasks, gaps};
+}
+
+// The member a part's check shows (Mark, 7.30 C2): the nearest member on the
+// path that isn't the payoff, met or not, one already met first for a
+// meaning part (you know 你: find its 亻); the payoff only where it is the
+// only member (the check shows no reading, so the payoff's guess is
+// untouched); null for a part with no member.
+export function checkMember(content, states, id, payoff = null) {
+  const r = content.rank(id);
+  const near = (a, b) => Math.abs(content.rank(a) - r) - Math.abs(content.rank(b) - r)
+    || content.rank(a) - content.rank(b);
+  const ms = content.membersOf(id).slice().sort(near);
+  const rest = ms.filter(m => m !== payoff);
+  const met = content.kind(id) === 'meaning' ? rest.filter(m => states[m]) : [];
+  return met[0] || rest[0] || ms[0] || null;
+}
+
 // ---- 3. interleave
 
 // chains: [{tasks, gaps}] where gaps[i] is the least distance from task i-1
 // to task i; a gap of 1 means straight after (the payoff Meet after its
-// part's test). Leads are spread over the reviews less a tail as long as the
-// longest chain, so the last lead's follow-ups still have room for their gaps.
-// Exported for family study (core/family.js; patch plan 7.5), unchanged.
+// part's test, a check after its Meet). Leads are spread over the reviews
+// less a tail as long as the longest chain, so the last lead's follow-ups
+// still have room for their gaps. Exported for family study
+// (core/family.js; patch plan 7.5).
+// The Meet cap (brief 7.30): with MEET_RUN Meets in a row (checks don't
+// count either way) and a lead due, a review comes first, then a follow-up
+// whose gap is met, then one MIN_GAP or more after its chain's last task
+// that isn't a check; only then the lead. Where reviews already sit
+// between the Meets, nothing changes.
 export function interleave(reviews, chains) {
   const R = reviews.length, G = chains.length, out = [];
   const tail = Math.max(0, ...chains.map(c => c.gaps.reduce((a, b) => a + b, 0)));
   const spread = Math.max(0, R - tail);
   const leadAfter = chains.map((_, i) => Math.floor(i * spread / G));
-  const pending = [];                      // {task, notBefore, chain, idx, seq}
-  let ri = 0, gi = 0, seq = 0;
+  const pending = [];                      // {task, notBefore, anchor, chain, idx, seq}
+  let ri = 0, gi = 0, seq = 0, run = 0;
   const last = () => (out.length ? out[out.length - 1].item : null);
-  const release = (chain, idx, pos) => {
+  const push = t => {
+    out.push(t);
+    if (isMeetTask(t)) run++;
+    else if (!isCheck(t)) run = 0;
+  };
+  // anchor: where the chain's last task that isn't a check went
+  const release = (chain, idx, pos, anchor) => {
     if (idx >= chain.tasks.length) return;
     if (chain.gaps[idx] === 1) {           // straight after
-      out.push(chain.tasks[idx]);
-      release(chain, idx + 1, out.length - 1);
+      const t = chain.tasks[idx];
+      push(t);
+      release(chain, idx + 1, out.length - 1, isCheck(t) ? anchor : out.length - 1);
       return;
     }
-    pending.push({task: chain.tasks[idx], notBefore: pos + chain.gaps[idx],
+    pending.push({task: chain.tasks[idx], notBefore: pos + chain.gaps[idx], anchor,
                   chain, idx, seq: seq++});
   };
   const emitPending = k => {
     const [x] = pending.splice(k, 1);
-    out.push(x.task);
-    release(x.chain, x.idx + 1, out.length - 1);
+    push(x.task);
+    release(x.chain, x.idx + 1, out.length - 1, out.length - 1);
   };
   while (ri < R || gi < G || pending.length) {
     const p = out.length;
     pending.sort((a, b) => a.notBefore - b.notBefore || a.seq - b.seq);
     let k = pending.findIndex(x => x.notBefore <= p && x.task.item !== last());
     if (k >= 0) { emitPending(k); continue; }
-    if (gi < G && (leadAfter[gi] <= ri || ri >= R)) {
+    const leadDue = gi < G && (leadAfter[gi] <= ri || ri >= R);
+    if (leadDue && run >= MEET_RUN) {
+      if (ri < R) { push(reviews[ri++]); continue; }
+      k = pending.findIndex(x => p - x.anchor >= MIN_GAP && x.task.item !== last());
+      if (k >= 0) { emitPending(k); continue; }
+    }
+    if (leadDue) {
       const chain = chains[gi++];
-      out.push(chain.tasks[0]);
-      release(chain, 1, out.length - 1);
+      push(chain.tasks[0]);
+      release(chain, 1, out.length - 1, out.length - 1);
       continue;
     }
-    if (ri < R) { out.push(reviews[ri++]); continue; }
+    if (ri < R) { push(reviews[ri++]); continue; }
     // only follow-ups whose gap can't be met are left: take the earliest,
     // keeping items apart where there is any choice
     k = pending.findIndex(x => x.task.item !== last());
@@ -213,7 +292,8 @@ export function compose(content, learner, today, rng) {
       chains.push({tasks, gaps});
     }
   }
-  const tasks = interleave(reviews, chains);
+  const tasks = interleave(reviews, chains.map(c => withChecks(content, states, c)));
+  const checks = tasks.filter(isCheck).length;
 
   const count = kind => units.filter(u => kind(u)).length;
   const summary = {
@@ -225,8 +305,9 @@ export function compose(content, learner, today, rng) {
       from_focus: count(u => u.source === 'focus'),
       from_path: count(u => u.source === 'path'),
     },
-    tasks: tasks.length,
-    est_minutes: Math.ceil(tasks.length * SECONDS_PER_TASK / 60),
+    tasks: tasks.length - checks,
+    checks,
+    est_minutes: estMinutes(tasks.length - checks, checks),
     next_up: units.length ? units[0].item : null,
     backlog_rule: backlogRule,
     dropped_new: chosen.length - units.length,
@@ -235,3 +316,7 @@ export function compose(content, learner, today, rng) {
   };
   return {tasks, summary};
 }
+
+// minutes for `tasks` counted tasks and `checks` checks (brief 7.30 C6)
+export const estMinutes = (tasks, checks = 0) =>
+  Math.ceil((tasks * SECONDS_PER_TASK + checks * SECONDS_PER_CHECK) / 60);

@@ -15,12 +15,27 @@
 // met), which drops that Meet. Every state change goes through state.js's transition(), and the new
 // state is written into `learner.states` and returned, so the caller can
 // save exactly the item that changed.
+//
+// A check (brief 7.30) is passed over, not answered: skipCheck() takes it off
+// the queue and changes nothing else -- no state, no `answered`, no
+// recomposition -- and answer() does the same for a check. `checked` counts
+// them, for the simulator's minutes.
 
 import {compose} from './today.js';
 import {transition, isKnown} from './state.js';
+import {isCheck} from './tasks.js';
 
 const MEETS = new Set(['meet', 'part_meet']);
 export const isMeet = task => MEETS.has(task.task);
+export {isCheck};
+
+// skipCheck(session) -> the check taken off the queue, or null when the
+// current task isn't one. Works on a family session too (same queue).
+export function skipCheck(session) {
+  if (!isCheck(session.queue[0])) return null;
+  session.checked = (session.checked || 0) + 1;
+  return session.queue.shift();
+}
 
 // openSession(content, learner, today, rng, {asOf}) -> session
 //   learner: {states, texts, settings}; `states` is written by answer()
@@ -31,7 +46,7 @@ export const isMeet = task => MEETS.has(task.task);
 export function openSession(content, learner, today, rng, {asOf = today} = {}) {
   const composed = compose(content, learner, asOf, rng);
   return {today, asOf, rng, composed, summary: composed.summary,
-          queue: composed.tasks.slice(), answered: 0, passed: 0, recomposed: 0};
+          queue: composed.tasks.slice(), answered: 0, passed: 0, recomposed: 0, checked: 0};
 }
 
 // The day Keep going composes as: the soonest day after `today` with a
@@ -51,13 +66,15 @@ export const current = session => session.queue[0] || null;
 // answer(content, learner, session, ok) -> {task, state, recomposed}
 //   Takes the current task off the queue and applies the answer. `recomposed`
 //   is the new composition when a missed test recomposed the session, else
-//   null. Atomic: the transition is worked out before the task leaves the
+//   null. A check is passed over (skipCheck): {task, state: null,
+//   recomposed: null}, and nothing changes. Atomic: the transition is worked out before the task leaves the
 //   queue, so an answer transition() refuses changes nothing (patch plan
 //   7.5, bug 1: a refused Meet used to leave the queue, and the next tap
 //   answered the task after it, unseen).
 export function answer(content, learner, session, ok) {
   const task = current(session);
   if (!task) throw new Error('answer: the session is over');
+  if (isCheck(task)) return {task: skipCheck(session), state: null, recomposed: null};
   const {today} = session;
   const before = learner.states[task.item] || null;
   const meet = isMeet(task);

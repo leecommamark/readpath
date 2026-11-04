@@ -13,6 +13,7 @@
 //                      meaning part)
 //   placementMeaningChoices   a meaning for a character in the placement
 //                      check (7.13), where the meaning part is no clue
+//   checkChoices       the tiles of a check after a Meet (brief 7.30)
 //
 // Reading choices (Mark, 2026-09-29, from the iPhone check; replacing brief
 // 4's decision 2): sound-alike choices clustered round the answer, so the
@@ -339,4 +340,78 @@ export function placementMeaningChoices(content, id, rng, exclude = []) {
     if (width > pool.length) break;
   }
   return {answer, choices: rng.shuffle([answer, ...wrong.map(ch => glossOf(content, ch))])};
+}
+
+// ---- checks (brief 7.30)
+//
+// checkChoices(content, task, rng, session) -> {answer, choices, part}:
+// CHECK_CHOICES characters, shuffled, the answer among them once; no
+// jyutping or gloss goes with them, so neither is checked here.
+//   * After a character's Meet ("Tap 我"), the character among look-alikes
+//     (Mark, 7.30 C1), in this order: its tell-apart siblings with another
+//     meaning part (清 among 請 情), the rest of its sound family (the
+//     siblings with its meaning part, the characters with its sound part,
+//     the family it heads), characters sharing a part with it or built on
+//     it (口: 叫), all ranked TELL_FAR or less; then `session`, the
+//     characters met this session; then main readings near it on the path.
+//     `part` is null.
+//   * After a part's Meet ("Which has 青 in it?"), the member the composer
+//     chose (task.target, today.js checkMember) among main readings near it
+//     on the path that don't have the part anywhere in them (C2). `part` is
+//     the part's form.
+export const CHECK_CHOICES = 3;
+
+export function checkChoices(content, task, rng, session = []) {
+  if (content.kind(task.item) === 'reading') {
+    const ch = content.item(task.item).char;
+    return {answer: ch, part: null, choices: rng.shuffle([ch, ...lookAlikes(content, ch, rng, session)])};
+  }
+  const part = content.item(task.item).part;
+  const ch = content.item(task.target).char;
+  const wrong = [];
+  for (let width = WINDOW; wrong.length < CHECK_CHOICES - 1; width *= 2) {
+    for (const c of rng.shuffle(byRank(content, ch, width).filter(c => !wrong.includes(c)))) {
+      if (wrong.length === CHECK_CHOICES - 1) break;
+      if (!hasPart(content, c, part)) wrong.push(c);
+    }
+    if (width > index(content).mains.length) break;
+  }
+  return {answer: ch, part, choices: rng.shuffle([ch, ...wrong])};
+}
+
+function lookAlikes(content, ch, rng, session) {
+  const X = index(content);
+  const near = c => c !== ch && (X.mainAt.has(c)) && content.rank(content.mainReading(c)) <= TELL_FAR;
+  const head = X.familyOf.get(ch);
+  const sibs = head ? X.family.get(head).filter(r => r.char !== ch) : [];
+  const own = head ? X.family.get(head).find(r => r.char === ch) : null;
+  const sp = content.soundPartOf(ch);
+  const tiers = [
+    sibs.filter(r => r.meaning_part !== own.meaning_part).map(r => r.char).filter(near),
+    [...sibs.filter(r => r.meaning_part === own.meaning_part).map(r => r.char),
+     ...((sp && X.withSound.get(sp)) || []), ...(X.withSound.get(ch) || [])].filter(near),
+    [...content.partsOf(ch).flatMap(({part}) => X.withPart.get(part) || []),
+     ...(X.withPart.get(ch) || [])].filter(near),
+    session.filter(c => c !== ch && X.mainAt.has(c)),
+    byRank(content, ch),
+  ];
+  const out = [];
+  for (const tier of tiers) {
+    for (const c of rng.shuffle([...new Set(tier)])) {
+      if (out.length === CHECK_CHOICES - 1) return out;
+      if (!out.includes(c)) out.push(c);
+    }
+  }
+  return out;
+}
+
+// Whether `ch` has `part` anywhere in it, as a part of a part too (靜 has
+// 青 through 青), another shape of the same part counting (亻 and 人).
+function hasPart(content, ch, part, seen = new Set()) {
+  const one = content.onePart || (x => x);
+  if (ch === part || one(ch) === one(part)) return true;
+  if (seen.has(ch)) return false;
+  seen.add(ch);
+  return content.partsOf(ch).some(p => hasPart(content, p.part, part, seen))
+    || content.partsInOrder(ch).some(f => f !== ch && hasPart(content, f, part, seen));
 }

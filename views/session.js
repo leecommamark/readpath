@@ -10,7 +10,9 @@ import {glyphKind} from './glyph.js';
 // showSession(el, content, run, {onExit(), onRef(char), onReport(shown),
 //                                tipOnce(), lineOf({text, line}),
 //                                keyUnseen(kind), keySeen(kind)})
-// ‹ Back takes back the last answer and asks it again (Mark, 2026-09-29).
+// ‹ Back takes back the last answer and asks it again (Mark, 2026-09-29);
+// a check is no answer, so Back steps over it (brief 7.30). The counter
+// counts no checks (runner.js progress).
 export function showSession(el, content, run, cb) {
   const count = h('span', {class: 'count mono'});
   const fill = h('i');
@@ -44,12 +46,15 @@ export function showSession(el, content, run, cb) {
     if (!task) return run.testMe ? cb.onExit() : finish();
     progress();
     back.disabled = !run.canUndo;
+    const check = task.task === 'check';
     const m = cardModel(content, task, run.choices, run.pool, run.learner.states,
-                        {lineOf: cb.lineOf});
+                        {lineOf: cb.lineOf, session: check ? metToday() : []});
     renderTask(card, m, {
       onAnswer: ok => {
-        // the task this card shows: a stale card answers nothing (7.5, bug 1)
-        run.answer(ok, {meet: task.task === 'meet' || task.task === 'part_meet', task});
+        // the task this card shows: a stale card answers nothing (7.5, bug
+        // 1); a check is passed over, recorded nowhere (brief 7.30)
+        if (check) run.skipCheck(task);
+        else run.answer(ok, {meet: task.task === 'meet' || task.task === 'part_meet', task});
         back.disabled = !run.canUndo;
       },
       onNext: next,
@@ -60,6 +65,14 @@ export function showSession(el, content, run, cb) {
       kindOf: form => glyphKind(content, form),
     });
     window.scrollTo(0, 0);
+  }
+
+  // the characters met today, a check's look-alikes after its own tiers
+  function metToday() {
+    const today = run.session.today;
+    return Object.values(run.learner.states)
+      .filter(s => s.met === today && content.has(s.item) && content.kind(s.item) === 'reading')
+      .map(s => content.item(s.item).char);
   }
 
   function finish() {

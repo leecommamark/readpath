@@ -13,7 +13,7 @@
 // recomposition would give, and the app stays in step with the simulator.
 
 import {KEYS} from './store.js';
-import {openSession, current, answer, isMeet, nextDueDay} from './core/session.js';
+import {openSession, current, answer, isMeet, isCheck, skipCheck, nextDueDay} from './core/session.js';
 import {taskFor} from './core/tasks.js';
 import {sentenceIndex} from './core/sentences.js';
 import {focusText} from './core/today.js';
@@ -58,6 +58,23 @@ export function readingsOf(content, tasks) {
   return [...out];
 }
 
+// A check (brief 7.30) is never recorded: run.answer() on one, or
+// run.skipCheck(), passes over it with no history (so ‹ Back steps over it
+// to the Meet before), no tally and no save; run.progress doesn't count
+// checks, so the total shown before Start doesn't grow.
+const counted = queue => queue.filter(t => !isCheck(t)).length;
+
+// Drops a Meet whose item was met since it was queued, with its check.
+function dropMet(queue, states) {
+  let t = queue[0] || null;
+  while (t && isMeet(t) && states[t.item]) {
+    queue.shift();
+    if (isCheck(queue[0]) && queue[0].item === t.item) queue.shift();
+    t = queue[0] || null;
+  }
+  return t;
+}
+
 // startRun(content, store, today, {keepGoing, texts}) -> run
 //   run.task      the task on screen, or null when the session is over
 //   run.answer(ok) saves and moves on; returns {task, state, recomposed}
@@ -78,23 +95,22 @@ export function startRun(content, store, today, {keepGoing = false, texts = []} 
   const run = {
     learner, session, tally,
     choices: choiceRng(seed, today),
-    // A Meet for an item already met is dropped: the reference card can mark
-    // an item known mid-session, after its Meet was queued.
-    get task() {
-      let t = current(session);
-      while (t && isMeet(t) && learner.states[t.item]) {
-        session.queue.shift();
-        t = current(session);
-      }
-      return t;
-    },
+    // A Meet for an item already met is dropped, and its check: the
+    // reference card can mark an item known mid-session, after its Meet was
+    // queued.
+    get task() { return dropMet(session.queue, learner.states); },
     get summary() { return session.summary; },
     get pool() { return readingsOf(content, [...session.composed.tasks, ...session.queue]); },
     keepGoing, practice: false,
     get progress() {
-      return {done: session.answered, total: session.answered + session.queue.length};
+      return {done: session.answered, total: session.answered + counted(session.queue)};
     },
     get canUndo() { return history.length > 0; },
+    // the check on screen, passed over (brief 7.30): null if it isn't one
+    skipCheck(shown = null) {
+      const t = current(session);
+      return isCheck(t) && (!shown || shown === t) ? skipCheck(session) : null;
+    },
     // `task` is the task the card showed: an answer for any other changes
     // nothing and returns null, so a card left on screen can never answer
     // the task after it (patch plan 7.5, bug 1). Nor does a Meet whose item
@@ -103,10 +119,12 @@ export function startRun(content, store, today, {keepGoing = false, texts = []} 
     answer(ok, {meet = false, task: shown = null} = {}) {
       const task = current(session);
       if (!task || (shown && shown !== task)) return null;
+      if (isCheck(task)) return {task: skipCheck(session), state: null, recomposed: null};
       if (isMeet(task) && learner.states[task.item]) return null;
       history.push({item: task.item, before: learner.states[task.item] || null,
                     queue: session.queue.slice(), answered: session.answered,
                     passed: session.passed, recomposed: session.recomposed,
+                    checked: session.checked,
                     tally: {...tally}, day: structuredClone(todayLog(store, today))});
       const r = answer(content, learner, session, ok);
       store.save(KEYS.states, learner.states);
@@ -127,7 +145,8 @@ export function startRun(content, store, today, {keepGoing = false, texts = []} 
       if (h.before) learner.states[h.item] = h.before;
       else delete learner.states[h.item];
       session.queue = h.queue;
-      Object.assign(session, {answered: h.answered, passed: h.passed, recomposed: h.recomposed});
+      Object.assign(session, {answered: h.answered, passed: h.passed, recomposed: h.recomposed,
+                              checked: h.checked});
       Object.assign(tally, h.tally);
       store.save(KEYS.states, learner.states);
       store.save(KEYS.today, h.day);
@@ -290,29 +309,27 @@ export function startFamily(content, store, today, card, {texts = []} = {}) {
   const tally = {right: 0, wrong: 0, met: 0};
   const history = [];
   const snap = () => ({queue: fs.queue.slice(), answered: fs.answered, passed: fs.passed,
-                       recomposed: fs.recomposed, tried: fs.tried.slice(),
+                       recomposed: fs.recomposed, checked: fs.checked, tried: fs.tried.slice(),
                        quizzes: fs.quizzes.slice(), metHere: fs.metHere.slice()});
   return {
     learner, tally, family: card, practice: false, keepGoing: false,
     choices: choiceRng(seed + 3, today),
     get session() { return fs; },
     // a Meet whose item was met since (Mark known from its card) is dropped,
-    // as startRun's
-    get task() {
-      let t = fs.queue[0] || null;
-      while (t && isMeet(t) && learner.states[t.item]) {
-        fs.queue.shift();
-        t = fs.queue[0] || null;
-      }
-      return t;
-    },
+    // with its check, as startRun's
+    get task() { return dropMet(fs.queue, learner.states); },
     get summary() { return fs.composed.summary; },
     get pool() { return readingsOf(content, [...fs.composed.tasks, ...fs.queue]); },
-    get progress() { return {done: fs.answered, total: fs.answered + fs.queue.length}; },
+    get progress() { return {done: fs.answered, total: fs.answered + counted(fs.queue)}; },
     get canUndo() { return history.length > 0; },
+    skipCheck(shown = null) {
+      const t = fs.queue[0];
+      return isCheck(t) && (!shown || shown === t) ? skipCheck(fs) : null;
+    },
     answer(ok, {meet = false, task: shown = null} = {}) {
       const task = fs.queue[0];
       if (!task || (shown && shown !== task)) return null;
+      if (isCheck(task)) return {task: skipCheck(fs), state: null, recomposed: null};
       if (isMeet(task) && learner.states[task.item]) return null;
       history.push({item: task.item, before: learner.states[task.item] || null, fs: snap(),
                     tally: {...tally}, day: structuredClone(todayLog(store, today))});
