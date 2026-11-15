@@ -83,7 +83,7 @@ export function builtFrom(content, ch) {
   };
   const parts = content.partsOf(ch).map((p, i) => ({p, i}))
     .sort((a, b) => at(a.p) - at(b.p) || a.i - b.i).map(x => x.p);
-  return parts.map(({part, role, reading, cousins, written, variant}) => {
+  return parts.map(({part, role, reading, cousins, written, variant, label}) => {
     let note = null;
     if (role === 'sound') note = reading || content.partReading(part);
     if (role === 'meaning') note = content.partGloss(part);
@@ -91,7 +91,10 @@ export function builtFrom(content, ch) {
       ? cousins.map(c => ({ch: c, over: charJp(content, c)})) : [];
     // how well it gives the sound: by the family's range (patch plan 7.32
     // Phase 2, decision B; brief 7.28 P4's soundFit labels until then)
-    const fit = role === 'sound' ? rangeLabel(content, ch) : null;
+    // a link Mark ruled historical says so, unless the range gives it after
+    // all (7.34 phase 9)
+    const ranged = role === 'sound' ? rangeLabel(content, ch) : null;
+    const fit = label === 'historical' && ranged !== 'in' ? 'historical' : ranged;
     // the shape the character shows for it, where worn down (7.34): and
     // whether that shape is close in sound too
     const worn = !written ? null : isShapeHead(part) ? {shown: written, head: true, close: false, jp: content.partReading(part)}
@@ -127,7 +130,10 @@ export function wornLines(built) {
 // is outside the whole range (冠 under 元), "(sound: unlike the rest of its
 // family)" where it is in it only on its own account (是 under 止)
 export const RANGE_LABEL = {outside: 'sound: not in its family’s range',
-                            alone: 'sound: unlike the rest of its family'};
+                            alone: 'sound: unlike the rest of its family',
+                            // 7.34 phase 9: a sound part whose sound Cantonese no
+                            // longer carries (豎 豆, 海 每, 找 戈)
+                            historical: 'sound: historical'};
 export function roleText(b) {
   return b.role === 'sound' ? RANGE_LABEL[b.fit] || 'sound' : b.role;
 }

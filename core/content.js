@@ -113,7 +113,9 @@ export function loadContent(tables) {
     // is the part written another way, not worn down (慈's 兹 is 茲; 7.34)
     partsOf.get(r.char).push({part: r.part, role: r.role, reading: r.reading || null,
                               cousins: r.cousins || [], listed: r.listed !== 0,
-                              written: r.written || null, variant: r.variant === 1});
+                              written: r.written || null, variant: r.variant === 1,
+                              // a sound link Mark ruled historical (7.34 phase 9)
+                              label: r.label || null});
   }
   // a component's main role: 'sound' or 'meaning', whichever it plays in
   // more characters, a tie to sound (patch plan 7.6 3b, Mark: 口 is a
