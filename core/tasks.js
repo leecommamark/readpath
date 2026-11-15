@@ -39,6 +39,7 @@ import {readingId} from './content.js';
 import {tellApartPool} from './choices.js';
 import {MAINTAIN} from './state.js';
 import {partUnlocked} from './unlock.js';
+import {guessable} from './soundfit.js';
 
 const CHAR_TASK = {2: 'reading', 3: 'meaning', 4: 'word', 5: 'sentence'};
 const PART_TEST = {sound: 'predict', meaning: 'tell_apart'};
@@ -70,13 +71,17 @@ export function askedRung(content, id, rung, step, sentences = null) {
 }
 
 // The part a new character's Meet is inferred from: its sound part if that
-// has unlocked, else its meaning part (decided 2026-09-28: unlocked, not
-// known). `assume` counts a part being met this session (the payoff Meet).
-// A secondary reading is never inferred: its parts predict the main one.
+// has unlocked and the character is guessable from it (patch plan 7.32 W5,
+// R7: its main reading in the family's range), else its meaning part
+// (decided 2026-09-28: unlocked, not known), else none and it is taught.
+// `assume` counts a part being met this session (the payoff Meet). A
+// secondary reading is never inferred: its parts predict the main one.
 export function inferredFrom(content, states, id, assume = []) {
   const it = content.item(id);
   if (!it.primary) return null;
-  for (const q of [content.soundItemOf(it.char), content.meaningItemOf(it.char)]) {
+  const s = content.soundItemOf(it.char);
+  const parts = [s && guessable(content, it.char) ? s : null, content.meaningItemOf(it.char)];
+  for (const q of parts) {
     if (q && (assume.includes(q) || partUnlocked(states[q]))) return q;
   }
   return null;
@@ -89,7 +94,9 @@ export function inferredFrom(content, states, id, assume = []) {
 // known on one remembered answer), never the member it asked last
 // (`exclude`), so passing twice means predicting two members.
 function predictTarget(content, states, id, exclude, rng, role) {
-  const members = content.membersOf(id).filter(m => m !== exclude);
+  // only a member the part lets you guess (7.32 W5, R7)
+  const members = content.membersOf(id)
+    .filter(m => m !== exclude && guessable(content, content.item(m).char));
   const unmet = members.filter(m => !states[m]);
   if (role === 'testme') {
     const pool = unmet.length ? unmet : members;

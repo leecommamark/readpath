@@ -12,7 +12,8 @@
 
 import {h, han, put, clear, jpSpan} from './dom.js';
 import {glyphTile, progressOf, stateItemOf} from './glyph.js';
-import {treeLayout, soundLine} from '../core/tree.js';
+import {treeLayout, soundLine, seenAs, shownParts} from '../core/tree.js';
+import {shapeHead, shownForm} from '../core/shapehead.js';
 import {familyKeyOf} from '../core/family.js';
 import {stateOf} from './families.js';
 import {headSense, shortGloss} from '../core/gloss.js';
@@ -54,11 +55,19 @@ export function treeModel(content, states, form, {trail = [form], expanded = {}}
   const main = content.mainReading(form);
   const it = main ? {id: main} : itemOfTile(content, form);
   const familyKey = familyKeyOf(content, form);
-  const parts = content.partsInOrder(form);
+  // as the tree shows them: a shape head in place of its shape (7.34)
+  const parts = shownParts(content, form);
   const line = soundLine(form, content);
   const layout = treeLayout(form, content, expanded);
   const tiles = new Map();
   for (const c of layout.columns) for (const t of c.tiles) tiles.set(t.form, tileOf(content, states, t.form));
+  // where the shape is seen, if a character shows a part worn down to it
+  const seen = seenAs(form, content);
+  if (seen) {
+    for (const f of [...seen.groups.flatMap(g => [g.part, ...g.chars]), ...seen.shape]) {
+      if (!tiles.has(f)) tiles.set(f, tileOf(content, states, f));
+    }
+  }
   const readings = content.readingsOf(form).filter(r => r.item)
     .sort((a, b) => b.primary - a.primary).map(r => r.jp);
   return {
@@ -71,9 +80,15 @@ export function treeModel(content, states, form, {trail = [form], expanded = {}}
     written: parts.length > 1 ? {ordered: content.partsOrdered(form), parts} : null,
     soundLine: line.length >= 3 ? line.map(f => ({form: f, jp: jpOf(content, f)})) : null,
     familyKey, familyHead: familyKey && familyKey.slice(2),
-    layout, tiles,
+    layout, tiles, seen,
+    // a shape head says what it is (7.34): its shape, read as its members are
+    head_: shapeHead(form) && {shape: shapeHead(form).shape, jp: jpOf(content, form)},
   };
 }
+
+// a row of "Where you see 开": what the characters show it for (7.34)
+export const seenSaid = (form, g) => (g.head ? 'the sound shape in' : g.variant ? `written ${form} in` : `worn down to ${form} in`);
+export const SHAPE_SAID = 'only as a shape in';
 
 // the line under the header: "#378 on the path · part #2,832 · learning",
 // the card's rank line (facts.js) and the state
@@ -84,6 +99,12 @@ export const KEY_LINES = [
   {cls: 'sound', text: 'gives the sound'},
   {cls: 'meaning', text: 'gives the meaning'},
   {cls: 'shape', text: 'only the shape'},
+];
+// a worn-down part's line (7.34), keyed only where the tree has one
+export const KEY_WORN = [
+  {cls: 'sound worn', role: 'sound', variant: false, text: 'gives the sound, worn down'},
+  {cls: 'meaning worn', role: 'meaning', variant: false, text: 'gives the meaning, worn down'},
+  {cls: 'sound worn', role: 'sound', variant: true, text: 'gives the sound, written another way'},
 ];
 export const KEY_BORDERS = [
   {cls: 'square', text: 'sound part'},
@@ -122,8 +143,10 @@ export function renderTree(el, m, cb) {
       h('p', {class: 'note'}, jpSpan(m.readings.join(' · ')),
         m.readings.length ? ' · ' : '', placeSaid(m)),
       // an order the IDS didn't give isn't claimed as written order (7.10)
+      m.head_ && h('p', {class: 'note'}, 'A sound shape, read ', jpSpan(m.head_.jp),
+        ...(m.head_.shape.length === 1 ? [': not the character ', han(m.head_.shape)] : []), '.'),
       m.written && h('p', {class: 'note'}, m.written.ordered ? 'Written: ' : 'Parts (order not known): ',
-        han(m.written.parts.join(' · '))),
+        ...m.written.parts.flatMap((p, i) => [i ? ' · ' : '', han(p)])),
       m.soundLine && h('p', {class: 'note tree-soundline'}, 'Sound line: ',
         ...m.soundLine.flatMap((s, i) => [i ? h('span', {class: 'tree-arrow', 'aria-hidden': 'true'}, ' ← ') : '',
                                            han(s.form), s.jp ? [' ', jpSpan(s.jp)] : ''])),
@@ -184,14 +207,29 @@ export function renderTree(el, m, cb) {
       const x1 = a.r + 3, x2 = b.l - 3, mx = (x1 + x2) / 2;
       const p = document.createElementNS(SVG, 'path');
       p.setAttribute('d', `M${x1} ${a.y} C${mx} ${a.y} ${mx} ${b.y} ${x2} ${b.y}`);
-      p.setAttribute('class', `te te-${e.role}${e.hot ? ' hot' : ''}`);
+      p.setAttribute('class', `te te-${e.role}${e.hot ? ' hot' : ''}${e.worn ? ' worn' : ''}`);
       svg.append(p);
     }
     scroller.scrollLeft = Math.max(0, xOf(centre) - scroller.clientWidth / 2);
   };
 
+  // where the shape is seen (7.34, 开): a row per part behind it, then the
+  // characters that have it only as a shape; a tile opens its tree
+  const seenTile = f => {
+    const x = m.tiles.get(f);
+    return glyphTile(f, kindOf(f), {size: 'sm', over: x.over || '', overWeak: x.jpWeak,
+                                    label: `${f}${x.jp ? ` ${x.jp}` : ''}: its tree`, onTap: g => cb.onTree(g)});
+  };
+  const seen = m.seen && h('section', {class: 'block tree-seen'},
+    h('h2', {class: 'label'}, 'Where you see ', han(m.form)),
+    ...m.seen.groups.map(g => h('p', {class: 'seen-row'}, seenTile(g.part),
+      h('span', {class: 'note'}, seenSaid(m.form, g)), ...g.chars.map(seenTile))),
+    m.seen.shape.length ? h('p', {class: 'seen-row'}, h('span', {class: 'note'}, SHAPE_SAID),
+      ...m.seen.shape.map(seenTile)) : null);
   const key = h('div', {class: 'note tree-key'},
     ...KEY_LINES.map(k => h('span', {class: 'tree-key-item'},
+      h('span', {class: `tree-key-line te-${k.cls}`, 'aria-hidden': 'true'}), k.text)),
+    ...KEY_WORN.filter(k => edges.some(e => e.worn && e.role === k.role && !!e.variant === k.variant)).map(k => h('span', {class: 'tree-key-item'},
       h('span', {class: `tree-key-line te-${k.cls}`, 'aria-hidden': 'true'}), k.text)),
     ...KEY_BORDERS.map(k => h('span', {class: 'tree-key-item'},
       h('span', {class: `gk-${k.cls}`, 'aria-hidden': 'true'}), k.text)));
@@ -206,8 +244,9 @@ export function renderTree(el, m, cb) {
     crumbs,
     head,
     h('figure', {class: 'tree-figure', 'aria-label':
-      `${m.form}: its parts on the left, the characters built from it on the right`}, scroller),
+      `${shownForm(m.form)}: its parts on the left, the characters built from it on the right`}, scroller),
     key,
+    seen,
     study);
   requestAnimationFrame(draw);
 }

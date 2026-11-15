@@ -8,18 +8,21 @@
 //     where no reading has a share); the head can't be "a new character
 //     with this part" (decided 2-3). Tone is ignored: one row per toneless
 //     syllable;
-//   * two rows go in the same box when their similarity is >= SIM_MIN,
-//     single linkage (decided 5): phonology.py's syl_sim, onset ×
-//     max(rime, nucleus × coda), from the sound_sim table. No hand-set
-//     rules: oe and eo stay apart (decided 6);
-//   * a box's title says what its rows share (decided 7; P3): the same
-//     ending ("–yu"), the same start ("s–"), a grid when both vary and
-//     every pair is there (青: c z × ing eng), or the syllables listed;
-//     its chips name the swaps ("z ~ s ~ c");
-//   * boxes, and rows in a box, by share, highest first (decided 8); a lone
-//     row under OTHERS_UNDER folds into Others (decided 9);
+//   * the boxes are by ending, then start (Mark, 2026-11-15: "-ong and
+//     -oeng with d, t and c in the first section and s and z in the
+//     second"): one box per ending, its rows the starts read with it;
+//     syllabic ng and m one box of their own; boxes, and rows in a box, by
+//     share, highest first (decided 8); a lone row under OTHERS_UNDER folds
+//     into Others (decided 9). Until 7.32 a box was readings that sound
+//     alike (sylSim single linkage, decided 5);
 //   * the head's tile sits on each row that is one of its own readings;
-//     a reading of its own that no member has is `headOnly` (P6).
+//     a reading of its own that no member has is `headOnly` (P6);
+//   * `range` (patch plan 7.32, Phase 2 as Mark revised it): the family's
+//     range (core/soundfit.js) as a syllable grid, no characters and no tone
+//     -- {starts, ends, cells: [end][start] share, rest}: the starts and
+//     endings some reading in the range has, by how many members carry
+//     them, and in each cell the share of the family read that way; `rest`
+//     is the share read outside the range. "At a glance, the guessing rule."
 // Shares are fractions of n, the members counted. Fixed reference figures:
 // nothing here reads a learner's states.
 //
@@ -28,6 +31,7 @@
 // One with no role row is unknown, not empty, and isn't counted.
 
 import {familiesOf} from './family.js';
+import {familyRange, rangeSyl} from './soundfit.js';
 
 export const SIM_MIN = 0.15;
 export const OTHERS_UNDER = 0.01;
@@ -65,7 +69,16 @@ export function sylSim(content, a, b) {
 
 export function roleCounts(content, form) {
   const n = content.roleCountsOf(form);
-  return {total: n.sound + n.meaning + n.form, ...n};
+  // a family head counts its whole family as using it for its sound,
+  // the members of the parts folded into it too (7.32 R1: 院 uses 元, through
+  // 完), each character once
+  const uses = content.usesOf(form);
+  const sound = new Set(uses.filter(u => u.role === 'sound').map(u => u.char));
+  const added = content.familyMembers(form).filter(c => !sound.has(c));
+  if (!added.length) return {total: n.sound + n.meaning + n.form, ...n};
+  const moved = r => uses.filter(u => u.role === r && added.includes(u.char)).length;
+  const out = {sound: n.sound + added.length, meaning: n.meaning - moved('meaning'), form: n.form - moved('form')};
+  return {total: out.sound + out.meaning + out.form, ...out};
 }
 
 // a member's study-item readings with their part of its one count
@@ -76,25 +89,6 @@ function splitCount(content, ch) {
 }
 
 // the distinct values of one slot over rows, in row order
-const valuesOf = (rows, slot) => [...new Set(rows.map(r => r.parts[slot]))];
-
-// a box's title: {kind: 'ending' | 'start' | 'grid' | 'list' | 'one', ...}
-function titleOf(rows) {
-  if (rows.length === 1) return {kind: 'one', chips: []};
-  const starts = valuesOf(rows, 'onset'), ends = valuesOf(rows, 'rime');
-  const chip = vs => vs.length > 1 ? [vs] : [];
-  const chips = [...chip(starts), ...chip(ends)];
-  if (ends.length === 1) return {kind: 'ending', ending: ends[0], chips};
-  if (starts.length === 1 && starts[0]) return {kind: 'start', start: starts[0], chips};
-  const has = new Set(rows.map(r => `${r.parts.onset}|${r.parts.rime}`));
-  if (starts.length > 1 && starts.every(s => ends.every(e => has.has(`${s}|${e}`)))) {
-    const at = new Map(rows.map(r => [`${r.parts.onset}|${r.parts.rime}`, r]));
-    return {kind: 'grid', starts, ends, chips,
-            cells: ends.map(e => starts.map(s => at.get(`${s}|${e}`)))};
-  }
-  return {kind: 'list', chips};
-}
-
 export function soundFamily(content, key) {
   const fam = familiesOf(content);
   const card = fam.byKey.get(key) || fam.folded.get(key);
@@ -135,26 +129,39 @@ export function soundFamily(content, key) {
     row.tiles.sort((a, b) => order(a.form) - order(b.form) || a.second - b.second);
   }
   const list = [...rows.values()].sort((a, b) => b.share - a.share || a.first - b.first);
-  // single linkage at SIM_MIN
-  const up = list.map((_, i) => i);
-  const find = i => (up[i] === i ? i : (up[i] = find(up[i])));
-  for (let i = 0; i < list.length; i++) {
-    for (let j = i + 1; j < list.length; j++) {
-      if (sylSim(content, list[i].syl, list[j].syl) >= SIM_MIN) up[find(i)] = find(j);
-    }
-  }
+  // boxes by ending, syllabic ng and m one ending
+  const endOf = row => (rangeSyl(row.syl) || {rime: row.syl}).rime;
   const groups = new Map();
-  list.forEach((row, i) => {
-    const g = find(i);
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g).push(row);           // list is in order, so each group is
-  });
-  const all = [...groups.values()].map(rs => ({
-    rows: rs, share: rs.reduce((t, r) => t + r.share, 0), title: titleOf(rs)}))
+  for (const row of list) {
+    const e = endOf(row);
+    if (!groups.has(e)) groups.set(e, []);
+    groups.get(e).push(row);              // list is in order, so each group is
+  }
+  const all = [...groups].map(([e, rs]) => ({
+    rows: rs, share: rs.reduce((t, r) => t + r.share, 0),
+    title: rs.length === 1 && e !== 'm' ? {kind: 'one', chips: []}
+      : e === 'm' ? {kind: 'syllabic', chips: []} : {kind: 'ending', ending: e, chips: []}}))
     .sort((a, b) => b.share - a.share || a.rows[0].first - b.rows[0].first);
   const lone = b => b.rows.length === 1 && b.share < OTHERS_UNDER;
   const otherRows = all.filter(lone).flatMap(b => b.rows);
+  // the range as a syllable grid (a row whose characters are all per_char
+  // members, 語 under 五, is Mark's ruling, not the range's: it counts in rest)
+  const rg = familyRange(content, head);
+  const cell = new Map(), carried = {onset: new Map(), rime: new Map()};
+  let inside = 0;
+  for (const row of list) {
+    const p = rangeSyl(row.syl);
+    if (!p || !rg.onsets.has(p.onset) || !rg.rimes.has(p.rime)) continue;
+    const k = `${p.onset}|${p.rime}`;
+    cell.set(k, (cell.get(k) || 0) + row.share);
+    inside += row.share;
+    for (const slot of ['onset', 'rime']) carried[slot].set(p[slot], (carried[slot].get(p[slot]) || 0) + row.count);
+  }
+  const byCount = m => [...m.keys()].sort((a, b) => m.get(b) - m.get(a) || a.localeCompare(b));
+  const starts = byCount(carried.onset), ends = byCount(carried.rime);
+  const range = {starts, ends, cells: ends.map(e => starts.map(o => cell.get(`${o}|${e}`) || 0)),
+                 rest: Math.max(0, 1 - inside)};
   return {key, head, n, boxes: all.filter(b => !lone(b)),
           others: otherRows.length ? {rows: otherRows, share: otherRows.reduce((t, r) => t + r.share, 0)} : null,
-          headOnly, roles: roleCounts(content, head)};
+          range, headOnly, roles: roleCounts(content, head)};
 }

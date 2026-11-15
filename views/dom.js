@@ -5,6 +5,8 @@
 // content can't inject markup. `on*` attributes become listeners; `false`,
 // null and undefined attributes and children are skipped.
 
+import {shapeHead, isShapeHead, CROPS} from '../core/shapehead.js';
+
 export function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -26,8 +28,25 @@ function append(el, children) {
 }
 
 // A span of Chinese text: the CJK face, and the document's zh-Hant-HK lang.
-export const han = (text, attrs = {}) =>
-  h('span', {lang: 'zh-Hant-HK', ...attrs, class: `han ${attrs.class || ''}`.trim()}, text);
+export const han = (text, attrs = {}) => (isShapeHead(text)
+  ? h('span', {lang: 'zh-Hant-HK', ...attrs, class: `han shead ${attrs.class || ''}`.trim(),
+               title: formSaid(text)}, headGlyph(text))
+  : h('span', {lang: 'zh-Hant-HK', ...attrs, class: `han ${attrs.class || ''}`.trim()}, text));
+
+// A shape head's glyph (7.34): its shape, or for a shape with no code point
+// a member's glyph cut down to it (廿口夫: the left of 難)
+export function headGlyph(form) {
+  const {shape} = shapeHead(form);
+  const crop = CROPS[shape];
+  return crop ? h('span', {class: `crop crop-${crop.keep}`, 'aria-hidden': 'true'},
+                  h('span', {class: 'crop-in'}, crop.from))
+    : shape;
+}
+// a form in words, for a label: a shape head says what it is
+export const formSaid = form => {
+  const s = shapeHead(form);
+  return s ? `${CROPS[s.shape] ? `${s.shape} shape` : s.shape} as a sound part, read ${s.name}` : form;
+};
 
 // A span of jyutping, alone (brief 7.12): its tones drawn as marks when the
 // learner has them on (app.css .jp). Never wrap other text in it.

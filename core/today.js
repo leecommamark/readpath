@@ -50,6 +50,8 @@ import {taskFor, checkFor, isCheck} from './tasks.js';
 import {sentenceIndex} from './sentences.js';
 import {isAvailable} from './unlock.js';
 import {focusNeeds} from './focus.js';
+import {guessable} from './soundfit.js';
+import {TELL_WINDOW} from './choices.js';
 
 export const QUIZ_GAP = 5;
 export const SECONDS_PER_TASK = 7;         // DESIGN: 100 tasks ≈ 12 minutes
@@ -92,7 +94,14 @@ function chooseNew(content, states, slots, focusItems) {
     if (units.length >= slots) return;
     const members = content.membersOf(id).filter(m => !chosen.has(m)
       && isAvailable(content, states, m, [id]));
-    const m = members.find(x => focusSet.has(x)) || members[0];
+    // the payoff is a member the part lets you guess (7.32 W5, R7): a focus
+    // member first, else the next guessable one, but only within
+    // TELL_WINDOW ranks of the member it replaces, so meeting it doesn't
+    // pull a rare character forward (W5a: 每's 海 -> 梅 was +1141)
+    const ok = members.filter(x => guessable(content, content.item(x).char));
+    let m = ok.find(x => focusSet.has(x));
+    if (!m && ok.length && members.length
+        && content.rank(ok[0]) - content.rank(members[0]) <= TELL_WINDOW) m = ok[0];
     if (!m) return;
     chosen.add(m);
     units.push({item: m, kind: 'payoff', of: id, source: focusSet.has(m) ? 'focus' : 'path'});

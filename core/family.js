@@ -2,7 +2,8 @@
 // and 4b; brief 7.5 decided 5 and 6).
 //
 // familiesOf(content): the path's characters grouped by the sound part
-// part_role names for them, as Path shows them (views/families.js draws
+// part_role names for them, followed up any fold (patch plan 7.32 R1: 當's
+// members are 尚's), as Path shows them (views/families.js draws
 // them). A character with no sound part that others have as theirs heads
 // that family and is its member (止); one with a sound part of its own (青,
 // under 井) is a member of that family, and only the head of its own.
@@ -67,7 +68,8 @@ export function familiesOf(content) {
   const byPath = (a, b) => number.get(a) - number.get(b);
   const groups = new Map();
   for (const c of chars) {
-    const s = content.soundPartOf(c);
+    // the family, folds followed (7.32 R1): 擋 is on 尚's card, not 當's
+    const s = content.familyHeadOf(c);
     if (!s) continue;
     if (!groups.has(s)) groups.set(s, []);
     groups.get(s).push(c);
@@ -114,7 +116,7 @@ function tiny(content, head, members) {
 // null where neither is a family.
 export function familyKeyOf(content, form) {
   const fam = familiesOf(content);
-  const sp = content.soundPartOf(form);
+  const sp = content.familyHeadOf(form);
   return fam.byKey.has(`f:${form}`) ? `f:${form}`
     : sp && fam.byKey.has(`f:${sp}`) ? `f:${sp}` : null;
 }

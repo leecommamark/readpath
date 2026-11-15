@@ -80,7 +80,7 @@ const app = {
   reader: null,             // {id, lines, selected}: the text being read
   family: null,             // {key, mode}: the family page open (patch plan 7.5)
   tree: null,               // {trail, expanded}: the tree open (patch plan 7.7)
-  browse: {sort: 'text', show: 'taught', shown: 0},  // Browse families' sort, filter (7.28) and rows drawn (7.7)
+  browse: {sort: 'useful', show: 'taught', shown: 0},  // Browse families' sort (Most useful since 7.32 W9), filter (7.28) and rows drawn (7.7)
   steps: 'families',        // the Steps tab's side: 'families' | 'meaning' (7.8)
   fromTab: 'path',          // the tab a family page or a tree was opened from (7.8)
   check: null,              // {check, rng, meaning, back} or {review, perPage}: the placement check on

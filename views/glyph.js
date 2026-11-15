@@ -29,7 +29,8 @@
 // lines, words, In your texts, sentences) keeps its lighter treatment and
 // never uses this.
 
-import {h} from './dom.js';
+import {h, headGlyph, formSaid} from './dom.js';
+import {isShapeHead} from '../core/shapehead.js';
 import {soundId, meaningId} from '../core/content.js';
 
 export const SIZES = ['sm', 'md', 'lg', 'xl', 'xxl'];
@@ -264,14 +265,16 @@ export function glyphTile(form, kind, {size = 'sm', onTap = null, locked = false
                                        progress = null, label = null, cls = '',
                                        overWeak = false, dashed = false} = {}) {
   const m = tileModel(kind, {size, progress, dashed});
-  const tile = h('span', {class: m.classes.join(' '), lang: 'zh-Hant-HK'},
-    ring(m.border, size), h('span', {class: 'gt-form'}, form));
+  // a shape head (7.34) draws its shape, marked: it is not that character
+  const head = isShapeHead(form);
+  const tile = h('span', {class: [...m.classes, head && 'gt-head'].filter(Boolean).join(' '), lang: 'zh-Hant-HK'},
+    ring(m.border, size), h('span', {class: 'gt-form'}, head ? headGlyph(form) : form));
   const parts = [over != null && h('span', {class: `gt-over jp${overWeak ? ' weak' : ''}`, lang: 'en'},
                                    over || ' '), tile];
   const classes = [...m.outer, cls].filter(Boolean).join(' ');
   if (!onTap) return h('span', {class: classes}, ...parts);
   return h('button', {type: 'button', class: classes,
-                      'aria-label': label || `${form}: open its reference card`,
+                      'aria-label': label || `${formSaid(form)}: open its reference card`,
                       onclick: () => { if (!locked || !locked()) onTap(form); }}, ...parts);
 }
 

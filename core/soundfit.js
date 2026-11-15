@@ -71,6 +71,15 @@ function relation(content, mine, theirs) {
   return null;
 }
 
+// rhymesWith(content, ch, form) -> whether `form`'s own reading shares a
+// rime with one of `ch`'s (tone ignored, m and ng one sound): a worn-down
+// shape that is close in sound too (patch plan 7.34, Decided 13: 志 寺 zi
+// and the 士 si6 they show; 矣 ji5 and 厶 si1)
+export function rhymesWith(content, ch, form) {
+  const theirs = partSyls(content, form);
+  return studySyls(content, ch).some(x => theirs.some(y => x.rime === y.rime));
+}
+
 export function soundFit(content, ch, part) {
   const m = memo(content);
   if (!m.fam.has(part)) m.fam.set(part, soundFamily(content, `f:${part}`));
@@ -101,4 +110,132 @@ export function fitLabel(fit) {
     case 'historic': return 'possibly historic?';
     default: return 'sound';
   }
+}
+
+// ---- the range (patch plan 7.32, R2-R8; Mark, 2026-11-14/15)
+//
+// A family is its head and its members: the head's own, and the members of
+// any part folded into it (R1; content.familyMembers carries them merged).
+// Its range is a set of starts and a set of endings (the research's range B,
+// research/analysis/score.py): a value is in it when two members carry it,
+// or one does and a class-mate (curated/sound_classes.tsv) is carried. The
+// head's readings build the range and are never tested. Syllabic m and ng
+// are one sound starting ng- (soundFit's, W3a, W4a).
+//   familyRange(content, head)  {onsets, rimes}: the whole family's, the one
+//                               the line names (R11)
+//   inRange(content, ch, head)  ch's family without ch gives a range one of
+//                               ch's readings is in (leave-one-out, R2); a
+//                               member with a per_char reading always is
+//   guessable(content, ch)      ch's MAIN reading is in its family's range
+//                               without it (R7)
+//   partFit(content, head)      {n, inn, outside, alone}: the share in range;
+//                               `outside` has no reading in the whole range
+//                               (the line's "Not in"), `alone` is in it only
+//                               on its own account
+// Memoised per content.
+
+const ranged = new WeakMap();
+
+// a start and an ending; syllabic m and ng one sound starting ng-
+export function rangeSyl(jp) {
+  const s = splitSyl(jp);
+  if (!s) return null;
+  if (s.nucleus === 'ng' || s.nucleus === 'm') return {onset: 'ng', rime: 'm'};
+  return {onset: s.onset || '∅', rime: s.rime};
+}
+
+const studied = (content, ch) => content.readingsOf(ch).filter(r => r.item).map(r => r.jp);
+
+function rangeMemo(content) {
+  if (!ranged.has(content)) ranged.set(content, {bag: new Map(), whole: new Map(), loo: new Map()});
+  return ranged.get(content);
+}
+
+// [ch, {onset, rime}] for the head and every member with a studied reading
+function bagOf(content, head) {
+  const m = rangeMemo(content);
+  if (!m.bag.has(head)) {
+    const own = studied(content, head);
+    const hr = own.length ? own : [content.partReading(head)].filter(Boolean);
+    const members = content.familyMembers(head).filter(c => studied(content, c).length);
+    const bag = [...hr.map(jp => [head, rangeSyl(jp)]),
+                 ...members.flatMap(c => studied(content, c).map(jp => [c, rangeSyl(jp)]))]
+      .filter(x => x[1]);
+    m.bag.set(head, {bag, members});
+  }
+  return m.bag.get(head);
+}
+
+// the values of one slot in range, `excl` left out
+function slotSet(content, bag, slot, excl) {
+  const by = new Map();
+  for (const [c, p] of bag) {
+    if (c === excl) continue;
+    if (!by.has(p[slot])) by.set(p[slot], new Set());
+    by.get(p[slot]).add(c);
+  }
+  const classes = content.soundClasses[slot];
+  const out = new Set();
+  for (const [v, cs] of by) {
+    if (cs.size >= 2) out.add(v);
+    else if ((classes.find(g => g.includes(v)) || []).some(u => u !== v && by.has(u))) out.add(v);
+  }
+  return out;
+}
+
+export function familyRange(content, head) {
+  const m = rangeMemo(content);
+  if (!m.whole.has(head)) {
+    const {bag} = bagOf(content, head);
+    m.whole.set(head, {onsets: slotSet(content, bag, 'onset'), rimes: slotSet(content, bag, 'rime')});
+  }
+  return m.whole.get(head);
+}
+
+function looRange(content, head, ch) {
+  const m = rangeMemo(content);
+  const k = `${head}|${ch}`;
+  if (!m.loo.has(k)) {
+    const {bag} = bagOf(content, head);
+    m.loo.set(k, {onsets: slotSet(content, bag, 'onset', ch), rimes: slotSet(content, bag, 'rime', ch)});
+  }
+  return m.loo.get(k);
+}
+
+const within = (r, jp) => {
+  const p = rangeSyl(jp);
+  return !!p && r.onsets.has(p.onset) && r.rimes.has(p.rime);
+};
+
+export function inRange(content, ch, head) {
+  if (content.perCharOf(head)[ch]) return true;
+  const r = looRange(content, head, ch);
+  return studied(content, ch).some(jp => within(r, jp));
+}
+
+export function guessable(content, ch) {
+  const head = content.familyHeadOf(ch);
+  const id = content.mainReading(ch);
+  if (!head || !id || ch === head) return false;
+  if (content.perCharOf(head)[ch]) return true;
+  return within(looRange(content, head, ch), content.item(id).jp);
+}
+
+// whether a reading falls in a family's whole range: a wrong choice must not
+// share its start or its ending with it (R8), so this is per slot
+export function sharesRange(content, head, jp) {
+  const p = rangeSyl(jp);
+  const r = familyRange(content, head);
+  return !!p && (r.onsets.has(p.onset) || r.rimes.has(p.rime));
+}
+
+export function partFit(content, head) {
+  const {members} = bagOf(content, head);
+  const whole = familyRange(content, head);
+  const inn = [], outside = [], alone = [];
+  for (const c of members) {
+    if (inRange(content, c, head)) inn.push(c);
+    else (studied(content, c).some(jp => within(whole, jp)) ? alone : outside).push(c);
+  }
+  return {n: members.length, fit: members.length ? inn.length / members.length : 1, inn, outside, alone};
 }

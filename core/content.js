@@ -10,9 +10,11 @@
 // the content goes through the object returned here, so a later change of
 // table shape is a change to this file alone.
 
+import {isShapeHead} from './shapehead.js';
+
 export const TABLES = ['glyph', 'reading', 'part_role', 'sound_part',
                        'meaning_part', 'tellapart', 'word', 'path', 'syllable',
-                       'decomp', 'sound_sim', 'marker'];
+                       'decomp', 'sound_sim', 'marker', 'sound_class'];
 // The Reader's (patch plan 5, Phase 1), loaded at boot too, but optional
 // here: a caller that only composes Today needs none of them. `lexicon` is a
 // flat array, `variants` one object (s2t), `char` rows as above. `offchar`
@@ -107,10 +109,11 @@ export function loadContent(tables) {
     // a curated no-example pair (撚 under 扌), never shown among the part's
     // characters (patch plan 6.5: CO-064, CO-016, CO-058); written: the
     // worn-down shape the character shows for it (巷 邑 as 巳, 有 又 as 𠂇),
-    // the form decomp and roleIn know it by (brief 7.9)
+    // the form decomp and roleIn know it by (brief 7.9); variant: that shape
+    // is the part written another way, not worn down (慈's 兹 is 茲; 7.34)
     partsOf.get(r.char).push({part: r.part, role: r.role, reading: r.reading || null,
                               cousins: r.cousins || [], listed: r.listed !== 0,
-                              written: r.written || null});
+                              written: r.written || null, variant: r.variant === 1});
   }
   // a component's main role: 'sound' or 'meaning', whichever it plays in
   // more characters, a tie to sound (patch plan 7.6 3b, Mark: 口 is a
@@ -174,6 +177,9 @@ export function loadContent(tables) {
   // 邑 is written 巳): the tree reads decomp's forms
   const roleIn = new Map();                // `${char}|${form}` -> role
   for (const r of T.part_role) roleIn.set(`${r.char}|${r.written || r.part}`, r.role);
+  // a shape head stands in the tree for the shape it is (7.34: 安's 女 is
+  // [女 on]), so it is known by its own form too
+  for (const r of T.part_role) if (r.written && isShapeHead(r.part)) roleIn.set(`${r.char}|${r.part}`, r.role);
   // what is built from a part as its sound or meaning (the tree's right
   // side): listed pairs only, sound uses first, then path order
   const uses = new Map();                  // part -> [{char, role}]
@@ -186,6 +192,23 @@ export function loadContent(tables) {
   for (const list of uses.values()) {
     list.sort((a, b) => (a.role !== 'sound') - (b.role !== 'sound') || charRank(a.char) - charRank(b.char));
   }
+  // where a shape is seen (patch plan 7.34, 开): the characters that show a
+  // part worn down to it, or written another way, and those that have it
+  // only as a shape; listed pairs, path order
+  const seenIn = new Map();                // shape -> [{char, part, role, variant}]
+  const shapeUses = new Map();             // part -> [char] as a form part
+  for (const r of T.part_role) {
+    if (r.listed === 0) continue;
+    if (r.written) {
+      if (!seenIn.has(r.written)) seenIn.set(r.written, []);
+      seenIn.get(r.written).push({char: r.char, part: r.part, role: r.role, variant: r.variant === 1});
+    } else if (r.role === 'form') {
+      if (!shapeUses.has(r.part)) shapeUses.set(r.part, []);
+      shapeUses.get(r.part).push(r.char);
+    }
+  }
+  for (const list of seenIn.values()) list.sort((a, b) => charRank(a.char) - charRank(b.char));
+  for (const list of shapeUses.values()) list.sort((a, b) => charRank(a) - charRank(b));
 
   // how a part is used, shape too (brief 7.25 decided 10): listed pairs, as
   // usesOf; part_role has one row per character and part
@@ -209,7 +232,19 @@ export function loadContent(tables) {
     const id = form && make(form);
     return id && items.has(id) ? id : null;
   };
-  const soundItemOf = ch => partItem(soundPartOf.get(ch), soundId);
+  // a character's family (patch plan 7.32 R1): its sound part, followed up
+  // fold_into to the part heading the family (擋's sound part is 當, its
+  // family 尚's); the sound part itself, for Built from and the tree, is
+  // soundPartOf's, unchanged
+  const foldInto = new Map(T.sound_part.filter(s => s.fold_into).map(s => [s.part, s.fold_into]));
+  const familyHead = part => {
+    for (let n = 0; part && foldInto.has(part) && n < 16; n++) part = foldInto.get(part);
+    return part || null;
+  };
+  const familyHeadOf = ch => familyHead(soundPartOf.get(ch));
+  const soundItemOf = ch => partItem(familyHeadOf(ch), soundId);
+  // every sound part's family, item or not, and its per_char readings
+  const soundRow = new Map(T.sound_part.map(s => [s.part, s]));
   const meaningItemOf = ch => partItem(meaningPartOf.get(ch), meaningId);
 
   return {
@@ -253,6 +288,14 @@ export function loadContent(tables) {
     onePart,
     soundItemOf, meaningItemOf,
     membersOf: id => members.get(id) || [],
+    // patch plan 7.32: the family a character belongs to (folds followed),
+    // a part's whole family as characters (item or not), its per_char
+    // readings ({char: jp}), and the sound classes ({onset, rime}: [[value]])
+    familyHeadOf, familyHead,
+    familyMembers: part => ((soundRow.get(part) || {}).members || []).filter(c => c !== part),
+    perCharOf: part => (soundRow.get(part) || {}).per_char || {},
+    soundClasses: {onset: T.sound_class.filter(c => c.slot === 'onset').map(c => c.members),
+                   rime: T.sound_class.filter(c => c.slot === 'rime').map(c => c.members)},
     wordsOf: id => item(id).words || [],
     // A reading's example word for the word rung. `words` never holds the
     // bare character (Phase 0 finding 2), so any entry is a real word.
@@ -270,6 +313,10 @@ export function loadContent(tables) {
     roleIn: (char, form) => roleIn.get(`${char}|${form}`) || null,
     // the characters built from a part as their sound or meaning part
     usesOf: part => uses.get(part) || [],
+    // the characters that show `shape` for a part worn down to it (or
+    // written another way), and those that have it only as a shape (7.34)
+    seenIn: shape => seenIn.get(shape) || [],
+    shapeUsesOf: part => shapeUses.get(part) || [],
     // {sound, meaning, form}: how many characters use `part` each way
     roleCountsOf: part => ({sound: 0, meaning: 0, form: 0, ...roleCounts.get(part)}),
     tellapart: T.tellapart,

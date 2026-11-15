@@ -577,6 +577,19 @@ p.in-text { cursor: default; }
 .fam-cell .fam-row-tiles { gap: var(--s2) var(--s1); }
 .fam-cell .fam-row { grid-template-columns: minmax(0, 1fr); }
 .fam-cell .fam-row-head { flex-direction: row; gap: var(--s2); align-items: baseline; }
+/* a family's range as a syllable grid over its boxes (7.32 Phase 2): starts
+   down, endings across, a % in each cell; compact on a part's Meet */
+.fam-range { margin: var(--s1) 0 var(--s3); }
+.fam-range-h { margin: 0 0 var(--s1); }
+.fam-range-grid { display: grid; gap: 2px; max-width: 22rem; }
+.frg-h { font-size: var(--t-sm); font-weight: 600; color: var(--accent); text-align: center; padding: 2px var(--s1); }
+.frg-h.side { text-align: left; }
+.frg-cell { background: var(--surface); border-radius: 6px; text-align: center; padding: var(--s1) 2px;
+  font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
+.frg-cell.empty { background: transparent; }
+.fam-range-rest { margin: var(--s1) 0 0; color: var(--muted); }
+.fam-sounds.compact { text-align: left; margin: var(--s2) 0; }
+.browse-fit { white-space: nowrap; }
 /* a second reading: faded (its ring draws the dashes) */
 .fam-second .gt-form, .fam-second .gt-over { opacity: .55; }
 .study { gap: var(--s2); }
@@ -653,6 +666,15 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
       width: 1.42em; height: 1.42em; border-radius: .16em; line-height: 1;
       font-family: var(--han); font-weight: 500; color: var(--ink); }
 .gt-circle { border-radius: 50%; }
+/* a shape head (7.34): the shape, not the character of that shape, so its
+   tile is marked by a second, outer ring (Mark: marked, no brackets) */
+.gt-head { box-shadow: 0 0 0 .09em var(--surface), 0 0 0 .15em var(--known); }
+/* a shape with no code point, cut from a member's glyph (廿口夫: 難's left) */
+.crop { display: inline-block; overflow: hidden; white-space: nowrap; vertical-align: bottom; }
+.crop-left { width: .5em; }
+.crop-in { display: inline-block; }
+/* in a line of text, a soft jade underline: not the character either */
+.han.shead { box-shadow: inset 0 -.14em 0 var(--known-soft); }
 .gt-bound { background: var(--tint); }
 .gt-bound .gt-form { color: var(--muted); }
 .is-ahead .gt-form { opacity: .55; }
@@ -775,6 +797,9 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .te-shape { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: .45; }
 .te-sound.hot { stroke-width: 1.75; }
 .te-meaning.hot, .te-shape.hot { stroke-width: 1.5; }
+/* a part the character shows worn down (7.34: 畾 ⇢ 田): its role's colour, a
+   longer dash than the shape line's, at full strength */
+.te.worn { stroke-dasharray: 5 3; }
 .tree-node { position: absolute; display: flex; flex-direction: column; align-items: center;
              justify-content: center; gap: 0; box-sizing: border-box; }
 .tree-node.is-here::before { content: ""; position: absolute; inset: 4px 2px; border-radius: 12px;
@@ -796,6 +821,9 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .tree-key-line { display: inline-block; width: 22px; height: 0; border-top: 1.25px solid var(--known); }
 .tree-key-line.te-meaning { border-top: 1px solid var(--muted); }
 .tree-key-line.te-shape { border-top: 1px dashed var(--muted); opacity: .45; }
+.tree-key-line.worn { border-top-style: dashed; }
+/* Where you see 开 (7.34): a row per part behind the shape */
+.seen-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); margin: var(--s2) 0; }
 .gk-solid { width: 14px; height: 14px; border: 1.5px solid var(--ink); border-radius: 3px; box-sizing: border-box; }
 
 /* ---- Path: where you are on the path (patch plan 7.7, Phase 4) ---------

@@ -31,6 +31,7 @@
 // question always has one answer.
 
 import {toneless} from './content.js';
+import {rangeSyl, sharesRange} from './soundfit.js';
 
 export const CHOICES = 4;
 // the rank window (either side) for choices drawn by path rank
@@ -131,6 +132,11 @@ const glossOf = (content, ch) => {
 // check, brief 7.13 decided 4): where another character with the same sound
 // part reads differently, one wrong choice is its reading, so knowing the
 // sound part doesn't single out the answer (青 doesn't give away 晴).
+// opts.range (patch plan 7.32 R8, W4): the head of the family a guess is made
+// from (the inferred Meet, the payoff, Predict, Test me); no wrong choice
+// then shares a start or an ending with the family's range, nor the answer's
+// ending, so the answer is the only choice the part points to (問 from 門: no
+// m-, -un, -an).
 export function readingChoices(content, char, answer, rng, pool = [], exclude = [], opts = {}) {
   const syl = content.syllables;
   const own = syl.get(toneless(answer));
@@ -146,11 +152,14 @@ export function readingChoices(content, char, answer, rng, pool = [], exclude = 
     if (k && k !== own.key) banned.add(k);
   }
   const wrong = [];
+  const ending = jp => (rangeSyl(jp) || {}).rime;
+  const outside = jp => !opts.range
+    || (!sharesRange(content, opts.range, jp) && ending(jp) !== ending(answer));
   const take = list => {
     for (const jp of rng.shuffle([...new Set(list)])) {
       if (wrong.length === CHOICES - 1) return;
       const k = keyOf(jp);
-      if (!k || banned.has(k)) continue;
+      if (!k || banned.has(k) || !outside(jp)) continue;
       banned.add(k);
       wrong.push(jp);
     }

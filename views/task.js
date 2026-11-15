@@ -33,7 +33,7 @@
 
 import {h, han, clear, put, rubyWord, jpSpan, layerChip, speaker, canSay} from './dom.js';
 import {cardWords, word as wordEntry, builtFrom, roleText, standsLine, whyLine, relationOf, overOf, meaningWording,
-        LAYER_TEXT, sayFor} from './facts.js';
+        LAYER_TEXT, sayFor, wornLines} from './facts.js';
 import {kindOf} from '../core/content.js';
 import {readingChoices, characterChoices, meaningChoices,
         tellApartChoices, checkChoices} from '../core/choices.js';
@@ -43,12 +43,9 @@ import {readingItemFor} from '../core/focus.js';
 import {sentenceSpans} from '../core/lines.js';
 import {wordChars} from './reader.js';
 import {glyphTile, BORDER_KEY, borderKinds} from './glyph.js';
-
-// Sound patterns taught at Predict (DESIGN *Sound patterns*), by the code
-// export_content.py records per member in sound_part.patterns.
-export const PATTERN_TEXT = {
-  ng_j: 'In this series ng- becomes j- before yu and i.',
-};
+import {rangeNote, renderRangeNote} from './range.js';
+import {soundsBlock, compactTile} from './families.js';
+import {soundFamily} from '../core/soundfamily.js';
 
 function partCard(content, task, base, states = {}) {
   const it = content.item(task.item);
@@ -56,11 +53,12 @@ function partCard(content, task, base, states = {}) {
   if (task.task === 'part_meet') {
     const members = content.membersOf(task.item);
     if (it.kind === 'sound') {
-      const same = members.filter(id => key(content.item(id).jp) === key(it.taughtReading));
+      // the family's range, drawn (7.32 R11, Phase 2 decision A), in place
+      // of "N of them sound like it"
       return {...base, kind: 'part', glyph: it.part, lead: 'A new sound part',
               reveal: {jp: it.taughtReading},
-              facts: [`Unlocks ${members.length} characters on your path; ` +
-                      `${same.length} of them sound like it.`],
+              facts: [`Unlocks ${members.length} characters on your path.`],
+              sounds: soundFamily(content, `f:${it.part}`),
               choices: [], answer: null};
     }
     // worded as its reliability allows (CO-059): a misleading part's note
@@ -75,20 +73,21 @@ function partCard(content, task, base, states = {}) {
   }
   if (task.task === 'predict' && task.target) {
     const m = content.item(task.target);
-    const pat = (it.patterns || []).find(p => p.startsWith(`${m.char}:`));
     // Test me on a part not met yet (Mark, step 6 6b): nothing has taught it,
     // so the lead says what it is rather than "You know"
     return {...base, kind: 'question', glyph: m.char, target: task.target,
             from: {part: it.part, note: it.taughtReading, kind: 'sound', verb: 'Predict:',
                    met: base.met !== false},
-            choices: readingChoices(content, m.char, m.jp, base.rng, base.pool).map(reading),
+            choices: readingChoices(content, m.char, m.jp, base.rng, base.pool, [], {range: it.part}).map(reading),
             answer: m.jp,
             // the meaning and the card's words with the reading, as the
             // inferred Meet shows them, so the answer teaches without a tap
             // (brief 7.9; the card's words since 7.10)
             reveal: {glyph: m.char, jp: m.jp, gloss: m.gloss, say: sayFor(content, task.target),
                      words: cardWords(content, task.target),
-                     pattern: pat ? PATTERN_TEXT[pat.split(':')[1]] || null : null}};
+                     // where in the family's range the answer sits (R10; the
+                     // classes replaced 7.32's named patterns, R6)
+                     rangeNote: rangeNote(content, m.char, m.jp, it.part)}};
   }
   if (task.task === 'tell_apart' && task.target) {
     const t = tellApartChoices(content, task.target, base.rng, it.part, states);
@@ -167,10 +166,11 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
     }
     const part = content.item(from);
     if (kindOf(from) === 'sound') {
-      return {...base, kind: 'guess', glyph: it.char, reveal,
+      return {...base, kind: 'guess', glyph: it.char,
+              reveal: {...reveal, rangeNote: rangeNote(content, it.char, it.jp, part.part)},
               lead: `You know ${part.part} ${part.taughtReading}. Guess:`,
               from: {part: part.part, note: part.taughtReading, kind: 'sound'},
-              choices: readingChoices(content, it.char, it.jp, rng, pool).map(reading),
+              choices: readingChoices(content, it.char, it.jp, rng, pool, [], {range: part.part}).map(reading),
               answer: it.jp};
     }
     const m = meaningChoices(content, task.item, rng);
@@ -334,7 +334,9 @@ function builtLine(built, cb) {
     level && h('span', {class: 'gt-over jp'}, '\u00a0'), h('span', {class: 'gt plus-gt'}, '+'));
   parts.forEach((p, i) => { if (i) joined.push(plus()); joined.push(p); });
   return h('div', {class: 'built-under'}, h('p', {class: 'label'}, 'Built from'),
-           h('div', {class: `built-parts${level ? ' with-over' : ''}`}, ...joined));
+           h('div', {class: `built-parts${level ? ' with-over' : ''}`}, ...joined),
+           // a part shown worn down (7.34): what the shape you see is
+           ...wornLines(built).map(l => h('p', {class: 'note center worn-line'}, ...l)));
 }
 
 // Where the sound part's reading is no clue, members that carry the sound
@@ -417,7 +419,8 @@ function revealBlock(m, ok, cb, given) {
         han(k.part || '', {class: 'muted'}), k.gloss ? ` ${k.gloss}` : '')));
   const pattern = r.pattern && h('p', {class: 'note'}, r.pattern);
   const word = m.task === 'tell_apart' ? wordLines(r.words) : null;
-  return h('section', {class: 'feedback', role: 'status'}, verdict, main, marks, word, pattern);
+  return h('section', {class: 'feedback', role: 'status'}, verdict, renderRangeNote(r.rangeNote),
+           main, marks, word, pattern);
 }
 
 // renderTask(el, model, {onAnswer(ok), onNext(), onRef(char), onReport(shown),
@@ -488,6 +491,7 @@ export function renderTask(el, m, cb) {
       m.pattern && h('p', {class: 'note center'}, 'Its main reading is ', jpSpan(m.pattern.main), '; ',
         jpSpan(r.jp), ` is ${m.pattern.relation}.`),
       ...(m.facts || []).map(f => h('p', {class: 'note center'}, f)),
+      m.sounds && soundsBlock(m.sounds, m.glyph, compactTile(cb, f => tileKind(cb, f)), {compact: true}),
       wordLines(r.words),
       likeLine(m.built, cb),
       h('div', {class: 'foot'}, cont(go), report()));

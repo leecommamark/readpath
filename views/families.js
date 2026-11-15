@@ -35,7 +35,8 @@
 // Everything here but the drawing is pure, so a test reads it without a DOM.
 
 import {searchButton} from './search.js';
-import {h, clear, put, jpSpan} from './dom.js';
+import {h, han, clear, put, jpSpan} from './dom.js';
+import {isShapeHead, shownForm} from '../core/shapehead.js';
 import {isKnown} from '../core/state.js';
 import {soundId} from '../core/content.js';
 import {markInReader} from '../actions.js';
@@ -44,6 +45,7 @@ import {glyphTile, progressOf} from './glyph.js';
 import {stepsSwitch} from './parts.js';
 import {familiesOf, familyPlan, reviewLoad, MIN_MEMBERS, OWN_SIZE} from '../core/family.js';
 import {soundFamily} from '../core/soundfamily.js';
+import {partFit} from '../core/soundfit.js';
 
 // the grouping is core/family.js's (the runner and the simulator use it too)
 export {familiesOf, MIN_MEMBERS, OWN_SIZE};
@@ -129,12 +131,26 @@ export function familyPage(content, states, key, mode = 'read') {
   // how it's read (7.25): each tile with its reading's state, as a cell
   const sounds = card.type === 'family' ? soundFamily(content, key) : null;
   if (sounds) {
-    for (const row of [...sounds.boxes.flatMap(b => b.rows), ...(sounds.others ? sounds.others.rows : [])]) {
+    for (const row of [...sounds.boxes.flatMap(b => b.rows), ...(sounds.others ? sounds.others.rows : []),
+]) {
       row.tiles = row.tiles.map(x => ({...x, kind: 'reading', state: x.id ? stateOf(states[x.id]) : null,
                                        progress: x.id ? progressOf(states[x.id], 'reading') : null}));
     }
   }
-  return {key, type: card.type, head, sounds,
+  // members that show the head worn down, or written another way (patch
+  // plan 7.34, Decided 13: 雷 累 show 畾 as 田), a group per shape
+  const shown = [];
+  if (head) {
+    for (const ch of card.members) {
+      // a shape head's members all show its shape: nothing to say (7.34)
+      const p = !isShapeHead(head) && content.partsOf(ch).find(x => x.part === head && x.written);
+      if (!p) continue;
+      let g = shown.find(x => x.shape === p.written && x.variant === p.variant);
+      if (!g) shown.push(g = {shape: p.written, variant: p.variant, chars: []});
+      g.chars.push(ch);
+    }
+  }
+  return {key, type: card.type, head, sounds, shown,
           study: {toLearn: plan.length, load: reviewLoad(plan.length),
                   parts: plan.filter(id => content.kind(id) !== 'reading').length},
           reading: head ? readingOf(content, head) : null,
@@ -191,7 +207,7 @@ function ring(known, total) {
   return svg;
 }
 
-const titleOf = c => (c.type === 'family' ? `${c.head} family` : 'Characters on their own');
+const titleOf = c => (c.type === 'family' ? `${shownForm(c.head)} family` : 'Characters on their own');
 
 // A family's head is its members' sound part, so it is always drawn as a
 // square, whatever role it plays most often elsewhere (patch plan 7.6 3b,
@@ -313,7 +329,7 @@ const ROLE_KEY = {sound: 'sound', meaning: 'meaning', form: 'shape only'};
 export function roleWords(form, r) {
   const said = ROLE_SAID.filter(([k]) => r[k]).map(([k, w], i) =>
     i ? `${r[k].toLocaleString('en-GB')} ${w}` : `${r[k].toLocaleString('en-GB')} ${r[k] === 1 ? 'uses' : 'use'} it ${w}`);
-  return `Of the ${plural(r.total, 'character')} with ${form} in ${r.total === 1 ? 'it' : 'them'}, ${said.join(' · ')}.`;
+  return `Of the ${plural(r.total, 'character')} with ${shownForm(form)} in ${r.total === 1 ? 'it' : 'them'}, ${said.join(' · ')}.`;
 }
 
 // the sentence, a three-colour bar and its key; null for a form no
@@ -334,6 +350,7 @@ const ONSET_SAID = o => o || '∅';
 export function boxTitle(b) {
   const t = b.title;
   if (t.kind === 'ending') return `–${t.ending}`;
+  if (t.kind === 'syllabic') return 'ng or m on its own';
   if (t.kind === 'start') return `${t.start}–`;
   return b.rows.map(r => r.syl).join(' · ');
 }
@@ -352,49 +369,91 @@ function shareBar(parts, cls = '') {
     ...parts.map((x, i) => h('span', {class: `sb-${i % 3}`, style: `width: ${(100 * x).toFixed(2)}%`})));
 }
 
+// the tiles of a compact block (a part's card, its Meet): each with its
+// reading over it, a second reading dashed, opening its card
+export const compactTile = (cb, kindOf) => x => glyphTile(x.form, kindOf ? kindOf(x.form) : null, {
+  size: 'sm', over: x.jp || '', dashed: !!x.second, cls: x.second ? 'fam-second' : '',
+  label: `${x.form}${x.jp ? ` ${x.jp}` : ''}${x.second ? ', a second reading' : ''}: open its card`,
+  onTap: cb && cb.onRef ? f => cb.onRef(f) : null});
+
 export function soundsSection(m, tileOf) {
-  const s = m.sounds;
-  const head = m.head;
-  const rowLabel = row => `${pct(row.share)} of characters using ${head} are read ${row.syl} `
+  return soundsBlock(m.sounds, m.head, tileOf);
+}
+
+// The range over the boxes (7.32 Phase 2, as Mark revised it twice: "a
+// syllable grid, with no characters and no tone, with the share of each
+// possible syllable in its cell so that it is clear at a glance what the
+// 'guessing rule' might be"): starts down, endings across, a % in each cell
+// the family reads; no start a row of its own, syllabic ng or m a column.
+// Never wider than five endings, so it fits 360 px.
+const START_SAID = o => (o === '∅' ? 'no start' : `${o}–`);
+const END_SAID = r => (r === 'm' ? 'ng/m' : `–${r}`);
+function rangeTable(s, head) {
+  const g = s.range;
+  if (!g || !g.starts.length || !g.ends.length) return null;
+  return h('div', {class: 'fam-range'},
+    h('p', {class: 'sm fam-range-h'}, 'Guessing from ', han(shownForm(head)), ':'),
+    h('div', {class: 'fam-range-grid', role: 'table', 'aria-label': `How ${shownForm(head)}'s family is read`,
+              style: `grid-template-columns: auto repeat(${g.ends.length}, minmax(0, 1fr))`},
+      h('span', {role: 'columnheader'}),
+      ...g.ends.map(e => h('span', {class: 'frg-h jp', lang: 'en', role: 'columnheader'}, END_SAID(e))),
+      ...g.starts.flatMap((o, i) => [h('span', {class: 'frg-h side jp', lang: 'en', role: 'rowheader'}, START_SAID(o)),
+        ...g.ends.map((e, j) => {
+          const v = g.cells[j][i];
+          return h('span', {class: `frg-cell${v ? '' : ' empty'}`, role: 'cell',
+                            'aria-label': `${START_SAID(o)} ${END_SAID(e)}: ${v ? pct(v) : 'none'}`}, v ? pct(v) : '');
+        })])),
+    g.rest >= 0.005 && h('p', {class: 'sm fam-range-rest'}, `Read otherwise: ${pct(g.rest)}`));
+}
+
+// soundsBlock(sounds, head, tileOf, {compact}) -> how a family is read: the
+// range as a syllable grid, then a box per ending, its rows the starts, then
+// Others. The family page and a card's Family section draw it whole; a sound
+// part's Meet compact (no heading, notes or share bars).
+export function soundsBlock(s, head, tileOf, {compact = false} = {}) {
+  if (!s) return null;
+  const rowLabel = row => `${pct(row.share)} of characters using ${shownForm(head)} are read ${row.syl} `
     + `(${plural(row.count, 'character')})`;
   const tiles = row => h('div', {class: 'tiles fam-row-tiles', lang: 'zh-Hant-HK'}, ...row.tiles.map(tileOf));
-  const rowEl = (row, inBox, {bar = true} = {}) => h('div', {class: 'fam-row', role: 'group', 'aria-label': rowLabel(row)},
+  const rowEl = (row, inBox, {bar = !compact} = {}) => h('div', {class: 'fam-row', role: 'group', 'aria-label': rowLabel(row)},
     h('div', {class: 'fam-row-head'}, sylLabel(row, inBox), h('span', {class: 'sm fam-pct'}, pct(row.share))),
     h('div', {class: 'fam-row-body'}, bar && shareBar([row.share], 'thin'), tiles(row)));
   const chips = b => b.title.chips.length ? h('span', {class: 'fam-chips'},
     ...b.title.chips.map(vs => h('span', {class: 'chip jp', lang: 'en'}, vs.map(ONSET_SAID).join(' ~ ')))) : '';
-  const grid = b => {
-    const g = b.title;
-    return h('div', {class: 'fam-grid', style: `grid-template-columns: auto repeat(${g.starts.length}, minmax(0, 1fr))`},
-      h('span', {}), ...g.starts.map(o => h('span', {class: 'fam-grid-h jp', lang: 'en'}, `${ONSET_SAID(o)}–`)),
-      ...g.ends.flatMap((e, i) => [h('span', {class: 'fam-grid-h side jp', lang: 'en'}, `–${e}`),
-        ...g.cells[i].map(row => h('div', {class: 'fam-cell'}, rowEl(row, true, {bar: false})))]));
-  };
   const box = b => b.rows.length === 1 ? rowEl(b.rows[0], false) : h('section', {class: 'fam-box'},
     h('p', {class: 'fam-box-head'}, h('b', {class: 'jp', lang: 'en'}, boxTitle(b)),
       h('span', {class: 'sm fam-pct'}, pct(b.share)), chips(b)),
-    shareBar(b.rows.map(r => r.share)),
-    b.title.kind === 'grid' ? grid(b) : b.rows.map(r => rowEl(r, true)));
+    !compact && shareBar(b.rows.map(r => r.share)),
+    b.rows.map(r => rowEl(r, true)));
+  const group = (said, g, cls) => g && h('div', {class: `fam-row ${cls}`, role: 'group', 'aria-label': `${said}: ${pct(g.share)}`},
+    h('div', {class: 'fam-row-head'}, h('span', {class: 'fam-syl'}, said), h('span', {class: 'sm fam-pct'}, pct(g.share))),
+    h('div', {class: 'fam-row-body'}, h('div', {class: 'tiles fam-row-tiles', lang: 'zh-Hant-HK'},
+      ...g.rows.flatMap(r => r.tiles).map(tileOf))));
+  const parts = [rangeTable(s, head), ...s.boxes.map(box), group('Others', s.others, 'fam-others')];
+  if (compact) return h('div', {class: 'fam-sounds compact'}, ...parts);
   const anySecond = [...s.boxes.flatMap(b => b.rows), ...(s.others ? s.others.rows : [])]
     .some(r => r.tiles.some(x => x.second));
   const anyOwn = s.boxes.some(b => b.rows.some(r => r.own));
-  const key = [s.boxes.some(b => b.rows.length > 1) && 'Sounds that often swap within families share a box',
-               anyOwn && `${head}’s own sound is underlined`,
+  const key = [s.boxes.some(b => b.rows.length > 1) && 'A box is one ending, its rows the starts read with it',
+               anyOwn && `${shownForm(head)}’s own sound is underlined`,
                anySecond && 'faded tiles are a second reading'].filter(Boolean);
   const said = key.length ? ` ${key.join('; ')}.`.replace(/^ (\S)/, (_, c) => ` ${c.toUpperCase()}`) : '';
   return h('section', {class: 'block fam-sounds'},
-    h('h2', {class: 'fam-sounds-h'}, `How characters with ${head} are read`),
-    h('p', {class: 'note'}, `${plural(s.n, 'character')} ${s.n === 1 ? 'uses' : 'use'} ${head} as `
+    h('h2', {class: 'fam-sounds-h'}, `How characters with ${shownForm(head)} are read`),
+    h('p', {class: 'note'}, `${plural(s.n, 'character')} ${s.n === 1 ? 'uses' : 'use'} ${shownForm(head)} as `
       + `${s.n === 1 ? 'its' : 'their'} sound part. The % is how many of them are read each way (tone ignored), `
       + `so it’s a fair first guess for a character you haven’t met.${said}`),
     s.headOnly.length > 0 && h('p', {class: 'note'},
-      `None of the ${s.n} ${s.n === 1 ? 'is' : 'are'} read ${s.headOnly.join(' or ')}, ${head}’s own reading.`),
-    ...s.boxes.map(box),
-    s.others && h('div', {class: 'fam-row', role: 'group', 'aria-label': `Others: ${pct(s.others.share)}`},
-      h('div', {class: 'fam-row-head'}, h('span', {class: 'fam-syl'}, 'Others'),
-        h('span', {class: 'sm fam-pct'}, pct(s.others.share))),
-      h('div', {class: 'fam-row-body'}, h('div', {class: 'tiles fam-row-tiles', lang: 'zh-Hant-HK'},
-        ...s.others.rows.flatMap(r => r.tiles).map(tileOf)))));
+      `None of the ${s.n} ${s.n === 1 ? 'is' : 'are'} read ${s.headOnly.join(' or ')}, ${shownForm(head)}’s own reading.`),
+    ...parts);
+}
+
+// "雷 累 show 畾 worn down to 田." / "慈 滋 磁 孳 show 茲 written 兹." (7.34)
+export const shownSaid = (head, g) => [g.chars.join(' '), g.chars.length > 1 ? ' show ' : ' shows ', head,
+  g.variant ? ' written ' : ' worn down to ', g.shape, '.'];
+function shownLines(m) {
+  return (m.shown || []).map(g => h('p', {class: 'note fam-shown'},
+    ...shownSaid(m.head, g).map((x, i) => (i % 2 === 0 && i < 5 ? han(x) : x))));
 }
 
 // renderFamily(el, model, cb)   cb: onBack, onMode(mode), onTap(cell),
@@ -427,11 +486,12 @@ export function renderFamily(el, m, cb) {
     h('div', {class: 'top'},
       h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Back'),
       h('span', {})),
-    h('h1', {id: 'family-h'}, m.head ? `${m.head} family` : 'Characters on their own'),
+    h('h1', {id: 'family-h'}, ...(m.head ? [han(m.head), ' family'] : ['Characters on their own'])),
     !m.head && h('p', {class: 'note'},
       `Characters ${m.from.toLocaleString('en-GB')}–${m.to.toLocaleString('en-GB')} on your path `
       + 'that share no sound part with another.'),
     head,
+    ...shownLines(m),
     m.sounds && roleBar(m.head, m.sounds.roles),
     studyBlock(m, cb),
     h('p', {class: 'note'}, [c.known && `${c.known} known`, c.learning && `${c.learning} learning`,
@@ -453,6 +513,8 @@ export function renderFamily(el, m, cb) {
 // known" and a meter. A row opens the family's page (P6).
 
 export const SORTS = [
+  // 7.32 W9: the default; text share x fit
+  {key: 'useful', label: 'Most useful', note: 'Share of written text, times how many of the family its part lets you guess.'},
   {key: 'text', label: 'Most of text', note: 'Share of written text the whole family covers.'},
   {key: 'left', label: 'Most still to unlock', note: 'Share of written text in the members you don’t know yet.'},
   {key: 'size', label: 'Largest', note: 'Families with the most characters first.'},
@@ -482,8 +544,8 @@ export function textPct(perMillion) {
 
 // browseModel(content, states, sort) -> {sort, rows: [{key, head, reading,
 // members: [{form, state}], known, total, value, left, from}]}
-export function browseModel(content, states, sort = 'text', show = 'taught') {
-  const key = SORTS.some(x => x.key === sort) ? sort : 'text';
+export function browseModel(content, states, sort = 'useful', show = 'taught') {
+  const key = SORTS.some(x => x.key === sort) ? sort : 'useful';
   const which = SHOWS.some(x => x.key === show) ? show : 'taught';
   const fam = familiesOf(content);
   const rows = fam.cards.filter(c => c.type === 'family').map(card => {
@@ -493,10 +555,13 @@ export function browseModel(content, states, sort = 'text', show = 'taught') {
     return {key: card.key, head: card.head, reading: readingOf(content, card.head),
             members, known: members.filter(x => x.state === 'known').length, total: members.length,
             value, left, from: fam.number.get(card.members[0]),
+            // the part's fit (7.32 W9, decision C): in range of those tested
+            fit: partFit(content, card.head),
             // its head is taught as a sound part (brief 7.28 S1)
             taught: content.has(soundId(card.head))};
   });
-  const by = {text: (a, b) => b.value - a.value || a.from - b.from,
+  const by = {useful: (a, b) => b.value * b.fit.fit - a.value * a.fit.fit || a.from - b.from,
+              text: (a, b) => b.value - a.value || a.from - b.from,
               left: (a, b) => b.left - a.left || a.from - b.from,
               size: (a, b) => b.total - a.total || b.value - a.value || a.from - b.from,
               path: (a, b) => a.from - b.from}[key];
@@ -520,6 +585,7 @@ export function renderBrowse(el, m, cb) {
   const figure = r => (m.sort === 'left' ? textPct(r.left) : tierOf(r.value));
   const row = r => h('button', {type: 'button', class: 'browse-row',
                                 'aria-label': `${r.head} family: ${m.sort === 'left' ? `${figure(r)} of text to unlock` : figure(r)}, `
+                                  + (r.fit.n ? `its part gives ${r.fit.inn.length} of ${r.fit.n}, ` : '')
                                   + `${r.known} of ${r.total} known. Open`,
                                 onclick: () => cb.onFamily(r.key)},
     glyphTile(r.head, headKind(cb, r.head), {size: 'md', progress: cb.progressOf ? cb.progressOf(r.head) : null}),
@@ -528,6 +594,10 @@ export function renderBrowse(el, m, cb) {
       r.total > BROWSE_PREVIEW && h('span', {class: 'bm-more', lang: 'en'}, `+${r.total - BROWSE_PREVIEW}`)),
     h('span', {class: 'browse-figure'},
       h('b', {class: m.sort === 'left' ? '' : 'tier'}, figure(r)),
+      // how many its part lets you guess (7.32 W9, decision C): every row
+      r.fit.n > 0 && h('span', {class: 'sm browse-fit'},
+        r.reading ? h('span', {class: 'jp', lang: 'en'}, r.reading) : '', r.reading ? ' · ' : '',
+        `${r.fit.inn.length} of ${r.fit.n}`),
       h('span', {class: 'sm'}, `${r.known}/${r.total} known`),
       h('span', {class: 'browse-meter', 'aria-hidden': 'true'},
         h('span', {style: `width:${(100 * r.known / r.total).toFixed(1)}%`}))));

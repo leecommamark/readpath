@@ -14,8 +14,9 @@
 // refModel() is pure; renderRef() draws it into the overlay.
 
 import {h, han, clear, put, rubyWord, jpSpan, layerChip, speaker} from './dom.js';
+import {shapeHead, shownForm} from '../core/shapehead.js';
 import {builtFrom, roleText, standsLine, relationOf, word as wordEntry, allOver, charJp, meaningWording,
-        cardWords, WORDS_SHOWN, LAYER_TEXT, partRankOf, rankSaid, sayFor, sayWord} from './facts.js';
+        cardWords, WORDS_SHOWN, LAYER_TEXT, partRankOf, rankSaid, sayFor, sayWord, wornLines} from './facts.js';
 import {isKnown, MAINTAIN} from '../core/state.js';
 import {canMarkKnown, canForget, canKnowOff} from '../actions.js';
 import {canTestMe} from '../runner.js';
@@ -221,11 +222,13 @@ export function summariesOf(m) {
   const out = {};
   if (m.built && m.built.length) {
     const sound = m.built.find(b => b.role === 'sound' && b.note);
-    out.built = m.built.map(b => b.part).join(' + ') + (sound ? ` · sounds like ${sound.part} ${sound.note}` : '');
+    // a shape head is its shape in words (7.34): 宀 + 女, never [女 on]
+    const said = f => (shapeHead(f) ? shapeHead(f).shape : f);
+    out.built = m.built.map(b => said(b.part)).join(' + ') + (sound ? ` · sounds like ${said(sound.part)} ${sound.note}` : '');
   }
   if (m.familyCard) {
     const f = m.familyCard;
-    out.family = `${f.head} family` + (f.top ? ` · ${f.top.title} ${pct(f.top.share)}` : '');
+    out.family = `${shownForm(f.head)} family` + (f.top ? ` · ${f.top.title} ${pct(f.top.share)}` : '');
   }
   if (m.words && m.words.length) {
     const w = m.words[0];
@@ -382,6 +385,8 @@ function builtBody(m, cb) {
         h('span', {class: 'muted'},
         // a sound part's note is its reading, a meaning part's its gloss
         b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${roleText(b)})`] : `(${roleText(b)})`))])),
+    // a part shown worn down, and whether the shape is close in sound (7.34)
+    ...wornLines(m.built).map(l => h('p', {class: 'note worn-line'}, ...l)),
     // where the sound part's reading is no clue, the members that carry the
     // sound (CO-016: 當 <- 尚 soeng6, sounds like 黨 堂)
     like && h('p', {class: 'ref-row like-line'}, h('span', {class: 'sm'}, 'Sounds like '),
@@ -390,7 +395,7 @@ function builtBody(m, cb) {
     // how its sound part's family is read (brief 7.25 P1); not mid-session
     family && cb.onFamily && h('p', {class: 'family-link'},
       h('button', {type: 'button', class: 'link', onclick: () => cb.onFamily(family.key)},
-        `${family.head} family: how it’s read ›`))];
+        `${shownForm(family.head)} family: how it’s read ›`))];
 }
 
 // 讀 ← 賣 ← 買 (the tree's), where it is three or more long
@@ -411,14 +416,14 @@ function familyBody(m, cb) {
     label: `${x.form}${x.jp ? ` ${x.jp}` : ''}${x.second ? ', a second reading' : ''}: open its card`,
     onTap: () => cb.onRef(x.form)});
   return [f.sounds && f.sounds.n ? soundsSection({sounds: f.sounds, head: f.head}, tileOf)
-            : h('p', {class: 'note'}, `No other character has ${f.head} as its sound part.`),
+            : h('p', {class: 'note'}, `No other character has ${shownForm(f.head)} as its sound part.`),
     cb.onStudy && h('div', {class: 'btns'}, f.toLearn
       ? h('button', {type: 'button', class: 'btn', onclick: () => cb.onStudy(f.key)},
           'Study this family', h('span', {class: 'study-n'}, ` · ${f.toLearn} to learn`))
       : h('p', {class: 'note'}, 'Nothing left to learn in this family: everything here is met.')),
     cb.onFamily && h('p', {class: 'family-link'},
       h('button', {type: 'button', class: 'link', onclick: () => cb.onFamily(f.key)},
-        `${f.head} family: how it’s read ›`))];
+        `${shownForm(f.head)} family: how it’s read ›`))];
 }
 
 // Used in (P2.6): what is built from it, as tiles; the rest are in its tree
@@ -498,7 +503,7 @@ function summaryNodes(key, m) {
   switch (key) {
     case 'built': {
       const sound = m.built.find(b => b.role === 'sound' && b.note);
-      return [han(m.built.map(b => b.part).join(' + ')),
+      return [...m.built.flatMap((b, i) => [i ? ' + ' : '', han(b.part)]),
               sound ? [' · sounds like ', han(sound.part), ' ', jpSpan(sound.note)] : ''];
     }
     case 'family': {

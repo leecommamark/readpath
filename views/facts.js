@@ -3,9 +3,11 @@
 
 import {readingId, soundId, meaningId} from '../core/content.js';
 import {isKnown} from '../core/state.js';
-import {soundFit, fitLabel} from '../core/soundfit.js';
+import {rhymesWith} from '../core/soundfit.js';
+import {rangeLabel} from './range.js';
 import {familiesOf} from '../core/family.js';
-import {han} from './dom.js';
+import {han, jpSpan} from './dom.js';
+import {shapeHead, isShapeHead} from '../core/shapehead.js';
 
 const WORDS_BY_FORM = new WeakMap();
 function wordsByForm(content) {
@@ -81,22 +83,53 @@ export function builtFrom(content, ch) {
   };
   const parts = content.partsOf(ch).map((p, i) => ({p, i}))
     .sort((a, b) => at(a.p) - at(b.p) || a.i - b.i).map(x => x.p);
-  return parts.map(({part, role, reading, cousins}) => {
+  return parts.map(({part, role, reading, cousins, written, variant}) => {
     let note = null;
     if (role === 'sound') note = reading || content.partReading(part);
     if (role === 'meaning') note = content.partGloss(part);
     const like = role === 'sound' && cousins
       ? cousins.map(c => ({ch: c, over: charJp(content, c)})) : [];
-    // how well it gives the sound (brief 7.28 P4): the label says so
-    const fit = role === 'sound' ? soundFit(content, ch, part) : null;
-    return {part, role, note, cousins: like, fit};
+    // how well it gives the sound: by the family's range (patch plan 7.32
+    // Phase 2, decision B; brief 7.28 P4's soundFit labels until then)
+    const fit = role === 'sound' ? rangeLabel(content, ch) : null;
+    // the shape the character shows for it, where worn down (7.34): and
+    // whether that shape is close in sound too
+    const worn = !written ? null : isShapeHead(part) ? {shown: written, head: true, close: false, jp: content.partReading(part)}
+      : variant ? {shown: written, variant: true, close: false}
+      : {shown: written, variant: false, close: role === 'sound' && rhymesWith(content, ch, written)};
+    return {part, role, note, cousins: like, fit, worn};
   });
 }
 
+// Under Built from, a part shown worn down (patch plan 7.34, Decided 13,
+// Mark 2026-11-13): "The 士 you see is a worn-down 之; close in sound too."
+// where the shape's own reading rhymes, else only what it is; a shape that
+// is the part written another way says so (Mark, 2026-11-14: "The 兹 you
+// see is 茲 written another way.")
+// a shape head (7.34): "The 女 here is a sound shape read on, not the
+// character 女."
+const wornParts = b => (b.worn.head
+  ? [['han', b.part], ' here is a sound shape read ', ['jp', b.worn.jp],
+     ...(shapeHead(b.part).shape.length === 1 ? [', not the character ', ['han', shapeHead(b.part).shape]] : []), '.']
+  : b.worn.variant
+  ? [['han', b.worn.shown], ' you see is ', ['han', b.part], ' written another way.']
+  : [['han', b.worn.shown], ' you see is a worn-down ', ['han', b.part], b.worn.close ? '; close in sound too.' : '.']);
+export const wornText = b => 'The ' + wornParts(b).map(x => (!Array.isArray(x) ? x : x[0] === 'jp' ? x[1]
+  : shapeHead(x[1]) ? shapeHead(x[1]).shape : x[1])).join('');
+export function wornLines(built) {
+  return (built || []).filter(b => b.worn).map(b =>
+    ['The ', ...wornParts(b).map(x => (!Array.isArray(x) ? x : x[0] === 'jp' ? jpSpan(x[1]) : han(x[1])))]);
+}
+
 // the label after a part in Built from: "(meaning)", "(form)", "(sound)",
-// "(sound: rhymes)" ... "(possibly historic?)" (brief 7.28 P4)
+// and for a sound part whose family's range doesn't give this character
+// (7.32 decision B): "(sound: not in its family's range)" where its reading
+// is outside the whole range (冠 under 元), "(sound: unlike the rest of its
+// family)" where it is in it only on its own account (是 under 止)
+export const RANGE_LABEL = {outside: 'sound: not in its family’s range',
+                            alone: 'sound: unlike the rest of its family'};
 export function roleText(b) {
-  return b.role === 'sound' ? fitLabel(b.fit) : b.role;
+  return b.role === 'sound' ? RANGE_LABEL[b.fit] || 'sound' : b.role;
 }
 
 // A meaning part's meaning as its reliability allows (CO-059, songpath's
