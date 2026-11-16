@@ -55,7 +55,7 @@ export function renderFind(host, query, r, onRef, kindOf = null, progressOf = nu
   const path = r.path.map(x => row(x.char, x.jp, x.gloss, STATE[x.state], cls(x.state), onRef,
     typedNote(x), x.id, kindOf, x.via || null, progressOf, x.weak));
   const parts = r.parts.map(x => row(x.form, x.reading, x.gloss,
-    `${x.kind} part · ${STATE[x.state]}`, cls(x.state), onRef, null, null, kindOf, null, progressOf, x.weak));
+    `${x.kind} part${x.family ? ', read as its family' : ''} · ${STATE[x.state]}`, cls(x.state), onRef, null, null, kindOf, null, progressOf, x.weak));
   const off = r.off.map(x => row(x.char, x.jp, x.gloss, x.known ? 'you know this' : 'not on the path',
     x.known ? 'accent' : '', onRef, typedNote(x), null, kindOf, null, progressOf, x.weak));
   if (!path.length && !parts.length && !off.length) {

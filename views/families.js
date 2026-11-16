@@ -35,6 +35,7 @@
 // Everything here but the drawing is pure, so a test reads it without a DOM.
 
 import {searchButton} from './search.js';
+import {modalNote, renderRangeNote} from './range.js';
 import {h, han, clear, put, jpSpan} from './dom.js';
 import {isShapeHead, shownForm} from '../core/shapehead.js';
 import {isKnown} from '../core/state.js';
@@ -154,6 +155,7 @@ export function familyPage(content, states, key, mode = 'read') {
           study: {toLearn: plan.length, load: reviewLoad(plan.length),
                   parts: plan.filter(id => content.kind(id) !== 'reading').length},
           reading: head ? readingOf(content, head) : null,
+          modal: head ? modalNote(content, head) : null,   // brief 7.33 decision A
           part: partId && {id: partId, state: stateOf(states[partId]),
                            progress: progressOf(states[partId], 'sound'),
                            unlocks: content.membersOf(partId).length,
@@ -477,6 +479,7 @@ export function renderFamily(el, m, cb) {
                 {size: 'xl', progress: m.part ? m.part.progress : null, onTap: f => cb.onRef(f)}),
       h('div', {class: 'fam-head-text'},
         m.reading && h('p', {class: 'jp big-jp'}, m.reading),
+        m.modal && renderRangeNote(m.modal),
         h('p', {class: 'note'}, [tierOf(m.value), oneIn(m.value)].filter(Boolean).join(' · ')),
         m.part && h('p', {class: 'note'},
           `Sound part · unlocks ${plural(m.part.unlocks, 'character')} · ${STATE_SAID[m.part.state]}`))),

@@ -44,7 +44,9 @@ export function todayModel(content, states, summary, reading = null) {
     } else if (it.kind === 'sound') {
       const n = content.membersOf(it.id).length;
       next = {form: it.part, jp: it.taughtReading, chip: 'sound part',
-              note: `unlocks ${plural(n, 'character')} on your path`};
+              note: `unlocks ${plural(n, 'character')} on your path`,
+              // its family's reading, not its own (brief 7.33 decision A)
+              family: content.partModal(it.part)};
     } else {
       const n = content.membersOf(it.id).length;
       next = {form: it.part, chip: 'meaning part',
@@ -170,7 +172,7 @@ export function renderToday(el, m, opts) {
                 {size: 'lg', over: m.next.jp || '',
                  progress: opts.progressOf ? opts.progressOf(m.next.form) : null,
                  onTap: opts.onRef ? f => opts.onRef(f) : null}),
-      h('span', {}, m.next.note)));
+      h('span', {}, m.next.family && h('span', {class: 'muted'}, '(family) '), m.next.note)));
 
   // Continue reading: the focus text, how readable it is, and a tap that
   // opens it where it was left

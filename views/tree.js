@@ -19,6 +19,7 @@ import {stateOf} from './families.js';
 import {headSense, shortGloss} from '../core/gloss.js';
 import {formGloss, formJp, DICTIONARY_SENSE} from '../core/provenance.js';
 import {partRankOf, rankSaid} from './facts.js';
+import {modalNote, renderRangeNote} from './range.js';
 
 const STATE_SAID = {known: 'known', learning: 'learning', ahead: 'not met yet'};
 
@@ -74,6 +75,8 @@ export function treeModel(content, states, form, {trail = [form], expanded = {}}
     form, trail,
     head: tileOf(content, states, form),
     readings: readings.length ? readings : [jpOf(content, form)].filter(Boolean),
+    // only where its reading is its family's: no reading of its own (𢦏)
+    modal: readings.length ? null : modalNote(content, form),
     rank: it ? content.rank(it.id) : null,
     partRank: main ? partRankOf(content, form) : null,
     state: it ? stateOf(states[it.id]) : null,
@@ -142,6 +145,8 @@ export function renderTree(el, m, cb) {
       m.head.weak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE),
       h('p', {class: 'note'}, jpSpan(m.readings.join(' · ')),
         m.readings.length ? ' · ' : '', placeSaid(m)),
+      // a part with no reading of its own, shown its family's (brief 7.33 decision A)
+      m.modal && renderRangeNote(m.modal),
       // an order the IDS didn't give isn't claimed as written order (7.10)
       m.head_ && h('p', {class: 'note'}, 'A sound shape, read ', jpSpan(m.head_.jp),
         ...(m.head_.shape.length === 1 ? [': not the character ', han(m.head_.shape)] : []), '.'),

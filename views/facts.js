@@ -100,7 +100,10 @@ export function builtFrom(content, ch) {
     const worn = !written ? null : isShapeHead(part) ? {shown: written, head: true, close: false, jp: content.partReading(part)}
       : variant ? {shown: written, variant: true, close: false}
       : {shown: written, variant: false, close: role === 'sound' && rhymesWith(content, ch, written)};
-    return {part, role, note, cousins: like, fit, worn};
+    // a family's modal reading, never shown as the part's own (brief 7.33
+    // decision A): "(family)" after it wherever it is drawn
+    const family = role === 'sound' && !!note && content.partModal(part) && note === content.partReading(part);
+    return {part, role, note, cousins: like, fit, worn, family};
   });
 }
 

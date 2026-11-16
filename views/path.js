@@ -84,6 +84,7 @@ function stoneOf(content, states, id, next) {
   const s = states[id];
   const g = stoneGloss(content, it);
   return {id, form: it.form, kind, rank: it.rank, jp: it.jp || content.partReading(it.form) || '',
+          family: kind === 'sound' && content.partModal(it.form),   // brief 7.33 decision A
           gloss: shortGloss(g.text), weak: g.weak,
           tag: KIND_SAID[kind] || null,
           state: stateOf(s), progress: progressOf(s, kind), next};
@@ -188,7 +189,7 @@ function trailBlock(t, cb) {
         st.next && h('span', {class: 'tag accent'}, 'Next'),
         st.tag && h('span', {class: 'tag'}, st.tag),
         h('span', {class: `stone-gloss${st.weak ? ' weak' : ''}`}, st.gloss || '—')),
-      h('span', {class: 'stone-meta sm'}, jpSpan(st.jp), st.jp ? ' · ' : '',
+      h('span', {class: 'stone-meta sm'}, jpSpan(st.jp), st.family ? h('span', {class: 'muted'}, ' (family)') : '', st.jp ? ' · ' : '',
         `#${n0(st.rank)}`, st.state !== 'ahead' ? ` · ${STATE_SAID[st.state]}` : '')));
   return h('section', {class: 'block trail-block'},
     h('span', {class: 'label'}, 'You are here'),

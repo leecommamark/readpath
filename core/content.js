@@ -286,6 +286,9 @@ export function loadContent(tables) {
     partGloss: part => partGloss.get(part) || null,
     partGlossSrc: part => partGlossSrc.get(part) || null,
     partReadingSrc: part => partReadingSrc.get(part) || null,
+    // brief 7.33 Decided 5: a part taught as its family's modal syllable
+    // (乙 zaat, 𢦏 zoi), never to be shown as its own reading
+    partModal: part => partReadingSrc.get(part) === 'modal',
     partTrust: part => partTrust.get(part) || {reliability: null, note: null},
     onePart,
     soundItemOf, meaningItemOf,
@@ -296,6 +299,11 @@ export function loadContent(tables) {
     familyHeadOf, familyHead,
     familyMembers: part => ((soundRow.get(part) || {}).members || []).filter(c => c !== part),
     perCharOf: part => (soundRow.get(part) || {}).per_char || {},
+    // brief 7.33: the readings a family's range is built from ({char: [jp]},
+    // the head and every member on the path or off: the research's), and the
+    // path members the export found guessable from it
+    rangeReadingsOf: part => (soundRow.get(part) || {}).range || {},
+    guessedOf: part => (soundRow.get(part) || {}).guessed || [],
     soundClasses: {onset: T.sound_class.filter(c => c.slot === 'onset').map(c => c.members),
                    rime: T.sound_class.filter(c => c.slot === 'rime').map(c => c.members)},
     wordsOf: id => item(id).words || [],

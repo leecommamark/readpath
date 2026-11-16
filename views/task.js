@@ -43,7 +43,7 @@ import {readingItemFor} from '../core/focus.js';
 import {sentenceSpans} from '../core/lines.js';
 import {wordChars} from './reader.js';
 import {glyphTile, BORDER_KEY, borderKinds} from './glyph.js';
-import {rangeNote, renderRangeNote} from './range.js';
+import {rangeNote, renderRangeNote, modalNote} from './range.js';
 import {soundsBlock, compactTile} from './families.js';
 import {soundFamily} from '../core/soundfamily.js';
 
@@ -57,6 +57,8 @@ function partCard(content, task, base, states = {}) {
       // of "N of them sound like it"
       return {...base, kind: 'part', glyph: it.part, lead: 'A new sound part',
               reveal: {jp: it.taughtReading},
+              // a modal reading said in words (brief 7.33 decision A)
+              modalNote: modalNote(content, it.part),
               facts: [`Unlocks ${members.length} characters on your path.`],
               sounds: soundFamily(content, `f:${it.part}`),
               choices: [], answer: null};
@@ -77,7 +79,7 @@ function partCard(content, task, base, states = {}) {
     // so the lead says what it is rather than "You know"
     return {...base, kind: 'question', glyph: m.char, target: task.target,
             from: {part: it.part, note: it.taughtReading, kind: 'sound', verb: 'Predict:',
-                   met: base.met !== false},
+                   met: base.met !== false, modal: content.partModal(it.part)},
             choices: readingChoices(content, m.char, m.jp, base.rng, base.pool, [], {range: it.part}).map(reading),
             answer: m.jp,
             // the meaning and the card's words with the reading, as the
@@ -168,8 +170,11 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
     if (kindOf(from) === 'sound') {
       return {...base, kind: 'guess', glyph: it.char,
               reveal: {...reveal, rangeNote: rangeNote(content, it.char, it.jp, part.part)},
-              lead: `You know ${part.part} ${part.taughtReading}. Guess:`,
-              from: {part: part.part, note: part.taughtReading, kind: 'sound'},
+              lead: content.partModal(part.part)
+                ? `Most characters with ${part.part} are read ${part.taughtReading}. Guess:`
+                : `You know ${part.part} ${part.taughtReading}. Guess:`,
+              from: {part: part.part, note: part.taughtReading, kind: 'sound',
+                     modal: content.partModal(part.part)},
               choices: readingChoices(content, it.char, it.jp, rng, pool, [], {range: part.part}).map(reading),
               answer: it.jp};
     }
@@ -326,6 +331,7 @@ function builtLine(built, cb) {
   const overOf = b => (b.role === 'sound' && b.note ? b.note : level ? '' : null);
   const parts = built.map(b => h('span', {class: 'built-part'}, glyphButton(b.part, cb, 'sm', null, overOf(b)),
     b.note && b.role !== 'sound' && h('span', {class: 'built-note'}, b.note),
+    b.family && h('span', {class: 'built-note muted'}, '(family)'),
     h('span', {class: 'built-role muted'}, roleText(b))));
   const joined = [];
   // the + built as a tile is, its line over it too, so it sits level with
@@ -480,6 +486,7 @@ export function renderTask(el, m, cb) {
       // then its meaning, then Built from (Mark: reading, tile, gloss, parts)
       glyphButton(m.glyph, cb, 'xl', null, r.jp || null),
       m.partLead && h('p', {class: 'note center part-lead'}, m.partLead),
+      m.modalNote && renderRangeNote(m.modalNote),
       m.quiet ? h('div', {class: 'muted'}, readingBlock(null, r.gloss, 'center', r.layer))
               : readingBlock(null, r.gloss, 'center', r.layer, speaker(r.say, cb.speech)),
       builtLine(m.built, cb),
@@ -500,7 +507,11 @@ export function renderTask(el, m, cb) {
   }
 
   // guess and question: the prompt, the choices, then the feedback
-  const prompt = [m.from
+  const prompt = [m.from && m.from.modal
+    // a modal reading in a sentence (brief 7.33 decision A): not "You know"
+    ? h('p', {class: 'lead'}, 'Most characters with ', han(m.from.part, {class: 'lead-part'}), ' are read ',
+        jpSpan(m.from.note), '. ', m.from.verb || 'Guess:')
+    : m.from
     ? h('p', {class: 'lead'}, m.from.met === false ? '' : 'You know ', han(m.from.part, {class: 'lead-part'}),
         // a sound part's note is its reading, a meaning part's its gloss
         m.from.met === false ? ' is read ' : ' ',

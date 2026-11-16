@@ -13,6 +13,7 @@
 //
 // refModel() is pure; renderRef() draws it into the overlay.
 
+import {modalNote, renderRangeNote} from './range.js';
 import {h, han, clear, put, rubyWord, jpSpan, layerChip, speaker} from './dom.js';
 import {shapeHead, shownForm} from '../core/shapehead.js';
 import {builtFrom, roleText, standsLine, relationOf, word as wordEntry, allOver, charJp, meaningWording,
@@ -146,6 +147,8 @@ function partRoles(content, states, form, {itemsOnly = false} = {}) {
     const known = ch => isKnown(states[content.mainReading(ch)]);
     members = [...members.filter(known), ...members.filter(ch => !known(ch))];
     roles.push({kind, id, reading, gloss, standsFor, written, status,
+                // a modal reading said in words (brief 7.33 decision A)
+                modal: kind === 'sound' ? modalNote(content, form) : null,
                 // a meaning from Unihan's kDefinition, shown muted (7.10)
                 glossWeak: kind === 'meaning' && !!gloss && partGlossWeak(content, form),
                 wording: kind === 'meaning' ? meaningWording(content, form, gloss) : null,
@@ -224,7 +227,8 @@ export function summariesOf(m) {
     const sound = m.built.find(b => b.role === 'sound' && b.note);
     // a shape head is its shape in words (7.34): 宀 + 女, never [女 on]
     const said = f => (shapeHead(f) ? shapeHead(f).shape : f);
-    out.built = m.built.map(b => said(b.part)).join(' + ') + (sound ? ` · sounds like ${said(sound.part)} ${sound.note}` : '');
+    out.built = m.built.map(b => said(b.part)).join(' + ')
+      + (sound ? ` · sounds like ${said(sound.part)} ${sound.note}${sound.family ? ' (family)' : ''}` : '');
   }
   if (m.familyCard) {
     const f = m.familyCard;
@@ -384,7 +388,8 @@ function builtBody(m, cb) {
       h('span', {class: 'part'}, charBtn(b.part, cb),
         h('span', {class: 'muted'},
         // a sound part's note is its reading, a meaning part's its gloss
-        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, ` (${roleText(b)})`] : `(${roleText(b)})`))])),
+        b.note ? [b.role === 'sound' ? jpSpan(b.note) : b.note, b.family ? ' (family)' : '', ` (${roleText(b)})`]
+               : `(${roleText(b)})`))])),
     // a part shown worn down, and whether the shape is close in sound (7.34)
     ...wornLines(m.built).map(l => h('p', {class: 'note worn-line'}, ...l)),
     // where the sound part's reading is no clue, the members that carry the
@@ -449,6 +454,7 @@ function roleBody(r, cb) {
     h('p', {class: `answer-line${r.wording && r.wording.quiet ? ' muted' : ''}${!r.reading && r.glossWeak ? ' weak' : ''}`},
       r.reading ? h('span', {class: 'jp big-jp'}, r.reading) : (r.wording ? r.wording.meaning : r.gloss)),
     !r.reading && r.glossWeak && h('p', {class: 'note weak-note'}, DICTIONARY_SENSE),
+    r.modal && renderRangeNote(r.modal),
     r.wording && r.wording.note && h('p', {class: 'note'}, r.wording.note),
     r.standsFor && h('p', {class: 'note'}, ...standsLine(r.standsFor, r.written)),
     r.canTest && cb.onTestMe && h('div', {class: 'btns'},
@@ -504,7 +510,7 @@ function summaryNodes(key, m) {
     case 'built': {
       const sound = m.built.find(b => b.role === 'sound' && b.note);
       return [...m.built.flatMap((b, i) => [i ? ' + ' : '', han(b.part)]),
-              sound ? [' · sounds like ', han(sound.part), ' ', jpSpan(sound.note)] : ''];
+              sound ? [' · sounds like ', han(sound.part), ' ', jpSpan(sound.note), sound.family ? ' (family)' : ''] : ''];
     }
     case 'family': {
       const f = m.familyCard;
@@ -619,6 +625,7 @@ export function renderRef(el, m, cb) {
   } else if (m.kind === 'part') {
     body.push(glance(...m.roles.map(r => h('p', {class: 'ref-role-line'},
       r.reading ? jpSpan(r.reading) : h('span', {class: r.glossWeak ? 'weak' : ''}, r.wording ? r.wording.meaning : r.gloss),
+      r.modal && h('span', {class: 'muted'}, ' (family)'),
       h('span', {class: 'sm'}, ` · ${r.kind} part`))), rankLine(m, cb), glyphKey()));
     body.push(...sectionsOf(m, cb));
   } else if (m.kind === 'offpath') {

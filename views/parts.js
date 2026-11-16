@@ -34,6 +34,7 @@ export function partsModel(content, states) {
     groups[it.kind].push({
       id, form: it.part, kind: it.kind,
       reading: it.kind === 'sound' ? it.taughtReading : null,
+      family: it.kind === 'sound' && content.partModal(it.part),   // brief 7.33 decision A
       gloss: it.kind === 'meaning' ? it.gloss : null,
       state: partStateOf(states[id]), progress: progressOf(states[id], it.kind),
       unlocks: content.membersOf(id).length,
@@ -56,6 +57,7 @@ function row(r, cb) {
     h('div', {class: 'part-text'},
       h('p', {class: 'part-what'},
         r.reading ? jpSpan(r.reading) : (r.gloss || ''),
+        r.family && h('span', {class: 'muted'}, ' (family)'),
         h('span', {class: 'sm'}, ` · unlocks ${plural(r.unlocks, 'character')}`)),
       h('p', {class: `tag ${r.state === 'known' ? 'accent' : r.state === 'ahead' ? '' : 'learn'}`},
         PART_STATE[r.state])),

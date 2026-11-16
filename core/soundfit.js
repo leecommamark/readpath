@@ -38,11 +38,16 @@ export function rhymesWith(content, ch, form) {
 //
 // A family is its head and its members: the head's own, and the members of
 // any part folded into it (R1; content.familyMembers carries them merged).
-// Its range is a set of starts and a set of endings (the research's range B,
-// research/analysis/score.py): a value is in it when two members carry it,
-// or one does and a class-mate (curated/sound_classes.tsv) is carried. The
-// head's readings build the range and are never tested. Syllabic m and ng
-// are one sound starting ng- (soundFit's, W3a, W4a).
+// Since brief 7.33 its range is built from the research's family: the head
+// and every member on the path or off, with the readings Mark's sound
+// analysis keeps (content.rangeReadingsOf, sources/sound_research.tsv via
+// the export, which decides with the same range which parts are taught:
+// readpath/lib/soundrange.py; test/range_agree.test.js holds the two
+// together). The range is a set of starts and a set of endings (the
+// research's range B, research/analysis/score.py): a value is in it when two
+// characters carry it, or one does and a class-mate (curated/sound_classes.tsv)
+// is carried. The head's readings build the range and are never tested.
+// Syllabic m and ng are one sound starting ng- (soundFit's, W3a, W4a).
 //   familyRange(content, head)  {onsets, rimes}: the whole family's, the one
 //                               the line names (R11)
 //   inRange(content, ch, head)  ch's family without ch gives a range one of
@@ -73,16 +78,15 @@ function rangeMemo(content) {
   return ranged.get(content);
 }
 
-// [ch, {onset, rime}] for the head and every member with a studied reading
+// [ch, {onset, rime}] for the head and every member, on the path or off,
+// from the range readings; `members` the path members with a studied reading
 function bagOf(content, head) {
   const m = rangeMemo(content);
   if (!m.bag.has(head)) {
-    const own = studied(content, head);
-    const hr = own.length ? own : [content.partReading(head)].filter(Boolean);
-    const members = content.familyMembers(head).filter(c => studied(content, c).length);
-    const bag = [...hr.map(jp => [head, rangeSyl(jp)]),
-                 ...members.flatMap(c => studied(content, c).map(jp => [c, rangeSyl(jp)]))]
+    const bag = Object.entries(content.rangeReadingsOf(head))
+      .flatMap(([c, jps]) => jps.map(jp => [c, rangeSyl(jp)]))
       .filter(x => x[1]);
+    const members = content.familyMembers(head).filter(c => studied(content, c).length);
     m.bag.set(head, {bag, members});
   }
   return m.bag.get(head);

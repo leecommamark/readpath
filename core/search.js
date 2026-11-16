@@ -130,6 +130,7 @@ export function search(content, query, {states = {}, offKnown = new Set()} = {})
          state: stateOf(states[id]), score, order, ...typedAs(content, from)}
       : {group: 'parts', id, form: it.form, kind: it.kind,
          reading: it.kind === 'sound' ? it.taughtReading || content.partReading(it.form) : null,
+         family: it.kind === 'sound' && content.partModal(it.form),   // brief 7.33 decision A
          gloss: it.kind === 'meaning' ? it.gloss : content.partGloss(it.form) || '',
          weak: partGlossWeak(content, it.form),
          state: stateOf(states[id]), score, order});
