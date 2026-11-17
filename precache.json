@@ -1,5 +1,5 @@
 {
- "build": "48033d41dacee644",
+ "build": "13cc283635eb98b9",
  "files": [
   "actions.js",
   "app.css",
@@ -107,6 +107,7 @@
   "views/search.js",
   "views/session.js",
   "views/settings.js",
+  "views/shapes.js",
   "views/task.js",
   "views/texts.js",
   "views/today.js",

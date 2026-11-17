@@ -10,7 +10,7 @@
 // the content goes through the object returned here, so a later change of
 // table shape is a change to this file alone.
 
-import {isShapeHead} from './shapehead.js';
+import {isShapeHead, shapeHead} from './shapehead.js';
 
 export const TABLES = ['glyph', 'reading', 'part_role', 'sound_part',
                        'meaning_part', 'tellapart', 'word', 'path', 'syllable',
@@ -115,7 +115,10 @@ export function loadContent(tables) {
                               cousins: r.cousins || [], listed: r.listed !== 0,
                               written: r.written || null, variant: r.variant === 1,
                               // a sound link Mark ruled historical (7.34 phase 9)
-                              label: r.label || null});
+                              label: r.label || null,
+                              // where a worn-down head sits that no part
+                              // shows (舍's 余: top; brief 7.36)
+                              where: r.where || null});
   }
   // a component's main role: 'sound' or 'meaning', whichever it plays in
   // more characters, a tie to sound (patch plan 7.6 3b, Mark: 口 is a
@@ -182,6 +185,11 @@ export function loadContent(tables) {
   // a shape head stands in the tree for the shape it is (7.34: 安's 女 is
   // [女 on]), so it is known by its own form too
   for (const r of T.part_role) if (r.written && isShapeHead(r.part)) roleIn.set(`${r.char}|${r.part}`, r.role);
+  // a shape of several parts is each of them (撤's 徹 is written 育攵, which
+  // the tree draws as 育 and 攵; brief 7.36)
+  for (const r of T.part_role) {
+    if (r.written && [...r.written].length > 1) for (const p of r.written) roleIn.set(`${r.char}|${p}`, r.role);
+  }
   // what is built from a part as its sound or meaning (the tree's right
   // side): listed pairs only, sound uses first, then path order
   const uses = new Map();                  // part -> [{char, role}]
@@ -304,6 +312,18 @@ export function loadContent(tables) {
     // path members the export found guessable from it
     rangeReadingsOf: part => (soundRow.get(part) || {}).range || {},
     guessedOf: part => (soundRow.get(part) || {}).guessed || [],
+    // brief 7.36: how a family's members show its head, unless they all
+    // show it as it is ([{kind, shape, members, seen?, worn?, variant?}];
+    // [] otherwise), the nearer part a member is cued by where it doesn't
+    // show the head (宥: 有), and the character a shape head is a reading of
+    // ([余 se]: 余)
+    shownOf: part => (soundRow.get(part) || {}).shown || [],
+    cueOf: ch => ((soundRow.get(familyHeadOf(ch)) || {}).cue || {})[ch] || null,
+    headStandsFor: part => (soundRow.get(part) || {}).stands_for || null,
+    // the shape heads drawn as `shape` (余: [余 se]; 女: [女 on]), folded
+    // ones left out
+    shapeHeadsOn: shape => T.sound_part.filter(s => !s.fold_into && isShapeHead(s.part)
+      && shapeHead(s.part).shape === shape).map(s => s.part),
     soundClasses: {onset: T.sound_class.filter(c => c.slot === 'onset').map(c => c.members),
                    rime: T.sound_class.filter(c => c.slot === 'rime').map(c => c.members)},
     wordsOf: id => item(id).words || [],

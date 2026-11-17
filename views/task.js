@@ -46,6 +46,18 @@ import {glyphTile, BORDER_KEY, borderKinds} from './glyph.js';
 import {rangeNote, renderRangeNote, modalNote} from './range.js';
 import {soundsBlock, compactTile} from './families.js';
 import {soundFamily} from '../core/soundfamily.js';
+import {alsoWritten, renderPieces} from './shapes.js';
+import {shownForm} from '../core/shapehead.js';
+
+// The nearer part a guess is cued by (brief 7.36 P6, Decided 18): where the
+// member doesn't show its head (宥 shows 有, not 又), the part it does show,
+// once that part's main reading is met; else null and the head cues it.
+// {part: 有, jp: jau5}
+export function cueFor(content, states, ch) {
+  const near = content.cueOf(ch);
+  const id = near && content.mainReading(near);
+  return id && states[id] ? {part: near, jp: content.item(id).jp} : null;
+}
 
 function partCard(content, task, base, states = {}) {
   const it = content.item(task.item);
@@ -60,6 +72,8 @@ function partCard(content, task, base, states = {}) {
               // a modal reading said in words (brief 7.33 decision A)
               modalNote: modalNote(content, it.part),
               facts: [`Unlocks ${members.length} characters on your path.`],
+              // its other shapes, in one line (brief 7.36 Decided 17)
+              also: alsoWritten(content, it.part, 'sound'),
               sounds: soundFamily(content, `f:${it.part}`),
               choices: [], answer: null};
     }
@@ -70,6 +84,7 @@ function partCard(content, task, base, states = {}) {
             reveal: {gloss: w.meaning}, partLead: w.lead, partNote: w.note, quiet: w.quiet,
             standsFor: it.standsFor && it.standsFor !== it.part ? it.standsFor : null,
             written: it.written || null,
+            also: alsoWritten(content, it.part, 'meaning'),
             facts: [`It helps tell apart ${plural(it.resolves.length, 'family', 'families')} of characters that sound alike.`],
             choices: [], answer: null};
   }
@@ -77,9 +92,13 @@ function partCard(content, task, base, states = {}) {
     const m = content.item(task.target);
     // Test me on a part not met yet (Mark, step 6 6b): nothing has taught it,
     // so the lead says what it is rather than "You know"
+    // a member that doesn't show the part is cued by the part it shows,
+    // once met (brief 7.36 P6): "You know 有 jau5, in 又's family."
+    const cue = base.met !== false && cueFor(content, states, m.char);
     return {...base, kind: 'question', glyph: m.char, target: task.target,
-            from: {part: it.part, note: it.taughtReading, kind: 'sound', verb: 'Predict:',
-                   met: base.met !== false, modal: content.partModal(it.part)},
+            from: cue ? {part: cue.part, note: cue.jp, kind: 'sound', verb: 'Predict:', family: it.part}
+              : {part: it.part, note: it.taughtReading, kind: 'sound', verb: 'Predict:',
+                 met: base.met !== false, modal: content.partModal(it.part)},
             choices: readingChoices(content, m.char, m.jp, base.rng, base.pool, [], {range: it.part}).map(reading),
             answer: m.jp,
             // the meaning and the card's words with the reading, as the
@@ -168,13 +187,17 @@ export function cardModel(content, task, rng, pool = [], states = {}, {lineOf = 
     }
     const part = content.item(from);
     if (kindOf(from) === 'sound') {
+      // the part it shows, where it doesn't show this one (brief 7.36 P6)
+      const cue = cueFor(content, states, it.char);
       return {...base, kind: 'guess', glyph: it.char,
               reveal: {...reveal, rangeNote: rangeNote(content, it.char, it.jp, part.part)},
-              lead: content.partModal(part.part)
+              lead: cue ? `You know ${cue.part} ${cue.jp}, in ${shownForm(part.part)}’s family. Guess:`
+                : content.partModal(part.part)
                 ? `Most characters with ${part.part} are read ${part.taughtReading}. Guess:`
                 : `You know ${part.part} ${part.taughtReading}. Guess:`,
-              from: {part: part.part, note: part.taughtReading, kind: 'sound',
-                     modal: content.partModal(part.part)},
+              from: cue ? {part: cue.part, note: cue.jp, kind: 'sound', family: part.part}
+                : {part: part.part, note: part.taughtReading, kind: 'sound',
+                   modal: content.partModal(part.part)},
               choices: readingChoices(content, it.char, it.jp, rng, pool, [], {range: part.part}).map(reading),
               answer: it.jp};
     }
@@ -495,6 +518,7 @@ export function renderTask(el, m, cb) {
       m.why && h('p', {class: 'note center why'}, m.why),
       m.partNote && h('p', {class: 'note center'}, m.partNote),
       m.standsFor && h('p', {class: 'note center'}, ...standsLine(m.standsFor, m.written)),
+      m.also && h('p', {class: 'note center'}, ...renderPieces(m.also)),
       m.pattern && h('p', {class: 'note center'}, 'Its main reading is ', jpSpan(m.pattern.main), '; ',
         jpSpan(r.jp), ` is ${m.pattern.relation}.`),
       ...(m.facts || []).map(f => h('p', {class: 'note center'}, f)),
@@ -515,7 +539,8 @@ export function renderTask(el, m, cb) {
     ? h('p', {class: 'lead'}, m.from.met === false ? '' : 'You know ', han(m.from.part, {class: 'lead-part'}),
         // a sound part's note is its reading, a meaning part's its gloss
         m.from.met === false ? ' is read ' : ' ',
-        m.from.kind === 'sound' ? jpSpan(m.from.note) : m.from.note, '. ',
+        m.from.kind === 'sound' ? jpSpan(m.from.note) : m.from.note,
+        ...(m.from.family ? [', in ', han(shownForm(m.from.family)), '’s family'] : []), '. ',
         m.from.verb || (m.from.kind === 'sound' ? 'Guess:' : 'Which meaning fits?'))
     : h('p', {class: 'lead'}, m.lead)];
   // The reference card would give the answer away, so the glyph opens it only

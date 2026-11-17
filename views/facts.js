@@ -83,7 +83,7 @@ export function builtFrom(content, ch) {
   };
   const parts = content.partsOf(ch).map((p, i) => ({p, i}))
     .sort((a, b) => at(a.p) - at(b.p) || a.i - b.i).map(x => x.p);
-  return parts.map(({part, role, reading, cousins, written, variant, label}) => {
+  return parts.map(({part, role, reading, cousins, written, variant, label, where}) => {
     let note = null;
     if (role === 'sound') note = reading || content.partReading(part);
     if (role === 'meaning') note = content.partGloss(part);
@@ -97,14 +97,39 @@ export function builtFrom(content, ch) {
     const fit = label === 'historical' && ranged !== 'in' ? 'historical' : ranged;
     // the shape the character shows for it, where worn down (7.34): and
     // whether that shape is close in sound too
-    const worn = !written ? null : isShapeHead(part) ? {shown: written, head: true, close: false, jp: content.partReading(part)}
+    const worn = role === 'sound' && branchSaid(content, ch, part, written, variant, where)
+      || (!written ? null : isShapeHead(part) ? {shown: written, head: true, close: false, jp: content.partReading(part)}
       : variant ? {shown: written, variant: true, close: false}
-      : {shown: written, variant: false, close: role === 'sound' && rhymesWith(content, ch, written)};
+      : {shown: written, variant: false, close: role === 'sound' && rhymesWith(content, ch, written)});
     // a family's modal reading, never shown as the part's own (brief 7.33
     // decision A): "(family)" after it wherever it is drawn
     const family = role === 'sound' && !!note && content.partModal(part) && note === content.partReading(part);
     return {part, role, note, cousins: like, fit, worn, family};
   });
+}
+
+// A shape head that is a character in a reading ([余 se] is 余 read se;
+// parts.tsv stands_for), and a worn-down head no part shows (舍's top),
+// said as Mark worded them (brief 7.36 Decided 23): 斜 "The 余 here is read
+// se, as 佘 still is." · 賒 "The 佘 you see is 余 written another way, read
+// se." · 佘 "佘 is 余 written another way; it kept the reading se." · 舍
+// "舍's top is 余 worn down, read se." -> {said: pieces} or null
+function branchSaid(content, ch, part, written, variant, where) {
+  const of = content.headStandsFor(part);
+  if (!of && !where) return null;
+  const name = of && shapeHead(part).name;
+  const read = of ? `, read ${name}` : '';
+  if (where) return {said: [['han', ch], `’s ${where} is `, ['han', of || part], ` worn down${read}.`]};
+  const keeper = content.shownOf(part).find(g => g.kind === 'variant' && g.members.includes(g.shape));
+  if (keeper && keeper.shape === ch) {
+    return {said: [['han', ch], ' is ', ['han', of], ` written another way; it kept the reading ${name}.`]};
+  }
+  if (written && variant) return {said: ['The ', ['han', written], ' you see is ', ['han', of], ` written another way${read}.`]};
+  if (written) {
+    return {said: ['The ', ['han', written], ` here is read ${name}`,
+                   ...(keeper ? [', as ', ['han', keeper.shape], ' still is'] : []), '.']};
+  }
+  return null;
 }
 
 // Under Built from, a part shown worn down (patch plan 7.34, Decided 13,
@@ -114,17 +139,17 @@ export function builtFrom(content, ch) {
 // see is 茲 written another way.")
 // a shape head (7.34): "The 女 here is a sound shape read on, not the
 // character 女."
-const wornParts = b => (b.worn.head
+const wornParts = b => (b.worn.said ? b.worn.said : ['The ', ...(b.worn.head
   ? [['han', b.part], ' here is a sound shape read ', ['jp', b.worn.jp],
      ...(shapeHead(b.part).shape.length === 1 ? [', not the character ', ['han', shapeHead(b.part).shape]] : []), '.']
   : b.worn.variant
   ? [['han', b.worn.shown], ' you see is ', ['han', b.part], ' written another way.']
-  : [['han', b.worn.shown], ' you see is a worn-down ', ['han', b.part], b.worn.close ? '; close in sound too.' : '.']);
-export const wornText = b => 'The ' + wornParts(b).map(x => (!Array.isArray(x) ? x : x[0] === 'jp' ? x[1]
+  : [['han', b.worn.shown], ' you see is a worn-down ', ['han', b.part], b.worn.close ? '; close in sound too.' : '.'])]);
+export const wornText = b => wornParts(b).map(x => (!Array.isArray(x) ? x : x[0] === 'jp' ? x[1]
   : shapeHead(x[1]) ? shapeHead(x[1]).shape : x[1])).join('');
 export function wornLines(built) {
   return (built || []).filter(b => b.worn).map(b =>
-    ['The ', ...wornParts(b).map(x => (!Array.isArray(x) ? x : x[0] === 'jp' ? jpSpan(x[1]) : han(x[1])))]);
+    [...wornParts(b).map(x => (!Array.isArray(x) ? x : x[0] === 'jp' ? jpSpan(x[1]) : han(x[1])))]);
 }
 
 // the label after a part in Built from: "(meaning)", "(form)", "(sound)",

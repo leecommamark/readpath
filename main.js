@@ -1364,6 +1364,7 @@ function drawFamily() {
     onBack: () => (history.state && history.state.family != null ? history.back() : showTab(app.fromTab)),
     onMode(mode) { f.mode = mode; drawFamily(); },
     onRef: openRef,                      // a tile opens its card (7.26 P4; its tree 7.7-7.25)
+    onFamily: key => showFamily(key),    // a shape head's family, and back (brief 7.36 P8)
     kindOf,
     onTestMe: id => testMe(id),
     onStudy: key => studyFamily(key),

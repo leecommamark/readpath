@@ -37,7 +37,8 @@
 import {searchButton} from './search.js';
 import {modalNote, renderRangeNote} from './range.js';
 import {h, han, clear, put, jpSpan} from './dom.js';
-import {isShapeHead, shownForm} from '../core/shapehead.js';
+import {shownForm} from '../core/shapehead.js';
+import {soundShapes, shapeLinks, renderShapes, renderLinks} from './shapes.js';
 import {isKnown} from '../core/state.js';
 import {soundId} from '../core/content.js';
 import {markInReader} from '../actions.js';
@@ -138,20 +139,12 @@ export function familyPage(content, states, key, mode = 'read') {
                                        progress: x.id ? progressOf(states[x.id], 'reading') : null}));
     }
   }
-  // members that show the head worn down, or written another way (patch
-  // plan 7.34, Decided 13: 雷 累 show 畾 as 田), a group per shape
-  const shown = [];
-  if (head) {
-    for (const ch of card.members) {
-      // a shape head's members all show its shape: nothing to say (7.34)
-      const p = !isShapeHead(head) && content.partsOf(ch).find(x => x.part === head && x.written);
-      if (!p) continue;
-      let g = shown.find(x => x.shape === p.written && x.variant === p.variant);
-      if (!g) shown.push(g = {shape: p.written, variant: p.variant, chars: []});
-      g.chars.push(ch);
-    }
-  }
-  return {key, type: card.type, head, sounds, shown,
+  // how its members show the head (brief 7.36; it replaces 7.34's lines
+  // "雷 累 show 畾 worn down to 田"), and the links between a shape and its
+  // shape heads (P8)
+  return {key, type: card.type, head, sounds,
+          shapes: head ? soundShapes(content, head) : null,
+          links: head ? shapeLinks(content, head) : [],
           study: {toLearn: plan.length, load: reviewLoad(plan.length),
                   parts: plan.filter(id => content.kind(id) !== 'reading').length},
           reading: head ? readingOf(content, head) : null,
@@ -442,20 +435,14 @@ export function soundsBlock(s, head, tileOf, {compact = false} = {}) {
   const said = key.length ? ` ${key.join('; ')}.`.replace(/^ (\S)/, (_, c) => ` ${c.toUpperCase()}`) : '';
   return h('section', {class: 'block fam-sounds'},
     h('h2', {class: 'fam-sounds-h'}, `How characters with ${shownForm(head)} are read`),
-    h('p', {class: 'note'}, `${plural(s.n, 'character')} ${s.n === 1 ? 'uses' : 'use'} ${shownForm(head)} as `
-      + `${s.n === 1 ? 'its' : 'their'} sound part. The % is how many of them are read each way (tone ignored), `
+    // "in 又's family", not "use 又 as their sound part": 授's is 受, 宥's 有
+    // (brief 7.36, Decided 19)
+    h('p', {class: 'note'}, `${plural(s.n, 'character')} ${s.n === 1 ? 'is' : 'are'} in ${shownForm(head)}’s family. `
+      + `The % is how many of them are read each way (tone ignored), `
       + `so it’s a fair first guess for a character you haven’t met.${said}`),
     s.headOnly.length > 0 && h('p', {class: 'note'},
       `None of the ${s.n} ${s.n === 1 ? 'is' : 'are'} read ${s.headOnly.join(' or ')}, ${shownForm(head)}’s own reading.`),
     ...parts);
-}
-
-// "雷 累 show 畾 worn down to 田." / "慈 滋 磁 孳 show 茲 written 兹." (7.34)
-export const shownSaid = (head, g) => [g.chars.join(' '), g.chars.length > 1 ? ' show ' : ' shows ', head,
-  g.variant ? ' written ' : ' worn down to ', g.shape, '.'];
-function shownLines(m) {
-  return (m.shown || []).map(g => h('p', {class: 'note fam-shown'},
-    ...shownSaid(m.head, g).map((x, i) => (i % 2 === 0 && i < 5 ? han(x) : x))));
 }
 
 // renderFamily(el, model, cb)   cb: onBack, onMode(mode), onTap(cell),
@@ -494,7 +481,8 @@ export function renderFamily(el, m, cb) {
       `Characters ${m.from.toLocaleString('en-GB')}–${m.to.toLocaleString('en-GB')} on your path `
       + 'that share no sound part with another.'),
     head,
-    ...shownLines(m),
+    ...renderLinks(m.links || [], {onFamily: cb.onFamily, onRef: cb.onRef}),
+    renderShapes(m.shapes, {onTap: f => cb.onRef(f), kindOf: cb.kindOf}),
     m.sounds && roleBar(m.head, m.sounds.roles),
     studyBlock(m, cb),
     h('p', {class: 'note'}, [c.known && `${c.known} known`, c.learning && `${c.learning} learning`,

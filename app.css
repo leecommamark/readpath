@@ -550,6 +550,16 @@ p.in-text { cursor: default; }
 .fam-sounds { display: flex; flex-direction: column; gap: var(--s3); }
 .fam-sounds > .note { margin: 0; }
 .fam-sounds-h { margin-top: var(--s2); }
+/* how a part's characters show it (brief 7.36): a row per shape, its tile
+   and label, then the characters; the characters wrap under on a phone */
+.shapes-h { margin-top: var(--s2); }
+.shapes-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3);
+              padding: var(--s2) 0; border-top: 1px solid var(--tint); }
+.shapes-row:first-of-type { border-top: 0; }
+.shapes-what { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
+.shapes-label { margin: 0; }
+.shapes-members { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s1) var(--s2); min-width: 0; }
+.shape-link { margin: var(--s2) 0 0; }
 .fam-box { display: flex; flex-direction: column; gap: var(--s3); padding: var(--s3);
            border-radius: 10px; background: var(--tint); min-width: 0; }
 .fam-box-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); margin: 0; }

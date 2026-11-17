@@ -23,6 +23,7 @@ import {canMarkKnown, canForget, canKnowOff} from '../actions.js';
 import {canTestMe} from '../runner.js';
 import {wordChars} from './reader.js';
 import {glyphTile, glyphKey} from './glyph.js';
+import {soundShapes, meaningShapes, shapeLinks, renderShapes, renderLinks} from './shapes.js';
 import {roleBar, boxTitle, pct, ROLE_SAID, soundsSection} from './families.js';
 import {roleCounts, soundFamily} from '../core/soundfamily.js';
 import {familiesOf, familyKeyOf, familyPlan} from '../core/family.js';
@@ -149,6 +150,11 @@ function partRoles(content, states, form, {itemsOnly = false} = {}) {
     roles.push({kind, id, reading, gloss, standsFor, written, status,
                 // a modal reading said in words (brief 7.33 decision A)
                 modal: kind === 'sound' ? modalNote(content, form) : null,
+                // how its characters show it, and a shape's links to its
+                // shape heads (brief 7.36: the family page's, and 手's and
+                // 扌's alike)
+                shapes: kind === 'sound' ? soundShapes(content, form) : meaningShapes(content, form),
+                links: kind === 'sound' ? shapeLinks(content, form) : [],
                 // a meaning from Unihan's kDefinition, shown muted (7.10)
                 glossWeak: kind === 'meaning' && !!gloss && partGlossWeak(content, form),
                 wording: kind === 'meaning' ? meaningWording(content, form, gloss) : null,
@@ -457,6 +463,8 @@ function roleBody(r, cb) {
     r.modal && renderRangeNote(r.modal),
     r.wording && r.wording.note && h('p', {class: 'note'}, r.wording.note),
     r.standsFor && h('p', {class: 'note'}, ...standsLine(r.standsFor, r.written)),
+    ...renderLinks(r.links || [], {onFamily: cb.onFamily, onRef: cb.onRef}),
+    renderShapes(r.shapes, {onTap: c => cb.onRef(c), kindOf: cb.kindOf}),
     r.canTest && cb.onTestMe && h('div', {class: 'btns'},
       h('button', {type: 'button', class: 'btn', onclick: () => cb.onTestMe(r.id)}, 'Test me')),
     r.canTest && cb.onTestMe && h('p', {class: 'note'}, r.kind === 'sound'
