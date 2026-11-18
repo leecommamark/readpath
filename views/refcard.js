@@ -26,6 +26,7 @@ import {glyphTile, glyphKey} from './glyph.js';
 import {soundShapes, meaningShapes, shapeLinks, renderShapes, renderLinks} from './shapes.js';
 import {roleBar, boxTitle, pct, ROLE_SAID, soundsSection} from './families.js';
 import {roleCounts, soundFamily} from '../core/soundfamily.js';
+import {jobsModel, treeModel, renderJobs, renderTree, soundHolds} from './jobs.js';
 import {familiesOf, familyKeyOf, familyPlan} from '../core/family.js';
 import {soundLine} from '../core/tree.js';
 import {shortGloss} from '../core/gloss.js';
@@ -278,6 +279,8 @@ export function refModel(content, states, form, texts = [], opts = {}) {
             looksLike: familyOf(content, form).map(ch => ({ch, over: charJp(content, ch)})),
             words, inTexts, simplified, also: alsoOf(content, form), asPart: partRoles(content, states, form, {itemsOnly: true}),
             family: familyOfPart(content, form), partUse: partUse(content, form),
+            // How 土 is used, and where its sound branches (patch plan 7.37)
+            jobs: jobsModel(content, form), branch: treeModel(content, form),
             // the tag at the top: the reading the card was opened for (a
             // search row's, patch plan 7A 6b: 好 hou3 from its own row says
             // "not met yet", not hou2's "known"), else the main one; named
@@ -297,6 +300,7 @@ export function refModel(content, states, form, texts = [], opts = {}) {
     // its place on the path: its first study item's (a part may be both)
     const ranks = roles.filter(r => content.has(r.id)).map(r => content.rank(r.id));
     return withSummaries({kind: 'part', glyph: form, roles, partUse: partUse(content, form),
+                          jobs: jobsModel(content, form), branch: treeModel(content, form),
                           rank: ranks.length ? Math.min(...ranks) : null,
                           usedIn: usedInOf(content, states, form)});
   }
@@ -472,10 +476,16 @@ function roleBody(r, cb) {
       : 'One question: tell a character apart by this part.')];
 }
 
-// As a part (P2.7): the 7.25 role bar, then each role it is a study item in
-// (the key to its border is in the glance band)
+// As a part (P2.7): the 7.25 role bar, How 土 is used and where its sound
+// branches (patch plan 7.37), then each role it is a study item in (the key
+// to its border is in the glance band)
 function asPartBody(m, roles, cb) {
+  const go = {onFamily: cb.onFamily, onRef: cb.onRef, kindOf: cb.kindOf};
+  const tree = renderTree(m.branch, go);
+  const inSound = soundHolds(m.jobs);
   return [m.partUse && roleBar(m.glyph, m.partUse),
+    renderJobs(m.jobs, {onTap: c => cb.onRef(c), kindOf: cb.kindOf, soundBody: inSound ? tree : null}),
+    !inSound && tree,
     ...roles.map(r => h('div', {class: 'ref-role'}, ...roleBody(r, cb)))];
 }
 

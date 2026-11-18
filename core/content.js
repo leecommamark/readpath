@@ -116,8 +116,9 @@ export function loadContent(tables) {
                               written: r.written || null, variant: r.variant === 1,
                               // a sound link Mark ruled historical (7.34 phase 9)
                               label: r.label || null,
-                              // where a worn-down head sits that no part
-                              // shows (舍's 余: top; brief 7.36)
+                              // where the part sits (舍's 余: top, where it
+                              // is worn down and no part shows it, 7.36;
+                              // every part since 7.37)
                               where: r.where || null});
   }
   // a component's main role: 'sound' or 'meaning', whichever it plays in
@@ -135,6 +136,11 @@ export function loadContent(tables) {
   // every part's taught reading and gloss, study item or not, for the "built
   // from" line (step 4 6b: 的's 勺 is no item, and had no reading shown)
   const partReading = new Map(T.sound_part.map(s => [s.part, s.taught_reading || s.head_reading]));
+  // its own reading where it is taught another (7.37 Decided 29: 爰 is
+  // taught wun4, read jyun4 on its own)
+  const ownReading = new Map(T.sound_part.filter(s => s.taught_reading && s.head_reading
+                                                  && s.taught_reading !== s.head_reading)
+    .map(s => [s.part, s.head_reading]));
   const partGloss = new Map(T.meaning_part.map(m => [m.part, m.gloss]));
   // where they come from (patch plan 7.10): a part gloss curated or Unihan's
   // kDefinition, a taught part reading a dictionary's, Mark's or kCantonese's
@@ -221,14 +227,16 @@ export function loadContent(tables) {
   for (const list of shapeUses.values()) list.sort((a, b) => charRank(a) - charRank(b));
 
   // how a part is used, shape too (brief 7.25 decided 10): listed pairs, as
-  // usesOf; part_role has one row per character and part
-  const roleCounts = new Map();            // part -> {sound, meaning, form}
+  // usesOf, path order, with where the part sits in each (patch plan 7.37:
+  // a word of phonetics.PLACES, or '' where nothing places it). part_role
+  // has one row per character and part
+  const partRows = new Map();              // part -> [{char, role, where}]
   for (const r of T.part_role) {
     if (r.listed === 0) continue;
-    if (!roleCounts.has(r.part)) roleCounts.set(r.part, {sound: 0, meaning: 0, form: 0});
-    const n = roleCounts.get(r.part);
-    if (r.role in n) n[r.role]++;
+    if (!partRows.has(r.part)) partRows.set(r.part, []);
+    partRows.get(r.part).push({char: r.char, role: r.role, where: r.where || ''});
   }
+  for (const list of partRows.values()) list.sort((a, b) => charRank(a.char) - charRank(b.char));
 
   const soundSim = new Map(T.sound_sim.map(r => [`${r.slot}|${r.a}|${r.b}`, r.sim]));
 
@@ -291,6 +299,10 @@ export function loadContent(tables) {
     partsOf: ch => partsOf.get(ch) || [],
     componentRole: form => mainRole.get(form) || null,
     partReading: part => partReading.get(part) || null,
+    ownReading: part => ownReading.get(part) || null,
+    // the shape its family head is worn down to in a folded part (䩻: 月,
+    // for 馬; 7.37 Decided 34)
+    foldWritten: part => (soundRow.get(part) || {}).fold_written || null,
     partGloss: part => partGloss.get(part) || null,
     partGlossSrc: part => partGlossSrc.get(part) || null,
     partReadingSrc: part => partReadingSrc.get(part) || null,
@@ -347,8 +359,19 @@ export function loadContent(tables) {
     // written another way), and those that have it only as a shape (7.34)
     seenIn: shape => seenIn.get(shape) || [],
     shapeUsesOf: part => shapeUses.get(part) || [],
-    // {sound, meaning, form}: how many characters use `part` each way
-    roleCountsOf: part => ({sound: 0, meaning: 0, form: 0, ...roleCounts.get(part)}),
+    // the characters with `part` as a part ([{char, role, where}], path
+    // order; 7.37); soundfamily.partJobs reads them
+    partRowsOf: part => partRows.get(part) || [],
+    charRank,
+    // patch plan 7.37: where a taught head's sound branches off an older
+    // family ({part, jp, kind: 'shift' | 'same'} | null; 尚: 向 hoeng3
+    // shift), and the heads that branch off `part`, path order
+    fromOf: part => {
+      const r = soundRow.get(part);
+      return r && r.from ? {part: r.from, jp: r.from_jp, kind: r.from_kind} : null;
+    },
+    branchesOf: part => T.sound_part.filter(s => s.from === part).map(s => s.part)
+      .sort((a, b) => charRank(a) - charRank(b)),
     tellapart: T.tellapart,
     words: new Map(T.word.map(w => [`${w.form}|${w.jp}`, w])),
     // toneless syllable -> {syllable, key, uses, tones, pair}: every

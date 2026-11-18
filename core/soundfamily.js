@@ -26,9 +26,23 @@
 // Shares are fractions of n, the members counted. Fixed reference figures:
 // nothing here reads a learner's states.
 //
-// roleCounts(content, form) -> {total, sound, meaning, form}: the
-// characters that have `form` as a part with a recorded role (decided 10).
-// One with no role row is unknown, not empty, and isn't counted.
+// partJobs(content, form) -> {sound, meaning, nosound, form}: the characters
+// that have `form` as a part with a recorded role (decided 10), each
+// {char, where}, path order; where the part sits in it (patch plan 7.37:
+// phonetics.PLACES, '' where nothing places it). One with no role row is
+// unknown, not empty, and isn't counted. A `form` row in a character with no
+// sound part at all is `nosound` (Decided 24: 鳴's 口 may carry meaning or be
+// part of a picture; the data can't tell), beside one `form` (土 in 在). A
+// family head counts its whole family as using it for its sound, the members
+// of the parts folded into it too (7.32 R1: 院 uses 元, through 完), each
+// character once and nowhere else (炎's 氮 was counted twice until 7.37);
+// such a member is {char, where: '', through}: the part it takes its sound
+// from (霸: 䩻), its own place unclaimed, since the head may be worn away in
+// it (Decided 25, reversing 13).
+//
+// roleCounts(content, form) -> {total, sound, meaning, nosound, form}:
+// partJobs' counts, the role bar's. One source, so the bar and "How 土 is
+// used" agree.
 
 import {familiesOf} from './family.js';
 import {familyRange, rangeSyl} from './soundfit.js';
@@ -67,18 +81,25 @@ export function sylSim(content, a, b) {
   return sim('onset') * Math.max(sim('rime'), sim('nucleus') * sim('coda'));
 }
 
+export function partJobs(content, form) {
+  const jobs = {sound: [], meaning: [], nosound: [], form: []};
+  for (const r of content.partRowsOf(form)) {
+    const job = r.role === 'form' && !content.soundPartOf(r.char) ? 'nosound' : r.role;
+    if (job in jobs) jobs[job].push({char: r.char, where: r.where});
+  }
+  const sound = new Set(jobs.sound.map(x => x.char));
+  const added = new Set(content.familyMembers(form).filter(c => !sound.has(c)));
+  if (!added.size) return jobs;
+  for (const k of ['meaning', 'nosound', 'form']) jobs[k] = jobs[k].filter(x => !added.has(x.char));
+  for (const c of added) jobs.sound.push({char: c, where: '', through: content.soundPartOf(c)});
+  jobs.sound.sort((a, b) => content.charRank(a.char) - content.charRank(b.char));
+  return jobs;
+}
+
 export function roleCounts(content, form) {
-  const n = content.roleCountsOf(form);
-  // a family head counts its whole family as using it for its sound,
-  // the members of the parts folded into it too (7.32 R1: 院 uses 元, through
-  // 完), each character once
-  const uses = content.usesOf(form);
-  const sound = new Set(uses.filter(u => u.role === 'sound').map(u => u.char));
-  const added = content.familyMembers(form).filter(c => !sound.has(c));
-  if (!added.length) return {total: n.sound + n.meaning + n.form, ...n};
-  const moved = r => uses.filter(u => u.role === r && added.includes(u.char)).length;
-  const out = {sound: n.sound + added.length, meaning: n.meaning - moved('meaning'), form: n.form - moved('form')};
-  return {total: out.sound + out.meaning + out.form, ...out};
+  const j = partJobs(content, form);
+  const n = {sound: j.sound.length, meaning: j.meaning.length, nosound: j.nosound.length, form: j.form.length};
+  return {total: n.sound + n.meaning + n.nosound + n.form, ...n};
 }
 
 // a member's study-item readings with their part of its one count

@@ -1,5 +1,5 @@
 {
- "build": "13cc283635eb98b9",
+ "build": "3a4ac036664a5caf",
  "files": [
   "actions.js",
   "app.css",
@@ -97,6 +97,7 @@
   "views/feedback.js",
   "views/find.js",
   "views/glyph.js",
+  "views/jobs.js",
   "views/jyutping.js",
   "views/parts.js",
   "views/path.js",

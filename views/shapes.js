@@ -5,7 +5,9 @@
 // A sound family's rows are the export's (sound_part `shown`, Decided 14):
 // the head as it is, then each member that others are shown through, by its
 // own reading ("有 jau5: 有 郁 賄 宥"; Mark, 2026-11-17), then its shapes
-// ("worn down to 𠂇: 右", "written another way, 佘"), then the head worn down
+// (𠂇: 有 右 郁 賄 宥, every character showing the shape, those reached
+// through 有 too; "written another way": 佘; 7.37 Decided 30, 32, 34), then
+// the head worn down
 // inside a member ("worn down, in 舍"). A meaning part's rows are its full form and each squeezed form that
 // tells as it ("squeezed, on the left: 扌"), each with the characters its
 // card counts; 月 is its own part, so 肉's card has no 月 row. The block
@@ -30,15 +32,17 @@ import {charJp} from './facts.js';
 export const ROW_SHOWN = 8;
 
 const H = f => ['han', f];
-const overOf = (content, chars) => Object.fromEntries(chars.slice(0, ROW_SHOWN).map(c => [c, charJp(content, c)]));
+const overOf = (content, chars) => Object.fromEntries(chars.map(c => [c, charJp(content, c)]));
 
 function soundLabel(content, g, shape) {
   if (g.kind === 'head') return [];
   // a member others show heads their row by its own reading (Mark,
   // 2026-11-17: 雷 leoi4: 雷 蕾 擂 鐳)
   if (g.kind === 'char') return [['jp', charJp(content, g.shape)]];
-  if (g.kind === 'worn') return ['worn down to ', H(g.shape)];
-  if (g.kind === 'variant') return ['written another way, ', H(g.shape)];
+  // the tile is the shape; nothing more to say of a worn one (Mark,
+  // 2026-11-18, Decided 34)
+  if (g.kind === 'worn') return [];
+  if (g.kind === 'variant') return ['written another way'];
   if (g.kind === 'in') return ['worn down, in ', H(g.shape)];
   // via: the nearer part, and how it shows the head
   if (g.seen) return [H(g.shape), ', worn down to ', H(g.seen)];
@@ -100,7 +104,9 @@ export function alsoWritten(content, form, kind) {
       by.get(shape).push(...(g.kind === 'char' ? [g.shape] : g.members));
     }
     const rank = c => content.rank(content.mainReading(c));
-    shapes = [...by].map(([shape, ms]) => ({shape, where: null, members: ms.sort((a, b) => rank(a) - rank(b))}))
+    // a member heading a row nested under its shape is in that shape's row
+    // too (7.37 Decided 30), so once
+    shapes = [...by].map(([shape, ms]) => ({shape, where: null, members: [...new Set(ms)].sort((a, b) => rank(a) - rank(b))}))
       .sort((a, b) => rank(a.members[0]) - rank(b.members[0]));
   } else {
     const {full, rows} = meaningForms(content, form);
@@ -136,9 +142,21 @@ export function renderShapes(m, {onTap = null, kindOf = null} = {}) {
     ...m.rows.map(r => h('div', {class: 'shapes-row'},
       h('div', {class: 'shapes-what'}, tile(r.tile, 'md'),
         r.label.length > 0 && h('span', {class: 'note shapes-label'}, ...pieces(r.label))),
-      h('div', {class: 'shapes-members'},
-        ...r.members.slice(0, ROW_SHOWN).map(c => tile(c, 'sm', (r.over || {})[c] || '')),
-        r.members.length > ROW_SHOWN && h('span', {class: 'sm'}, ` and ${r.members.length - ROW_SHOWN} more`)))));
+      moreRow(r.members, c => tile(c, 'sm', (r.over || {})[c] || '')))));
+}
+
+// a row's first ROW_SHOWN, and "+ N more" that opens the rest in place
+// (Mark, 2026-11-18)
+function moreRow(members, tile) {
+  const box = h('div', {class: 'shapes-members'}, ...members.slice(0, ROW_SHOWN).map(tile));
+  if (members.length > ROW_SHOWN) {
+    const more = h('button', {type: 'button', class: 'link sm', onclick: () => {
+      more.remove();
+      box.append(...members.slice(ROW_SHOWN).map(tile));
+    }}, `+ ${members.length - ROW_SHOWN} more`);
+    box.append(more);
+  }
+  return box;
 }
 
 // The links between a shape and its shape heads (P8, Decided 20), on the

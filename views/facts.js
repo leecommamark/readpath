@@ -114,8 +114,12 @@ export function builtFrom(content, ch) {
 // se, as 佘 still is." · 賒 "The 佘 you see is 余 written another way, read
 // se." · 佘 "佘 is 余 written another way; it kept the reading se." · 舍
 // "舍's top is 余 worn down, read se." -> {said: pieces} or null
-function branchSaid(content, ch, part, written, variant, where) {
+function branchSaid(content, ch, part, written, variant, at) {
   const of = content.headStandsFor(part);
+  // worn down past seeing: the character heads an `in` row of the part's
+  // shown (舍; 7.36 Decided 9), and part_role says where it sits. Since
+  // 7.37 every row has a place, so the place alone says nothing of wear
+  const where = at && content.shownOf(part).some(g => g.kind === 'in' && g.shape === ch) ? at : null;
   if (!of && !where) return null;
   const name = of && shapeHead(part).name;
   const read = of ? `, read ${name}` : '';

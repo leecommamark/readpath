@@ -39,6 +39,7 @@ import {modalNote, renderRangeNote} from './range.js';
 import {h, han, clear, put, jpSpan} from './dom.js';
 import {shownForm} from '../core/shapehead.js';
 import {soundShapes, shapeLinks, renderShapes, renderLinks} from './shapes.js';
+import {jobsModel, treeModel, renderJobs, renderTree, soundHolds} from './jobs.js';
 import {isKnown} from '../core/state.js';
 import {soundId} from '../core/content.js';
 import {markInReader} from '../actions.js';
@@ -145,6 +146,10 @@ export function familyPage(content, states, key, mode = 'read') {
   return {key, type: card.type, head, sounds,
           shapes: head ? soundShapes(content, head) : null,
           links: head ? shapeLinks(content, head) : [],
+          // How 尚 is used, its sound branch a line alone (Decided 14), and
+          // where its sound branches (patch plan 7.37)
+          jobs: head ? jobsModel(content, head, {tiles: false}) : null,
+          branch: head ? treeModel(content, head) : null,
           study: {toLearn: plan.length, load: reviewLoad(plan.length),
                   parts: plan.filter(id => content.kind(id) !== 'reading').length},
           reading: head ? readingOf(content, head) : null,
@@ -315,8 +320,10 @@ export const pct = x => {
   return !r && x > 0 ? '<1%' : `${r}%`;
 };
 
-export const ROLE_SAID = [['sound', 'for its sound'], ['meaning', 'for its meaning'], ['form', 'for its shape only']];
-const ROLE_KEY = {sound: 'sound', meaning: 'meaning', form: 'shape only'};
+// `nosound`: a form row in a character with no sound part (7.37 Decided 24)
+export const ROLE_SAID = [['sound', 'for its sound'], ['meaning', 'for its meaning'],
+                          ['nosound', 'in characters with no sound part'], ['form', 'for its shape only']];
+const ROLE_KEY = {sound: 'sound', meaning: 'meaning', nosound: 'no sound part', form: 'shape only'};
 
 // "Of the 29 characters with 白 in them, 15 use it for its sound · 5 for its
 // meaning · 9 for its shape only." (decided 10): only characters with a
@@ -337,7 +344,7 @@ export function roleBar(form, r) {
       ...ROLE_SAID.filter(([k]) => r[k]).map(([k]) =>
         h('span', {class: `rb-${k}`, style: `width: ${(100 * r[k] / r.total).toFixed(2)}%`}))),
     h('p', {class: 'role-key sm', 'aria-hidden': 'true'},
-      ...ROLE_SAID.map(([k]) => h('span', {class: 'rk-item'}, h('span', {class: `rk-dot rb-${k}`}), ROLE_KEY[k]))));
+      ...ROLE_SAID.filter(([k]) => k !== 'nosound' || r[k]).map(([k]) => h('span', {class: 'rk-item'}, h('span', {class: `rk-dot rb-${k}`}), ROLE_KEY[k]))));
 }
 
 const ONSET_SAID = o => o || '∅';
@@ -472,6 +479,16 @@ export function renderFamily(el, m, cb) {
           `Sound part · unlocks ${plural(m.part.unlocks, 'character')} · ${STATE_SAID[m.part.state]}`))),
     m.part && m.part.canTest && h('div', {class: 'btns'},
       h('button', {type: 'button', class: 'btn', onclick: () => cb.onTestMe(m.part.id)}, 'Test me')));
+  // how the members are read, with the switch that marks them, and how its
+  // shapes connect: the body of How 土 is used's sound branch (7.37 Decided
+  // 31, 34), else at the foot
+  const reading = h('div', {class: 'fam-reading'},
+    h('div', {class: 'reader-controls'}, modes),
+    h('p', {class: 'note mode-hint'}, FAMILY_HINT[m.mode]),
+    m.sounds ? soundsSection(m, tileOf)
+             : h('div', {class: 'tiles fam-members', lang: 'zh-Hant-HK'}, ...m.cells.map(tileOf)));
+  const inSound = !!m.sounds && soundHolds(m.jobs);
+  const tree = renderTree(m.branch, {onFamily: cb.onFamily, onRef: cb.onRef, kindOf: cb.kindOf});
   put(clear(el),
     h('div', {class: 'top'},
       h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Back'),
@@ -484,13 +501,13 @@ export function renderFamily(el, m, cb) {
     ...renderLinks(m.links || [], {onFamily: cb.onFamily, onRef: cb.onRef}),
     renderShapes(m.shapes, {onTap: f => cb.onRef(f), kindOf: cb.kindOf}),
     m.sounds && roleBar(m.head, m.sounds.roles),
+    renderJobs(m.jobs, {onTap: f => cb.onRef(f), kindOf: cb.kindOf,
+                        soundBody: inSound ? [reading, tree] : null}),
+    !inSound && tree,
     studyBlock(m, cb),
     h('p', {class: 'note'}, [c.known && `${c.known} known`, c.learning && `${c.learning} learning`,
                              c.ahead && `${c.ahead} not met yet`].filter(Boolean).join(' · ')),
-    h('div', {class: 'reader-controls'}, modes),
-    h('p', {class: 'note mode-hint'}, FAMILY_HINT[m.mode]),
-    m.sounds ? soundsSection(m, tileOf)
-             : h('div', {class: 'tiles fam-members', lang: 'zh-Hant-HK'}, ...m.cells.map(tileOf)));
+    !inSound && reading);
 }
 
 // ---- Browse families (patch plan 7.7, Phase 4; brief 7.7 decided 2)
