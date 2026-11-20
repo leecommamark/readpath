@@ -199,7 +199,6 @@ h2 { font: 600 var(--t-lg)/1.25 var(--head); margin: 0; }
 
 /* ---- Today */
 .session-line { font-size: var(--t-lg); margin: 0; }
-.next { display: flex; align-items: center; gap: var(--s4); }
 .known { font-family: var(--head); font-size: var(--t-lg); }
 .unsent { color: var(--accent); margin-top: var(--s2); }
 /* About and licences (patch plan 7B): one credit a line */
@@ -312,9 +311,14 @@ mark.rb { background: none; color: inherit;
 .links { display: flex; flex-wrap: wrap; gap: 0 var(--s4); align-items: center; }
 .tip { color: var(--accent); margin-top: calc(-1 * var(--s2)); }
 .top-right { display: flex; align-items: center; gap: var(--s2); }
-/* Today: the date, and under it the trail marker (brief 7.29 M3) */
+/* Today: the date; search and the Settings gear on the right (brief 7.38 P5) */
 .top-date { display: flex; flex-direction: column; min-width: 0; }
-.trail-line { font-size: var(--t-sm); color: var(--learn-text); }
+.top-right .search-btn { margin: 0; }
+/* Settings' last line: the build id (brief 7.38 Q7) */
+.build-line { margin: var(--s4) 0 0; color: var(--muted); }
+.gear-btn { margin: 0 calc(-1 * var(--s3)) 0 0; color: var(--ink); display: inline-flex;
+            align-items: center; justify-content: center; }
+.gear-btn .gear { width: 22px; height: 22px; }
 /* a marker passed (M4): one line, tapped away */
 .passed-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s2); width: 100%;
                border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left; }
@@ -555,7 +559,7 @@ p.in-text { cursor: default; }
 /* how a part's characters show it (brief 7.36): a row per shape, its tile
    and label, then the characters; the characters wrap under on a phone */
 .shapes-h { margin-top: var(--s2); }
-.shapes-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3);
+.shapes-row { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s2);
               padding: var(--s2) 0; border-top: 1px solid var(--tint); }
 .shapes-row:first-of-type { border-top: 0; }
 .shapes-what { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
@@ -570,15 +574,17 @@ p.in-text { cursor: default; }
 .jobs-branch:first-of-type { border-top: 0; }
 .jobs-title { display: flex; align-items: center; gap: var(--s2); margin: 0; font-size: 1rem; }
 .jobs-line { margin: var(--s1) 0 0; }
-.jobs-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); padding: var(--s1) 0; }
-.jobs-where { display: flex; align-items: center; gap: var(--s2); min-width: 9.5em; }
+/* one alignment (brief 7.38 P13): the tiles always start under the label */
+.jobs-row { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s1); padding: var(--s1) 0; }
+.jobs-where { display: flex; align-items: center; gap: var(--s2); }
 .jobs-where .note { margin: 0; }
 .jobs-members { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s1) var(--s2); min-width: 0; }
 .pm { position: relative; flex: none; width: 16px; height: 16px; box-sizing: border-box;
       border: 1.5px solid var(--muted); border-radius: 3px; }
-.pm:not([class*="pm-"]) { border-style: dashed; opacity: .5; }
 .pm::after { content: ""; position: absolute; background: var(--muted); }
-.pm:not([class*="pm-"])::after { display: none; }
+/* a use placed nowhere yet: "elsewhere in the character", a dashed square */
+.pm-elsewhere { border-style: dashed; }
+.pm-elsewhere::after { display: none; }
 .pm-left::after   { left: 1px; top: 1px; bottom: 1px; width: 5px; }
 .pm-right::after  { right: 1px; top: 1px; bottom: 1px; width: 5px; }
 .pm-top::after    { left: 1px; right: 1px; top: 1px; height: 5px; }
@@ -679,6 +685,14 @@ p.in-text { cursor: default; }
             padding: var(--s1) 0; cursor: pointer; }
 .find-list li:first-child .find-row { border-top: 0; }
 .find-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* search's one row per glyph (brief 7.38 P11): its roles as tags under the
+   reading, in line with it (the small tile is 1.42 x --g-sm wide) */
+.glyph-row { border-top: 1px solid var(--rule); }
+.find-list li.glyph-row:first-child { border-top: 0; }
+.glyph-row .find-row { border-top: 0; }
+.role-tags { margin: calc(-1 * var(--s1)) 0 var(--s2) calc(1.42 * var(--g-sm) + var(--s3));
+             font-size: var(--t-sm); color: var(--muted); }
+.role-tag { min-height: 0; padding: 0; }
 /* "you typed 复, the simplified form" (7A 6b): its own line under the reading */
 .find-typed { display: block; overflow: hidden; text-overflow: ellipsis; }
 .part-row { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0;
@@ -810,6 +824,19 @@ button.glyph-tile:focus-visible { outline: 2px solid var(--accent); outline-offs
 .fold-body { display: flex; flex-direction: column; gap: var(--s2); padding-bottom: var(--s4); }
 .fold-body[hidden] { display: none; }
 .fold-body .fam-sounds-h { font-size: var(--t-body); margin-top: 0; }
+/* a fold inside a section (the card's How 土 is used): the same head, a
+   rule above it, no block of its own */
+.fold-sub { border-top: 1px solid var(--tint); }
+.fold-sub > .fold-head { padding: var(--s2) 0; }
+.fold-sub > .fold-body { padding-bottom: var(--s2); }
+/* the one overflow (brief 7.38 P9): "+ N more", a chip that opens the row */
+.more-chip { align-self: center; border: 1px solid var(--rule); border-radius: 99px; background: var(--surface);
+             color: var(--muted); font: inherit; font-size: var(--t-sm); padding: 2px var(--s2);
+             min-height: 28px; cursor: pointer; }
+.more-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tiles-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s1) var(--s2); min-width: 0; }
+.fam-how { margin: 0; }
+.fam-summary .family-link { margin: 0; }
 .ref-role { display: flex; flex-direction: column; gap: var(--s2); }
 .ref-soundline { margin: 0; }
 .tiles { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s2); align-items: flex-start; margin: 0; }

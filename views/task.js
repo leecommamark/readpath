@@ -71,7 +71,7 @@ function partCard(content, task, base, states = {}) {
               reveal: {jp: it.taughtReading},
               // a modal reading said in words (brief 7.33 decision A)
               modalNote: modalNote(content, it.part),
-              facts: [`Unlocks ${members.length} characters on your path.`],
+              facts: [`Unlocks ${members.length} ${members.length === 1 ? 'character' : 'characters'} on your path.`],
               // its other shapes, in one line (brief 7.36 Decided 17)
               also: alsoWritten(content, it.part, 'sound'),
               sounds: soundFamily(content, `f:${it.part}`),
@@ -522,7 +522,10 @@ export function renderTask(el, m, cb) {
       m.pattern && h('p', {class: 'note center'}, 'Its main reading is ', jpSpan(m.pattern.main), '; ',
         jpSpan(r.jp), ` is ${m.pattern.relation}.`),
       ...(m.facts || []).map(f => h('p', {class: 'note center'}, f)),
-      m.sounds && soundsBlock(m.sounds, m.glyph, compactTile(cb, f => tileKind(cb, f)), {compact: true}),
+      // its top box, and the way to the rest on its family's page, over the
+      // session as a tree is (brief 7.38 D2, Q10)
+      m.sounds && soundsBlock(m.sounds, m.glyph, compactTile(cb, f => tileKind(cb, f)),
+        {compact: true, onFamily: cb.onFamily ? () => cb.onFamily(`f:${m.glyph}`) : null}),
       wordLines(r.words),
       likeLine(m.built, cb),
       h('div', {class: 'foot'}, cont(go), report()));

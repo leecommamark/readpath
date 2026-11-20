@@ -7,7 +7,7 @@ import {h, clear, put} from './dom.js';
 import {cardModel, renderTask} from './task.js';
 import {glyphKind} from './glyph.js';
 
-// showSession(el, content, run, {onExit(), onRef(char), onReport(shown),
+// showSession(el, content, run, {onExit(), onRef(char), onFamily(key), onReport(shown),
 //                                tipOnce(), lineOf({text, line}),
 //                                keyUnseen(kind), keySeen(kind),
 //                                speech, auto: audio.js audioFor's, brief 7.31})
@@ -60,6 +60,9 @@ export function showSession(el, content, run, cb) {
       },
       onNext: next,
       onRef: cb.onRef,
+      // a sound part's Meet: the rest of its family's readings, on its page
+      // over the session (brief 7.38 Q10)
+      onFamily: cb.onFamily || null,
       onReport: cb.onReport,
       tipOnce: cb.tipOnce,
       keyUnseen: cb.keyUnseen, keySeen: cb.keySeen,

@@ -27,9 +27,10 @@ import {shownForm, shapeHead} from '../core/shapehead.js';
 import {familiesOf} from '../core/family.js';
 import {meaningId} from '../core/content.js';
 import {charJp} from './facts.js';
+import {ROW_SHOWN, moreRow} from './fold.js';
 
-// a row's characters drawn at most, then "and N more" (扌 has 235)
-export const ROW_SHOWN = 8;
+// a row's characters drawn at most, then "+ N more" (扌 has 235)
+export {ROW_SHOWN};
 
 const H = f => ['han', f];
 const overOf = (content, chars) => Object.fromEntries(chars.map(c => [c, charJp(content, c)]));
@@ -43,10 +44,10 @@ function soundLabel(content, g, shape) {
   // 2026-11-18, Decided 34)
   if (g.kind === 'worn') return [];
   if (g.kind === 'variant') return ['written another way'];
-  if (g.kind === 'in') return ['worn down, in ', H(g.shape)];
+  if (g.kind === 'in') return ['morphed, in ', H(g.shape)];
   // via: the nearer part, and how it shows the head
-  if (g.seen) return [H(g.shape), ', worn down to ', H(g.seen)];
-  if (g.worn) return [H(g.shape), ' (', H(shape), ' worn down to ', H(g.worn), ')'];
+  if (g.seen) return [H(g.shape), ', morphed into ', H(g.seen)];
+  if (g.worn) return [H(g.shape), ' (', H(shape), ' morphed into ', H(g.worn), ')'];
   if (g.variant) return [H(g.shape), ' (', H(shape), ' written another way, ', H(g.variant), ')'];
   return [H(g.shape)];
 }
@@ -134,29 +135,17 @@ export const piecesText = ps => ps.map(x => (!Array.isArray(x) ? x : x[0] === 'j
 const pieces = ps => ps.map(x => (!Array.isArray(x) ? x : x[0] === 'jp' ? jpSpan(x[1]) : han(shownForm(x[1]))));
 export const renderPieces = pieces;
 
-export function renderShapes(m, {onTap = null, kindOf = null} = {}) {
+// heading: false inside a fold that names it (the family page); 'h3' inside
+// a card's section, whose heading is the section's (brief 7.38 P3)
+export function renderShapes(m, {onTap = null, kindOf = null, heading = 'h2'} = {}) {
   if (!m) return null;
   const tile = (f, size, over = null) => glyphTile(f, kindOf ? kindOf(f) : null, {size, onTap, over});
   return h('section', {class: 'block shapes'},
-    h('h2', {class: 'shapes-h'}, 'How ', han(m.of), ' looks in its characters'),
+    heading && h(heading, {class: 'shapes-h'}, 'How ', han(m.of), ' looks in its characters'),
     ...m.rows.map(r => h('div', {class: 'shapes-row'},
       h('div', {class: 'shapes-what'}, tile(r.tile, 'md'),
         r.label.length > 0 && h('span', {class: 'note shapes-label'}, ...pieces(r.label))),
-      moreRow(r.members, c => tile(c, 'sm', (r.over || {})[c] || '')))));
-}
-
-// a row's first ROW_SHOWN, and "+ N more" that opens the rest in place
-// (Mark, 2026-11-18)
-function moreRow(members, tile) {
-  const box = h('div', {class: 'shapes-members'}, ...members.slice(0, ROW_SHOWN).map(tile));
-  if (members.length > ROW_SHOWN) {
-    const more = h('button', {type: 'button', class: 'link sm', onclick: () => {
-      more.remove();
-      box.append(...members.slice(ROW_SHOWN).map(tile));
-    }}, `+ ${members.length - ROW_SHOWN} more`);
-    box.append(more);
-  }
-  return box;
+      moreRow(r.members, c => tile(c, 'sm', (r.over || {})[c] || ''), {cls: 'shapes-members'}))));
 }
 
 // The links between a shape and its shape heads (P8, Decided 20), on the

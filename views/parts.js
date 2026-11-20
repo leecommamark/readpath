@@ -16,6 +16,7 @@ import {h, clear, put, jpSpan} from './dom.js';
 import {isKnown} from '../core/state.js';
 import {canTestMe} from '../runner.js';
 import {glyphTile, progressOf} from './glyph.js';
+import {shortGloss} from '../core/gloss.js';
 
 export const PART_STATE = {
   ahead: 'ahead', met: 'met', unlocked: 'unlocks its characters', known: 'known'};
@@ -56,7 +57,8 @@ function row(r, cb) {
                onTap: f => cb.onRef(f)}),
     h('div', {class: 'part-text'},
       h('p', {class: 'part-what'},
-        r.reading ? jpSpan(r.reading) : (r.gloss || ''),
+        // the short gloss, as search and Path show it (brief 7.38 Q9)
+        r.reading ? jpSpan(r.reading) : shortGloss(r.gloss || ''),
         r.family && h('span', {class: 'muted'}, ' (family)'),
         h('span', {class: 'sm'}, ` · unlocks ${plural(r.unlocks, 'character')}`)),
       h('p', {class: `tag ${r.state === 'known' ? 'accent' : r.state === 'ahead' ? '' : 'learn'}`},
@@ -92,7 +94,7 @@ export function renderParts(el, m, cb) {
     h('div', {class: 'row'},
       h('h2', {}, label),
       h('span', {class: 'sm'}, `${m.counts[kind].known} of ${m.counts[kind].total} known`)),
-    h('p', {class: 'note'}, note),
+    note && h('p', {class: 'note'}, note),
     h('ul', {class: 'part-list'}, ...m[kind].map(r => row(r, cb))));
   // the sound parts are the families on Path now (patch plan 7.5): this
   // lists the meaning parts
@@ -100,10 +102,21 @@ export function renderParts(el, m, cb) {
     h('div', {class: 'top'}, h('span', {}), searchButton(cb.onSearch)),
     h('h1', {id: 'parts-h'}, 'Steps'),
     stepsSwitch('meaning', cb.onSwitch),
-    h('p', {class: 'note'}, 'Tap a part for its card.'),
-    h('p', {class: 'note'},
-      'Each comes on the path just before the characters that need it. Once you’ve met it and '
-      + 'passed its test, those characters unlock. Knowing characters doesn’t mark their parts known: '
-      + 'Test me asks a part’s own question. A sound part is on its family’s page.'),
-    group('meaning', 'In path order', 'A meaning part tells apart characters that sound the same.'));
+    howBlock(),
+    group('meaning', 'In path order', null));
+}
+
+// one line, and the rest a tap away (brief 7.38 P8), as the family page's
+// How to read this
+export const MEANING_LINE = 'A meaning part tells apart characters that sound the same. Tap one for its card.';
+export const MEANING_HOW = 'Each comes on the path just before the characters that need it. Once you’ve met it and '
+  + 'passed its test, those characters unlock. Knowing characters doesn’t mark their parts known: '
+  + 'Test me asks a part’s own question, where it has one yet. A sound part is on its family’s page.';
+function howBlock() {
+  const how = h('p', {class: 'note fam-how', hidden: true}, MEANING_HOW);
+  const more = h('button', {type: 'button', class: 'link sm', onclick: () => {
+    how.hidden = false;
+    more.remove();
+  }}, 'How meaning parts work ›');
+  return h('div', {}, h('p', {class: 'note'}, `${MEANING_LINE} `, more), how);
 }

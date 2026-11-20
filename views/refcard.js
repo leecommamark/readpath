@@ -1,10 +1,11 @@
 // refcard.js — the reference card (patch plan 4, Phase 5; Blueprint:
 // reference card). Every fact about a character lives here, opened on demand
 // from any character anywhere, never pushed mid-task (DESIGN *Design rules*
-// 1): its readings, meaning, what it's built from, what it looks like (its
-// tell-apart family), words, the rung it's on, and Mark known / I forgot
-// this. A part opens a part's card: its reading or meaning, and the
-// characters it unlocks. In your texts (step 5): up to three lines from the
+// 1): its readings, meaning, what it's built from, its family in a line,
+// words, the rung it's on, and Mark known / I forgot this. (Looks like, its
+// tell-apart group, and Used in went in brief 7.38, D3.) A part opens a
+// part's card: its reading or meaning, and how it is used (As a part). In
+// your texts (step 5): up to three lines from the
 // learner's texts that have the character, each opening the Reader there.
 // Step 6: a part that is a study item offers Test me (its own test, now);
 // a character off the path with a jyutping has an off-path card -- its
@@ -16,7 +17,7 @@
 import {modalNote, renderRangeNote} from './range.js';
 import {h, han, clear, put, rubyWord, jpSpan, layerChip, speaker} from './dom.js';
 import {shapeHead, shownForm} from '../core/shapehead.js';
-import {builtFrom, roleText, standsLine, relationOf, word as wordEntry, allOver, charJp, meaningWording,
+import {builtFrom, roleText, standsLine, relationOf, word as wordEntry, allOver, meaningWording,
         cardWords, WORDS_SHOWN, LAYER_TEXT, partRankOf, rankSaid, sayFor, sayWord, wornLines} from './facts.js';
 import {isKnown, MAINTAIN} from '../core/state.js';
 import {canMarkKnown, canForget, canKnowOff} from '../actions.js';
@@ -24,16 +25,16 @@ import {canTestMe} from '../runner.js';
 import {wordChars} from './reader.js';
 import {glyphTile, glyphKey} from './glyph.js';
 import {soundShapes, meaningShapes, shapeLinks, renderShapes, renderLinks} from './shapes.js';
-import {roleBar, boxTitle, pct, ROLE_SAID, soundsSection} from './families.js';
+import {roleBar, boxShort, pct, ROLE_SAID, studyButton, NOTHING_LEFT} from './families.js';
+import {fold} from './fold.js';
 import {roleCounts, soundFamily} from '../core/soundfamily.js';
-import {jobsModel, treeModel, renderJobs, renderTree, soundHolds} from './jobs.js';
+import {jobsModel, treeModel, renderJobs, renderTree} from './jobs.js';
 import {familiesOf, familyKeyOf, familyPlan} from '../core/family.js';
 import {soundLine} from '../core/tree.js';
 import {shortGloss} from '../core/gloss.js';
 import {charGlossWeak, offReadingsWeak, partGlossWeak, formJp, DICTIONARY_SENSE} from '../core/provenance.js';
 
 export {WORDS_SHOWN};
-export const MEMBERS_SHOWN = 16;
 export const IN_TEXTS = 3;
 const EXCERPT = 24;                        // characters of a line shown
 
@@ -91,12 +92,6 @@ export function statusOf(content, s, id) {
   return content.kind(id) === 'reading' ? `rung ${s.rung} of 5` : 'learning';
 }
 
-function familyOf(content, ch) {
-  const own = content.tellapart.find(r => r.char === ch);
-  if (!own) return [];
-  return content.tellapart.filter(r => r.head === own.head && r.char !== ch).map(r => r.char);
-}
-
 // Main-reading characters on the path that have `part` in `role`, in path
 // order.
 const WITH_PART = new WeakMap();
@@ -120,16 +115,15 @@ function withPart(content, part, role) {
 }
 
 // A form's roles as a part (sound, meaning), each with its reading or
-// meaning, status, members and whether Test me has something to ask.
+// meaning, status and whether Test me has something to ask.
 // `itemsOnly` keeps the study items: a character's own card shows them
 // (青 is a character and a sound part).
 function partRoles(content, states, form, {itemsOnly = false} = {}) {
   const roles = [];
   for (const [kind, id] of [['sound', `s:${form}`], ['meaning', `m:${form}`]]) {
-    let members, reading, gloss, standsFor = null, written = null, status;
+    let reading, gloss, standsFor = null, written = null, status;
     if (content.has(id)) {
       const it = content.item(id);
-      members = content.membersOf(id).map(r => content.item(r).char);
       reading = it.taughtReading || null;
       gloss = it.meaning || it.gloss || null;
       standsFor = it.standsFor && it.standsFor !== form ? it.standsFor : null;
@@ -138,16 +132,12 @@ function partRoles(content, states, form, {itemsOnly = false} = {}) {
     } else {
       // a part that isn't a study item still has a reading or a meaning,
       // and characters on the path it is that part of (勺 in 的)
-      members = withPart(content, form, kind);
+      const members = withPart(content, form, kind);
       reading = kind === 'sound' ? content.partReading(form) : null;
       gloss = kind === 'meaning' ? content.partGloss(form) : null;
       status = 'not a study item';
       if (itemsOnly || !members.length) continue;
     }
-    // what the learner knows first, then path order (CO-060: songpath's
-    // order, the known ones being the anchor for the part)
-    const known = ch => isKnown(states[content.mainReading(ch)]);
-    members = [...members.filter(known), ...members.filter(ch => !known(ch))];
     roles.push({kind, id, reading, gloss, standsFor, written, status,
                 // a modal reading said in words (brief 7.33 decision A)
                 modal: kind === 'sound' ? modalNote(content, form) : null,
@@ -158,13 +148,29 @@ function partRoles(content, states, form, {itemsOnly = false} = {}) {
                 links: kind === 'sound' ? shapeLinks(content, form) : [],
                 // a meaning from Unihan's kDefinition, shown muted (7.10)
                 glossWeak: kind === 'meaning' && !!gloss && partGlossWeak(content, form),
+                // the characters where it means something else (月: moon, not
+                // flesh, in 期 明; Mark, 2026-11-20): [{label, chars}]
+                own: kind === 'meaning' ? ownMeanings(content, form) : [],
                 wording: kind === 'meaning' ? meaningWording(content, form, gloss) : null,
-                canTest: canTestMe(content, states, id),
-                members: members.slice(0, MEMBERS_SHOWN)
-                  .map(ch => ({ch, over: charJp(content, ch)})),
-                more: Math.max(0, members.length - MEMBERS_SHOWN)});
+                canTest: canTestMe(content, states, id)});
   }
   return roles;
+}
+
+// a meaning part's characters on the path where it means something else
+// than its gloss (part_role `label`): 月 moon in 期 朗 明 -> [{label, chars}]
+// None where every character has one: its meaning already says so by side
+// (阝: left hill, right town; parts.tsv by_where)
+function ownMeanings(content, form) {
+  const by = new Map();
+  let plain = 0;
+  for (const ch of withPart(content, form, 'meaning')) {
+    const p = content.partsOf(ch).find(x => x.role === 'meaning' && x.part === form);
+    if (!p || !p.label) { plain++; continue; }
+    if (!by.has(p.label)) by.set(p.label, []);
+    by.get(p.label).push(ch);
+  }
+  return plain ? [...by].map(([label, chars]) => ({label, chars})) : [];
 }
 
 // `texts` (texts.js heldLines()) gives In your texts; omitted, it's empty.
@@ -175,6 +181,13 @@ function partRoles(content, states, form, {itemsOnly = false} = {}) {
 function familyOfPart(content, form) {
   const part = content.soundPartOf(form);
   return part && familiesOf(content).byKey.has(`f:${part}`) ? {key: `f:${part}`, head: part} : null;
+}
+
+// the family pages As a part links to (brief 7.38 Q5): its own, for How 尚
+// looks; its tree's, for how its shapes connect (a fold's card: its head's)
+function pagesOf(content, form) {
+  const has = f => (f && familiesOf(content).byKey.has(`f:${f}`) ? `f:${f}` : null);
+  return {self: has(form), tree: has(content.familyHead(form) || form)};
 }
 
 // how a form is used as a part, for its card's bar (decided 10); null where
@@ -194,40 +207,27 @@ function soundLineOf(content, form) {
   return line.length >= 3 ? line.map(f => ({form: f, jp: formJp(content, f).text})) : null;
 }
 
-// its family (the tree's rule: its own, else its sound part's), how that
-// family is read -- its first box -- and Study's "N to learn"
+// its family (the tree's rule: its own, else its sound part's) in one
+// line -- how it is read most, its size -- and Study's "N to learn"; the
+// grid is the family page's (brief 7.38 D2)
 function familyCardOf(content, states, form) {
   const key = familyKeyOf(content, form);
   if (!key) return null;
   const card = familiesOf(content).byKey.get(key);
   const sf = soundFamily(content, key);
   const box = sf && sf.boxes[0];
-  // a grid box's title, short for the closed line: 青's c/z–ing/eng
-  const title = b => (b.title.kind === 'grid'
-    ? `${b.title.starts.map(x => x || '∅').join('/')}–${b.title.ends.join('/')}` : boxTitle(b));
-  return {key, head: card.head, n: sf ? sf.n : card.members.length - 1, members: card.members.length,
-          top: box ? {title: title(box), share: box.share} : null,
-          toLearn: familyPlan(content, states, card).length, sounds: sf};
-}
-
-// what is built from it as a sound or meaning part: the tree's first column
-// to the right, what the learner knows first (CO-060, as a part's members),
-// then content.usesOf's order (sound uses first, then path order)
-function usedInOf(content, states, form) {
-  const all = [...new Set(content.usesOf(form).map(u => u.char))];
-  const known = ch => isKnown(states[content.mainReading(ch)]);
-  const chars = [...all.filter(known), ...all.filter(ch => !known(ch))];
-  return {total: chars.length,
-          tiles: chars.slice(0, MEMBERS_SHOWN).map(ch => ({ch, over: charJp(content, ch)})),
-          more: Math.max(0, chars.length - MEMBERS_SHOWN)};
+  // the family's size, its head too where it is one (土 7; Q2)
+  return {key, head: card.head, members: card.members.length,
+          top: box ? {title: boxShort(box), share: box.share} : null,
+          toLearn: familyPlan(content, states, card).length};
 }
 
 const count = (n, one, many = `${one}s`) => `${n.toLocaleString('en-GB')} ${n === 1 ? one : many}`;
 
 // the line each section shows closed (P2): 言 + 賣 · sounds like 賣 maai6;
-// 者 family · –yu 47%; 4 words · 青春 youth; 清 · 請 · 晴; 3 lines · 《飲茶》;
-// in 37 characters; 15 for its sound · 2 for its meaning. A section with
-// nothing to show has none.
+// 者 family · –yu 47% · 14 characters; 4 words · 青春 youth; 3 lines ·
+// 《飲茶》; 15 for its sound · 2 for its meaning. A section with nothing to
+// show has none.
 export function summariesOf(m) {
   const out = {};
   if (m.built && m.built.length) {
@@ -239,17 +239,16 @@ export function summariesOf(m) {
   }
   if (m.familyCard) {
     const f = m.familyCard;
-    out.family = `${shownForm(f.head)} family` + (f.top ? ` · ${f.top.title} ${pct(f.top.share)}` : '');
+    out.family = `${shownForm(f.head)} family` + (f.top ? ` · ${f.top.title} ${pct(f.top.share)}` : '')
+      + ` · ${count(f.members, 'character')}`;
   }
   if (m.words && m.words.length) {
     const w = m.words[0];
     out.words = `${count(m.words.length, 'word')} · ${w.form}` + (w.gloss ? ` ${shortGloss(w.gloss)}` : '');
   }
-  if (m.looksLike && m.looksLike.length) out.looksLike = m.looksLike.map(x => x.ch).join(' · ');
   if (m.inTexts && m.inTexts.length) {
     out.inTexts = `${count(m.inTexts.length, 'line')} · 《${m.inTexts[0].title}》`;
   }
-  if (m.usedIn && m.usedIn.total) out.usedIn = `in ${count(m.usedIn.total, 'character')}`;
   if (m.partUse) {
     out.asPart = ROLE_SAID.filter(([k]) => m.partUse[k])
       .map(([k, w]) => `${m.partUse[k].toLocaleString('en-GB')} ${w}`).join(' · ');
@@ -276,11 +275,10 @@ export function refModel(content, states, form, texts = [], opts = {}) {
     const words = cardWords(content, main);
     return withSummaries({kind: 'char', glyph: form, main, readings, gloss: m.gloss,
             built: builtFrom(content, form),
-            looksLike: familyOf(content, form).map(ch => ({ch, over: charJp(content, ch)})),
             words, inTexts, simplified, also: alsoOf(content, form), asPart: partRoles(content, states, form, {itemsOnly: true}),
             family: familyOfPart(content, form), partUse: partUse(content, form),
             // How 土 is used, and where its sound branches (patch plan 7.37)
-            jobs: jobsModel(content, form), branch: treeModel(content, form),
+            jobs: jobsModel(content, form), branch: treeModel(content, form), pages: pagesOf(content, form),
             // the tag at the top: the reading the card was opened for (a
             // search row's, patch plan 7A 6b: 好 hou3 from its own row says
             // "not met yet", not hou2's "known"), else the main one; named
@@ -293,16 +291,15 @@ export function refModel(content, states, form, texts = [], opts = {}) {
             canMarkKnown: canMarkKnown(content, states, main),
             canForget: canForget(content, states, main),
             rank: content.rank(main), partRank: partRankOf(content, form), soundLine: soundLineOf(content, form),
-            familyCard: familyCardOf(content, states, form), usedIn: usedInOf(content, states, form)});
+            familyCard: familyCardOf(content, states, form)});
   }
   const roles = partRoles(content, states, form);
   if (roles.length) {
     // its place on the path: its first study item's (a part may be both)
     const ranks = roles.filter(r => content.has(r.id)).map(r => content.rank(r.id));
     return withSummaries({kind: 'part', glyph: form, roles, partUse: partUse(content, form),
-                          jobs: jobsModel(content, form), branch: treeModel(content, form),
-                          rank: ranks.length ? Math.min(...ranks) : null,
-                          usedIn: usedInOf(content, states, form)});
+                          jobs: jobsModel(content, form), branch: treeModel(content, form), pages: pagesOf(content, form),
+                          rank: ranks.length ? Math.min(...ranks) : null});
   }
   if (canKnowOff(content, form)) {
     const o = content.offchar(form);
@@ -320,11 +317,9 @@ export function refModel(content, states, form, texts = [], opts = {}) {
             glossWeak: charGlossWeak(c), readingsWeak: offReadingsWeak(o),
             words, wordForms: o.words, built: builtFrom(content, form), inTexts, simplified,
             also: alsoOf(content, form),
-            status: known ? 'you know this' : 'not on the path', known,
-            usedIn: usedInOf(content, states, form)});
+            status: known ? 'you know this' : 'not on the path', known});
   }
-  return withSummaries({kind: 'other', glyph: form, built: builtFrom(content, form), inTexts,
-                        usedIn: usedInOf(content, states, form)});
+  return withSummaries({kind: 'other', glyph: form, built: builtFrom(content, form), inTexts});
 }
 
 // The other forms a learner may meet the character in (brief 7.23: 說, 説),
@@ -346,8 +341,8 @@ export function shownOfRef(m) {
 }
 
 // Every glyph on the card that opens its own card is a tile by its kind
-// (views/glyph.js; 7.5 retired the dotted box): Built from, Looks like and a
-// part's characters (Mark, step 6 iPhone check: Looks like was tappable
+// (views/glyph.js; 7.5 retired the dotted box): Built from and a part's
+// characters (Mark, step 6 iPhone check: Looks like was tappable
 // with nothing to say so). cb.kindOf is glyph.js glyphKind over the content.
 const kindOf = (cb, ch) => (cb.kindOf ? cb.kindOf(ch) : null);
 // its state in its border (after 7.7, Mark: every tile but a question's);
@@ -420,34 +415,18 @@ function soundLineP(m) {
                                        han(s.form), s.jp ? [' ', jpSpan(s.jp)] : '']));
 }
 
-// Family (brief 7.26 P2): how its family is read, the family page's boxes;
-// Study and the family's page, never mid-session (decided 2: cb.onStudy and
-// cb.onFamily are null then)
+// Family (brief 7.38 D2, Q4): the closed line says it (青 family · –ing 81%
+// · 16 characters); open, the way to its page and Study this family. Study
+// is never mid-session (7.26 decided 2: cb.onStudy is null then); the page
+// opens over a session as a tree does (Q10).
 function familyBody(m, cb) {
   const f = m.familyCard;
-  const tileOf = x => glyphTile(x.form, kindOf(cb, x.form), {
-    size: 'sm', over: x.jp || '', progress: progressOf(cb, x.form),
-    dashed: !!x.second, cls: x.second ? 'fam-second' : '',
-    label: `${x.form}${x.jp ? ` ${x.jp}` : ''}${x.second ? ', a second reading' : ''}: open its card`,
-    onTap: () => cb.onRef(x.form)});
-  return [f.sounds && f.sounds.n ? soundsSection({sounds: f.sounds, head: f.head}, tileOf)
-            : h('p', {class: 'note'}, `No other character has ${shownForm(f.head)} as its sound part.`),
-    cb.onStudy && h('div', {class: 'btns'}, f.toLearn
-      ? h('button', {type: 'button', class: 'btn', onclick: () => cb.onStudy(f.key)},
-          'Study this family', h('span', {class: 'study-n'}, ` · ${f.toLearn} to learn`))
-      : h('p', {class: 'note'}, 'Nothing left to learn in this family: everything here is met.')),
-    cb.onFamily && h('p', {class: 'family-link'},
+  return [cb.onFamily && h('p', {class: 'family-link'},
       h('button', {type: 'button', class: 'link', onclick: () => cb.onFamily(f.key)},
-        `${shownForm(f.head)} family: how it’s read ›`))];
-}
-
-// Used in (P2.6): what is built from it, as tiles; the rest are in its tree
-function usedInBody(m, cb) {
-  const u = m.usedIn;
-  return [h('p', {class: 'ref-row'}, ...u.tiles.map(x => rubyBtn(x, cb)),
-    u.more ? (cb.onTree
-      ? h('button', {type: 'button', class: 'link sm', onclick: () => cb.onTree(m.glyph)}, ` and ${u.more} more ›`)
-      : h('span', {class: 'sm'}, ` and ${u.more} more`)) : '')];
+        `${shownForm(f.head)} family: how it’s read ›`)),
+    cb.onStudy && (f.toLearn
+      ? h('div', {class: 'btns'}, studyButton(f.toLearn, () => cb.onStudy(f.key)))
+      : h('p', {class: 'note'}, NOTHING_LEFT))];
 }
 
 // each word with its speaker at the end (brief 7.31 A5), when there is one
@@ -457,8 +436,10 @@ function wordsBody(m, cb) {
 }
 
 // A part role: its reading or meaning, what it stands for, and Test me (not
-// during a session: cb.onTestMe is null then). Its characters are Used in's.
-function roleBody(r, cb) {
+// during a session: cb.onTestMe is null then). How a sound part looks in
+// its characters is its family page's (brief 7.38 Q5): asPartBody links
+// there, where there is a page to go to; a meaning part's shapes stay (手 扌).
+function roleBody(r, cb, family = null) {
   return [h('span', {class: 'label'}, r.kind === 'sound' ? `Sound part · ${r.status}` : `Meaning part · ${r.status}`),
     r.wording && r.wording.lead && h('p', {class: 'note part-lead'}, r.wording.lead),
     h('p', {class: `answer-line${r.wording && r.wording.quiet ? ' muted' : ''}${!r.reading && r.glossWeak ? ' weak' : ''}`},
@@ -467,8 +448,11 @@ function roleBody(r, cb) {
     r.modal && renderRangeNote(r.modal),
     r.wording && r.wording.note && h('p', {class: 'note'}, r.wording.note),
     r.standsFor && h('p', {class: 'note'}, ...standsLine(r.standsFor, r.written)),
+    ...(r.own || []).map(o => h('p', {class: 'note'}, 'In ',
+      ...o.chars.flatMap((c, i) => [i ? ' ' : '', han(c)]),
+      ` it means ${o.label}${r.gloss ? `, not ${r.gloss.split(';')[0].trim()}` : ''}.`)),
     ...renderLinks(r.links || [], {onFamily: cb.onFamily, onRef: cb.onRef}),
-    renderShapes(r.shapes, {onTap: c => cb.onRef(c), kindOf: cb.kindOf}),
+    !(r.kind === 'sound' && family && cb.onFamily) && renderShapes(r.shapes, {onTap: c => cb.onRef(c), kindOf: cb.kindOf, heading: 'h3'}),
     r.canTest && cb.onTestMe && h('div', {class: 'btns'},
       h('button', {type: 'button', class: 'btn', onclick: () => cb.onTestMe(r.id)}, 'Test me')),
     r.canTest && cb.onTestMe && h('p', {class: 'note'}, r.kind === 'sound'
@@ -476,28 +460,46 @@ function roleBody(r, cb) {
       : 'One question: tell a character apart by this part.')];
 }
 
-// As a part (P2.7): the 7.25 role bar, How 土 is used and where its sound
-// branches (patch plan 7.37), then each role it is a study item in (the key
-// to its border is in the glance band)
+// As a part, the home of a part's uses (brief 7.38 Q5): the role bar (a
+// part with one job says so in its words), then each role it is a study
+// item in, with Test me (P3: first), then How 土 is used folded (patch plan
+// 7.37), then how its shapes connect: a link to its family's page, which
+// draws it, where there is one, else drawn here. The key to its border is
+// in the glance band.
 function asPartBody(m, roles, cb) {
   const go = {onFamily: cb.onFamily, onRef: cb.onRef, kindOf: cb.kindOf};
-  const tree = renderTree(m.branch, go);
-  const inSound = soundHolds(m.jobs);
-  return [m.partUse && roleBar(m.glyph, m.partUse),
-    renderJobs(m.jobs, {onTap: c => cb.onRef(c), kindOf: cb.kindOf, soundBody: inSound ? tree : null}),
-    !inSound && tree,
-    ...roles.map(r => h('div', {class: 'ref-role'}, ...roleBody(r, cb)))];
+  const pages = cb.onFamily ? m.pages || {} : {};
+  const sound = roles.find(r => r.kind === 'sound');
+  const of = han(shownForm(m.glyph));
+  // the family page's blocks, one line each page (Q5): "How 口 looks in its
+  // characters, and how its shapes connect ›"
+  const looks = !!(sound && sound.shapes && pages.self);
+  const connects = !!(m.branch && pages.tree);
+  const link = (key, ...said) => h('p', {class: 'family-link'},
+    h('button', {type: 'button', class: 'link', onclick: () => cb.onFamily(key)}, ...said));
+  const links = looks && connects && pages.self === pages.tree
+    ? [link(pages.self, 'How ', of, ' looks in its characters, and how its shapes connect ›')]
+    : [looks && link(pages.self, 'How ', of, ' looks in its characters ›'),
+       connects && link(pages.tree, 'How ', han(shownForm(m.branch.of)), '’s shapes connect ›')];
+  const jobs = m.jobs && !m.jobs.one && fold({key: 'jobs', label: ['How ', han(m.jobs.of), ' is used'], level: 'sub',
+    body: [renderJobs(m.jobs, {onTap: c => cb.onRef(c), kindOf: cb.kindOf, heading: false})]});
+  return [m.partUse && roleBar(m.glyph, m.partUse, {said: m.jobs && m.jobs.one}),
+    ...roles.map(r => h('div', {class: 'ref-role'}, ...roleBody(r, cb, pages.self))),
+    jobs,
+    ...links,
+    !connects && renderTree(m.branch, go)];
 }
 
 // ---- the sections (brief 7.26 P2-P3), in this order. Each is drawn whole
 // and folded with `hidden`, so a tap opens it without drawing the card again;
 // its header says in one line what is inside.
-export const SECTIONS = ['built', 'family', 'words', 'looksLike', 'inTexts', 'usedIn', 'asPart'];
-export const SECTION_LABEL = {built: 'Built from', family: 'Family', words: 'Words', looksLike: 'Looks like',
-                              inTexts: 'In your texts', usedIn: 'Used in', asPart: 'As a part'};
+export const SECTIONS = ['built', 'family', 'words', 'inTexts', 'asPart'];
+export const SECTION_LABEL = {built: 'Built from', family: 'Family', words: 'Words',
+                              inTexts: 'In your texts', asPart: 'As a part'};
 // P3: open by where the card was opened from, until the learner opens or
-// closes a section themselves (cb.opened, readpath.settings.card)
-export const OPEN_FROM = {reader: ['words', 'inTexts'], session: ['built', 'looksLike'], other: []};
+// closes a section themselves (cb.opened, readpath.settings.card); a family
+// page's "How 尚 is used ›" opens its head's card at As a part (brief 7.38 Q5)
+export const OPEN_FROM = {reader: ['words', 'inTexts'], session: ['built'], family: ['asPart'], other: []};
 export function isOpen(key, {from = 'other', opened = {}} = {}) {
   return key in opened ? !!opened[key] : (OPEN_FROM[from] || []).includes(key);
 }
@@ -532,35 +534,22 @@ function summaryNodes(key, m) {
     }
     case 'family': {
       const f = m.familyCard;
-      return [han(f.head), ' family', f.top ? [' · ', jpSpan(f.top.title), ` ${pct(f.top.share)}`] : ''];
+      return [han(f.head), ' family', f.top ? [' · ', jpSpan(f.top.title), ` ${pct(f.top.share)}`] : '',
+              ` · ${count(f.members, 'character')}`];
     }
     case 'words': {
       const w = m.words[0];
       return [`${m.words.length} ${m.words.length === 1 ? 'word' : 'words'} · `, han(w.form),
               w.gloss ? ` ${shortGloss(w.gloss)}` : ''];
     }
-    case 'looksLike': return han(s.looksLike);
     case 'inTexts': return [`${m.inTexts.length} ${m.inTexts.length === 1 ? 'line' : 'lines'} · `,
                             han(`《${m.inTexts[0].title}》`)];
     default: return s[key];
   }
 }
 
-function fold(key, m, cb, body) {
-  const open = isOpen(key, cb);
-  const inner = h('div', {class: 'fold-body', id: `fold-${key}`, hidden: !open}, ...body);
-  const head = h('button', {type: 'button', class: 'fold-head', 'aria-expanded': String(open),
-                            'aria-controls': `fold-${key}`, onclick: () => {
-    const now = head.getAttribute('aria-expanded') !== 'true';
-    head.setAttribute('aria-expanded', String(now));
-    inner.hidden = !now;
-    if (cb.onToggle) cb.onToggle(key, now);
-  }},
-    h('span', {class: 'label'}, SECTION_LABEL[key]),
-    h('span', {class: 'fold-sum'}, summaryNodes(key, m)),
-    h('span', {class: 'fold-chev', 'aria-hidden': 'true'}, '›'));
-  return h('section', {class: 'block fold', 'data-section': key}, head, inner);
-}
+const section = (key, m, cb, body) => fold({key, label: SECTION_LABEL[key], summary: summaryNodes(key, m),
+                                            open: isOpen(key, cb), body, onToggle: cb.onToggle});
 
 // the sections a model has, each with its body; one with nothing to show is
 // left out
@@ -570,21 +559,20 @@ function sectionsOf(m, cb) {
   if (m.built && m.built.length) out.push(['built', builtBody(m, cb)]);
   if (m.familyCard) out.push(['family', familyBody(m, cb)]);
   if (m.words && m.words.length) out.push(['words', wordsBody(m, cb)]);
-  if (m.looksLike && m.looksLike.length) out.push(['looksLike', [h('p', {class: 'ref-row'}, ...m.looksLike.map(x => rubyBtn(x, cb)))]]);
   if (m.inTexts && m.inTexts.length) out.push(['inTexts', textLines(m, cb)]);
-  if (m.usedIn && m.usedIn.total) out.push(['usedIn', usedInBody(m, cb)]);
   const roles = m.kind === 'part' ? m.roles : m.asPart || [];
   if (has('asPart') || roles.length) out.push(['asPart', asPartBody(m, roles, cb)]);
   out.sort((a, b) => SECTIONS.indexOf(a[0]) - SECTIONS.indexOf(b[0]));
-  return out.map(([key, body]) => fold(key, m, cb, body));
+  return out.map(([key, body]) => section(key, m, cb, body));
 }
 
-// "#650 on the path · Trace its steps ›", or "#378 · part #2,832 · Trace
-// its steps ›" (brief 7.27, decided 2-3 and P2): its tree, what it is built
-// from and what is built from it, a tap from every card, mid-session too;
-// the link alone where it has no rank
+// "#650 on the path · Trace its steps ›", "#1,046 on the path · part #325 ·
+// Trace its steps ›" (brief 7.27, decided 2-3 and P2; the long form on every
+// card since 7.38 Q8): its tree, what it is built from and what is built
+// from it, a tap from every card, mid-session too; the link alone where it
+// has no rank
 function rankLine(m, cb) {
-  const said = rankSaid(m, {short: true});
+  const said = rankSaid(m);
   const trace = cb.onTree && h('button', {type: 'button', class: 'link ref-trace',
                                           onclick: () => cb.onTree(m.glyph)}, 'Trace its steps ›');
   if (!said && !trace) return null;

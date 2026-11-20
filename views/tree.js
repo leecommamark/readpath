@@ -8,13 +8,15 @@
 // a box of its own that scrolls sideways and opens centred on the
 // character (core/tree.js lays it out); the lines say the relationship. A
 // tap on any tile re-centres the tree there, and the breadcrumb goes back.
-// Under it, the key and Learn this family next (the family study session).
+// Under it, the key. Study this family (the family study session) is in the header (7.38 Q1).
 
 import {h, han, put, clear, jpSpan} from './dom.js';
 import {glyphTile, progressOf, stateItemOf} from './glyph.js';
 import {treeLayout, soundLine, seenAs, shownParts} from '../core/tree.js';
 import {shapeHead, shownForm} from '../core/shapehead.js';
-import {familyKeyOf} from '../core/family.js';
+import {familyKeyOf, familyPlan, familiesOf} from '../core/family.js';
+import {studyButton, NOTHING_LEFT} from './families.js';
+import {fold} from './fold.js';
 import {stateOf} from './families.js';
 import {headSense, shortGloss} from '../core/gloss.js';
 import {formGloss, formJp, DICTIONARY_SENSE} from '../core/provenance.js';
@@ -83,6 +85,8 @@ export function treeModel(content, states, form, {trail = [form], expanded = {}}
     written: parts.length > 1 ? {ordered: content.partsOrdered(form), parts} : null,
     soundLine: line.length >= 3 ? line.map(f => ({form: f, jp: jpOf(content, f)})) : null,
     familyKey, familyHead: familyKey && familyKey.slice(2),
+    // Study this family's "N to learn" (brief 7.38 D6, Q1)
+    toLearn: familyKey ? familyPlan(content, states, familiesOf(content).byKey.get(familyKey)).length : 0,
     layout, tiles, seen,
     // a shape head says what it is (7.34): its shape, read as its members are
     head_: shapeHead(form) && {shape: shapeHead(form).shape, jp: jpOf(content, form)},
@@ -90,7 +94,7 @@ export function treeModel(content, states, form, {trail = [form], expanded = {}}
 }
 
 // a row of "Where you see 开": what the characters show it for (7.34)
-export const seenSaid = (form, g) => (g.head ? 'the sound shape in' : g.variant ? `written ${form} in` : `worn down to ${form} in`);
+export const seenSaid = (form, g) => (g.head ? 'the sound shape in' : g.variant ? `written ${form} in` : `morphed into ${form} in`);
 export const SHAPE_SAID = 'only as a shape in';
 
 // the line under the header: "#378 on the path · part #2,832 · learning",
@@ -101,18 +105,20 @@ export const placeSaid = m => (m.rank == null ? 'Not on the path'
 export const KEY_LINES = [
   {cls: 'sound', text: 'gives the sound'},
   {cls: 'meaning', text: 'gives the meaning'},
-  {cls: 'shape', text: 'only the shape'},
+  {cls: 'shape', text: 'shape only'},
 ];
 // a worn-down part's line (7.34), keyed only where the tree has one
 export const KEY_WORN = [
-  {cls: 'sound worn', role: 'sound', variant: false, text: 'gives the sound, worn down'},
-  {cls: 'meaning worn', role: 'meaning', variant: false, text: 'gives the meaning, worn down'},
+  {cls: 'sound worn', role: 'sound', variant: false, text: 'gives the sound, morphed'},
+  {cls: 'meaning worn', role: 'meaning', variant: false, text: 'gives the meaning, morphed'},
   {cls: 'sound worn', role: 'sound', variant: true, text: 'gives the sound, written another way'},
 ];
 export const KEY_BORDERS = [
   {cls: 'square', text: 'sound part'},
   {cls: 'circle', text: 'meaning part'},
-  {cls: 'solid', text: 'neither'},
+  // a solid square is any glyph that is no sound or meaning part, a plain
+  // character too (好), so not "shape only" (brief 7.38 Q6)
+  {cls: 'solid', text: 'not a sound or meaning part'},
 ];
 
 // the tree's geometry, in px: a column's width and a row's height
@@ -132,10 +138,15 @@ export function renderTree(el, m, cb) {
         ? han(f, {class: 'tree-crumb here', 'aria-current': 'page'})
         : h('button', {type: 'button', class: 'link tree-crumb', lang: 'zh-Hant-HK',
                        onclick: () => cb.onCrumb(i)}, f)]));
-  // its family's page, how it's read (brief 7.26 P6); not during a session
+  // its family's page, how it's read (brief 7.26 P6; over a session too
+  // since 7.38 Q10), and under it Study this family (D6, Q1: one name, the
+  // card's; "this family" is the line's), never during a session
   const familyLink = m.familyKey && cb.onFamily && h('p', {class: 'family-link'},
     h('button', {type: 'button', class: 'link', onclick: () => cb.onFamily(m.familyKey)},
       han(m.familyHead), ' family: how it’s read ›'));
+  const study = m.familyKey && cb.onStudy && (m.toLearn
+    ? h('div', {class: 'btns'}, studyButton(m.toLearn, () => cb.onStudy(m.familyKey)))
+    : h('p', {class: 'note'}, NOTHING_LEFT));
   const head = h('section', {class: 'block first'}, h('div', {class: 'tree-head'},
     glyphTile(m.form, kindOf(m.form), {size: 'lg', over: m.head.over, progress: m.head.progress,
                                        overWeak: m.head.jpWeak,
@@ -155,7 +166,8 @@ export function renderTree(el, m, cb) {
       m.soundLine && h('p', {class: 'note tree-soundline'}, 'Sound line: ',
         ...m.soundLine.flatMap((s, i) => [i ? h('span', {class: 'tree-arrow', 'aria-hidden': 'true'}, ' ← ') : '',
                                            han(s.form), s.jp ? [' ', jpSpan(s.jp)] : ''])),
-      familyLink)));
+      familyLink,
+      study)));
 
   // ---- the tree: columns of tiles, the lines in one SVG behind them
   const {columns, edges, more} = m.layout;
@@ -225,12 +237,15 @@ export function renderTree(el, m, cb) {
     return glyphTile(f, kindOf(f), {size: 'sm', over: x.over || '', overWeak: x.jpWeak,
                                     label: `${f}${x.jp ? ` ${x.jp}` : ''}: its tree`, onTap: g => cb.onTree(g)});
   };
-  const seen = m.seen && h('section', {class: 'block tree-seen'},
-    h('h2', {class: 'label'}, 'Where you see ', han(m.form)),
-    ...m.seen.groups.map(g => h('p', {class: 'seen-row'}, seenTile(g.part),
+  // folded as the card's sections are (brief 7.38 P10), its parts in the
+  // closed line
+  const seen = m.seen && fold({key: 'tree-seen', cls: 'tree-seen', label: ['Where you see ', han(m.form)],
+    summary: m.seen.groups.map(g => g.part).concat(m.seen.shape.length ? m.seen.shape : [])
+      .flatMap((f, i) => [i ? ' ' : '', han(f)]),
+    body: [...m.seen.groups.map(g => h('p', {class: 'seen-row'}, seenTile(g.part),
       h('span', {class: 'note'}, seenSaid(m.form, g)), ...g.chars.map(seenTile))),
     m.seen.shape.length ? h('p', {class: 'seen-row'}, h('span', {class: 'note'}, SHAPE_SAID),
-      ...m.seen.shape.map(seenTile)) : null);
+      ...m.seen.shape.map(seenTile)) : null]});
   const key = h('div', {class: 'note tree-key'},
     ...KEY_LINES.map(k => h('span', {class: 'tree-key-item'},
       h('span', {class: `tree-key-line te-${k.cls}`, 'aria-hidden': 'true'}), k.text)),
@@ -238,10 +253,6 @@ export function renderTree(el, m, cb) {
       h('span', {class: `tree-key-line te-${k.cls}`, 'aria-hidden': 'true'}), k.text)),
     ...KEY_BORDERS.map(k => h('span', {class: 'tree-key-item'},
       h('span', {class: `gk-${k.cls}`, 'aria-hidden': 'true'}), k.text)));
-  const study = m.familyKey && cb.onStudy && h('div', {class: 'btns'},
-    h('button', {type: 'button', class: 'btn', onclick: () => cb.onStudy(m.familyKey)},
-      m.familyHead === m.form ? 'Learn this family next' : ['Learn ', han(m.familyHead), '’s family next']));
-
   put(clear(el),
     h('div', {class: 'top'},
       h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Back'),
@@ -251,7 +262,6 @@ export function renderTree(el, m, cb) {
     h('figure', {class: 'tree-figure', 'aria-label':
       `${shownForm(m.form)}: its parts on the left, the characters built from it on the right`}, scroller),
     key,
-    seen,
-    study);
+    seen);
   requestAnimationFrame(draw);
 }

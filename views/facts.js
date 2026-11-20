@@ -86,7 +86,9 @@ export function builtFrom(content, ch) {
   return parts.map(({part, role, reading, cousins, written, variant, label, where}) => {
     let note = null;
     if (role === 'sound') note = reading || content.partReading(part);
-    if (role === 'meaning') note = content.partGloss(part);
+    // what it means in this character, where Mark gave it (月 moon in 期,
+    // not flesh; 2026-11-20), else the part's gloss
+    if (role === 'meaning') note = label || content.partGloss(part);
     const like = role === 'sound' && cousins
       ? cousins.map(c => ({ch: c, over: charJp(content, c)})) : [];
     // how well it gives the sound: by the family's range (patch plan 7.32
@@ -123,7 +125,7 @@ function branchSaid(content, ch, part, written, variant, at) {
   if (!of && !where) return null;
   const name = of && shapeHead(part).name;
   const read = of ? `, read ${name}` : '';
-  if (where) return {said: [['han', ch], `’s ${where} is `, ['han', of || part], ` worn down${read}.`]};
+  if (where) return {said: [['han', ch], `’s ${where} is `, ['han', of || part], ` morphed${read}.`]};
   const keeper = content.shownOf(part).find(g => g.kind === 'variant' && g.members.includes(g.shape));
   if (keeper && keeper.shape === ch) {
     return {said: [['han', ch], ' is ', ['han', of], ` written another way; it kept the reading ${name}.`]};
@@ -148,7 +150,7 @@ const wornParts = b => (b.worn.said ? b.worn.said : ['The ', ...(b.worn.head
      ...(shapeHead(b.part).shape.length === 1 ? [', not the character ', ['han', shapeHead(b.part).shape]] : []), '.']
   : b.worn.variant
   ? [['han', b.worn.shown], ' you see is ', ['han', b.part], ' written another way.']
-  : [['han', b.worn.shown], ' you see is a worn-down ', ['han', b.part], b.worn.close ? '; close in sound too.' : '.'])]);
+  : [['han', b.worn.shown], ' you see is a morphed ', ['han', b.part], b.worn.close ? '; close in sound too.' : '.'])]);
 export const wornText = b => wornParts(b).map(x => (!Array.isArray(x) ? x : x[0] === 'jp' ? x[1]
   : shapeHead(x[1]) ? shapeHead(x[1]).shape : x[1])).join('');
 export function wornLines(built) {
@@ -166,8 +168,10 @@ export const RANGE_LABEL = {outside: 'sound: not in its family’s range',
                             // 7.34 phase 9: a sound part whose sound Cantonese no
                             // longer carries (豎 豆, 海 每, 找 戈)
                             historical: 'sound: historical'};
+// a part that gives neither: "shape only", the one word for it (brief 7.38
+// D7; the role's key, "form", until then)
 export function roleText(b) {
-  return b.role === 'sound' ? RANGE_LABEL[b.fit] || 'sound' : b.role;
+  return b.role === 'sound' ? RANGE_LABEL[b.fit] || 'sound' : b.role === 'form' ? 'shape only' : b.role;
 }
 
 // A meaning part's meaning as its reliability allows (CO-059, songpath's

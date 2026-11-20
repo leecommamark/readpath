@@ -226,9 +226,12 @@ export function createLayer({overlays, history, loc, draw}) {
 // A tree opened during a session (brief 7.18 Decided 3) is an entry in the
 // history marked `inRun`, so a back gesture retraces the trees opened from
 // the session and then lands on the session as it was. A tree entry from
-// before the session (Learn this family next was tapped on a tree) isn't
+// before the session (Study this family was tapped on a tree) isn’t
 // one: back past the session's own trees goes to the session, never to it.
 export const runTree = state => (state && state.tree != null && state.inRun ? state.tree : null);
+// A family's page opened over a session (brief 7.38 Q10: a sound part's
+// Meet, a card, a tree) is one too: read-only, and back lands on the session.
+export const runFamily = state => (state && state.family != null && state.inRun ? state.family : null);
 
 // A card opened from a card stacks, and "Back to 清" returns to it.
 // open(form) pushes it unless it's already on top; back() pops one.

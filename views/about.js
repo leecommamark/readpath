@@ -3,7 +3,8 @@
 // The name, the versions, what is (never) sent, the share-alike statement,
 // and every credit in readpath/ATTRIBUTIONS.md, as export_about.py wrote it
 // into content/about.json, and the tiles' border key (brief 7.28 P23).
-// Reached from its row at the foot of Today.
+// Reached from its row in Settings (brief 7.38 P6); the build id is
+// Settings' last line, not here (Q7).
 
 import {h, clear, put} from './dom.js';
 import {NAME} from './welcome.js';
@@ -17,7 +18,7 @@ function link(href, text) {
   return h('a', {href, ...(ext ? {target: '_blank', rel: 'noopener'} : {})}, text);
 }
 
-// renderAbout(el, {about, build, version}, {onBack})   about: null while
+// renderAbout(el, {about}, {onBack})   about: null while
 // it loads, or {error}
 export function renderAbout(el, m, cb) {
   const a = m.about;
@@ -36,8 +37,7 @@ export function renderAbout(el, m, cb) {
       h('span', {})),
     h('h1', {id: 'about-h'}, NAME),
     h('section', {class: 'block first'},
-      h('p', {class: 'lead-note'}, 'Learn to read the Cantonese you already speak.'),
-      h('p', {class: 'sm'}, `App ${m.build} · Content ${m.version}`)),
+      h('p', {class: 'lead-note'}, 'Learn to read the Cantonese you already speak.')),
     // the border key, as a Meet shows it once (brief 7.28 P23)
     h('section', {class: 'block'},
       h('h2', {}, 'The tiles'),

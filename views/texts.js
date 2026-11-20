@@ -158,10 +158,8 @@ export function renderTexts(el, m, ui, cb) {
   put(clear(el),
     h('div', {class: 'top'}, h('span', {}), searchButton(cb.onSearch) || h('span', {})),
     h('h1', {id: 'texts-h'}, 'Texts'),
-    bundle || '', batch || '', list || '', add, picker,
-    // Send feedback at the foot (patch plan 7B, Phase 3)
-    cb.onFeedback && h('section', {class: 'block quiet'},
-      h('button', {type: 'button', class: 'link', onclick: cb.onFeedback}, 'Send feedback')));
+    // Send feedback is Settings' (brief 7.38 P6)
+    bundle || '', batch || '', list || '', add, picker);
 }
 
 function textRow(r, ui, cb) {

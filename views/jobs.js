@@ -1,5 +1,8 @@
-// jobs.js — "How 土 is used" and where a sound branches (patch plan 7.37):
-// on the family page and the card's As a part, under the role bar.
+// jobs.js — "How 土 is used" and where a sound branches (patch plan 7.37).
+// How 土 is used is the card's As a part's, folded under the role bar (brief
+// 7.38 Q5); the family page says a one-job part's line, else links to it.
+// How its shapes connect is the family page's, and a card's where there is
+// no family page to link to.
 //
 // The block (Decided 10-14, 24-28, 31): one branch per job the part has, in
 // the role bar's order -- For its sound (N) · For its meaning (N) · In
@@ -8,11 +11,13 @@
 // by where the part is in them ("on the left": 地 埋 場 ...), the row with
 // the most first, a use nothing places next with no mark (Decided 7), then a
 // row for each part a use comes through ("through 䩻": 霸), unplaced and
-// outside the patterns; path order, the first ROW_SHOWN and "+ N more" that
-// opens the row in place.
+// outside the patterns, and last a use nothing places, "elsewhere in the
+// character" with its own mark (brief 7.38 P13; Decided 7 had no mark and no
+// words); path order, the first ROW_SHOWN and "+ N more" that opens the row
+// in place (views/fold.js).
 //   * a sound or meaning branch of RARE_SHARE of the uses or less, of
-//     RARE_MIN or more, is "Rarely for its sound (3)": "Only 3 of the 34
-//     characters with 食 use it for its sound." (Decided 27)
+//     RARE_MIN or more, is "Rarely for its sound (3)" (Decided 27); its
+//     "Only 3 of the 34 ..." went in 7.38 (P3): the role bar says it
 //   * the no-sound-part branch: "Here 土 may carry meaning or be part of a
 //     picture." (Decided 24)
 //   * a sound or meaning branch of 5+ direct uses says the pattern its places
@@ -24,8 +29,6 @@
 //     or below, and its sound on the right."
 //   * a part with one job, one line: "尚 is always used for its sound (29
 //     characters)." (Decided 28)
-//   * on the family page the sound branch holds How characters with 土 are
-//     read in place of tiles (`soundBody`; Decided 14, 31).
 //
 // How 口's shapes connect across its sound family (Decided 29, 33, 34;
 // sound_part `from`): a small tree in the For its sound branch, of the
@@ -42,8 +45,8 @@
 //
 // jobsModel(content, form, {tiles}) -> {of, differ, branches} | {of, one, job} | null
 // treeModel(content, form) -> {here, of, up, root, folds, branches} | null
-// renderJobs(model, {onTap, kindOf, soundBody})
-// renderTree(model, cb)   cb: {onFamily, onRef, kindOf}
+// renderJobs(model, {onTap, kindOf, heading})
+// renderTree(model, cb, {heading})   cb: {onFamily, onRef, kindOf}
 
 import {h, han, jpSpan} from './dom.js';
 import {glyphTile} from './glyph.js';
@@ -51,12 +54,15 @@ import {shownForm} from '../core/shapehead.js';
 import {partJobs, splitSyl} from '../core/soundfamily.js';
 import {familiesOf} from '../core/family.js';
 import {charJp} from './facts.js';
-import {ROW_SHOWN} from './shapes.js';
+import {ROW_SHOWN, moreRow} from './fold.js';
 
 export const PLACE_SAID = {left: 'on the left', right: 'on the right', top: 'on top', bottom: 'below',
                            middle: 'in the middle', outside: 'around the outside', inside: 'inside',
                            across: 'across it'};
 const PLACES = Object.keys(PLACE_SAID);
+// a use `part_role` places nowhere yet (review/part_where.tsv), last in its
+// branch (brief 7.38 P13)
+export const ELSEWHERE = 'elsewhere in the character';
 const JOBS = [['sound', 'For its sound'], ['meaning', 'For its meaning'],
               ['nosound', 'In characters with no sound part'], ['form', 'For its shape only']];
 // a pattern: a branch of USUAL_MIN uses or more, its fewest places (one or
@@ -106,7 +112,6 @@ export function jobsModel(content, form, {tiles = true} = {}) {
     const xs = jobs[job];
     const rare = (job === 'sound' || job === 'meaning') && total >= RARE_MIN && xs.length <= RARE_SHARE * total;
     const lines = [];
-    if (rare) lines.push(`Only ${xs.length} of the ${total.toLocaleString('en-GB')} characters with ${of} use it for its ${job}.`);
     if (job === 'nosound') lines.push(`Here ${of} may carry meaning or be part of a picture.`);
     let line = null;
     if (pat[job]) {
@@ -120,15 +125,16 @@ export function jobsModel(content, form, {tiles = true} = {}) {
       if (!by.has(k)) by.set(k, []);
       by.get(k).push(x.char);
     }
-    const ordered = [...rows].sort((a, b) => (a[0] === '') - (b[0] === '') || b[1].length - a[1].length
+    const ordered = [...rows].filter(([w]) => w).sort((a, b) => b[1].length - a[1].length
       || PLACES.indexOf(a[0]) - PLACES.indexOf(b[0]));
     const row = (where, said, chars) => ({where, said, members: chars,
                                           over: Object.fromEntries(chars.map(c => [c, charJp(content, c)]))});
     if (line) lines.push(line);
     return {job, title: `${rare ? title.replace('For', 'Rarely for') : title} (${xs.length.toLocaleString('en-GB')})`, lines,
             rows: job === 'sound' && !tiles ? []
-              : [...ordered.map(([where, chars]) => row(where, PLACE_SAID[where] || '', chars)),
-                 ...[...through].map(([via, chars]) => ({...row('', `through ${shownForm(via)}`, chars), via}))]};
+              : [...ordered.map(([where, chars]) => row(where, PLACE_SAID[where], chars)),
+                 ...[...through].map(([via, chars]) => ({...row('', `through ${shownForm(via)}`, chars), via})),
+                 ...(rows.has('') ? [row('elsewhere', ELSEWHERE, rows.get(''))] : [])]};
   });
   return {of, differ, branches};
 }
@@ -161,7 +167,8 @@ export function shiftSaid(from, to) {
 }
 
 // the tree's one level: the parent, then each head branching off it
-const TREE_TILES = 4;
+// a node's tiles before "+ N more": the one cut (brief 7.38 P9; 4 until then)
+const TREE_TILES = ROW_SHOWN;
 export function treeModel(content, form) {
   const fam = familiesOf(content);
   const to = f => (fam.byKey.has(`f:${f}`) ? {family: `f:${f}`} : {ref: f});
@@ -206,7 +213,7 @@ export function treeModel(content, form) {
            ...tilesOf(content.familyMembers(root).filter(c => content.soundPartOf(c) === root
                                                           && !via.has(c) && !kids.includes(c)))},
     folds: nest([...via].sort((a, b) => byRank(a[0], b[0])).map(([v, ms]) => ({form: v, jp: content.partReading(v) || charJp(content, v),
-                                            said: written(v) ? [['han', root], ' worn down to ', ['han', written(v)]] : [],
+                                            said: written(v) ? [['han', root], ' morphed into ', ['han', written(v)]] : [],
                                             ...tilesOf(ms), ...to(v), folds: []}))),
     branches: kids.map(c => {
       const jp = content.partReading(c), ms = content.familyMembers(c);
@@ -228,44 +235,27 @@ function nest(nodes) {
   return top;
 }
 
-// a place, drawn as the slot shaded in a square; nothing where unplaced
+// a place, drawn as the slot shaded in a square; elsewhere, a dashed one
 const placeMark = where => h('span', {class: `pm${where ? ` pm-${where}` : ''}`, 'aria-hidden': 'true'});
 
-// whether the model has a sound branch (or is one sound job) to hold a body
-export const soundHolds = m => !!m && (m.one ? m.job === 'sound' : m.branches.some(b => b.job === 'sound'));
-
-// soundBody: what the sound branch holds below its line (the family page's
-// How characters with 土 are read; Decided 31), or under a one-job line
-export function renderJobs(m, {onTap = null, kindOf = null, soundBody = null} = {}) {
+export function renderJobs(m, {onTap = null, kindOf = null, heading = true} = {}) {
   if (!m) return null;
   if (m.one) {
     return h('section', {class: 'block jobs'},
-      h('h2', {class: 'jobs-h'}, 'How ', han(m.of), ' is used'),
-      h('p', {class: 'note jobs-line'}, m.one),
-      m.job === 'sound' && soundBody);
+      heading && h('h2', {class: 'jobs-h'}, 'How ', han(m.of), ' is used'),
+      h('p', {class: 'note jobs-line'}, m.one));
   }
   const tile = (c, over) => glyphTile(c, kindOf ? kindOf(c) : null, {size: 'sm', onTap, over});
-  const row = r => {
-    const members = h('div', {class: 'jobs-members'}, ...r.members.slice(0, ROW_SHOWN).map(c => tile(c, r.over[c] || '')));
-    if (r.members.length > ROW_SHOWN) {
-      const more = h('button', {type: 'button', class: 'link sm', onclick: () => {
-        more.remove();
-        members.append(...r.members.slice(ROW_SHOWN).map(c => tile(c, r.over[c] || '')));
-      }}, `+ ${r.members.length - ROW_SHOWN} more`);
-      members.append(more);
-    }
-    return h('div', {class: 'jobs-row'},
-      h('div', {class: 'jobs-where'}, !r.via && placeMark(r.where), r.said && h('span', {class: 'note'}, r.said)),
-      members);
-  };
+  const row = r => h('div', {class: 'jobs-row'},
+    h('div', {class: 'jobs-where'}, !r.via && placeMark(r.where), r.said && h('span', {class: 'note'}, r.said)),
+    moreRow(r.members, c => tile(c, r.over[c] || ''), {cls: 'jobs-members'}));
   return h('section', {class: 'block jobs'},
-    h('h2', {class: 'jobs-h'}, 'How ', han(m.of), ' is used'),
+    heading && h('h2', {class: 'jobs-h'}, 'How ', han(m.of), ' is used'),
     m.differ && h('p', {class: 'note jobs-differ'}, m.differ),
     ...m.branches.map(b => h('div', {class: `jobs-branch jb-${b.job}`},
       h('h3', {class: 'jobs-title'}, h('span', {class: `rk-dot rb-${b.job}`, 'aria-hidden': 'true'}), b.title),
       ...b.lines.map(l => h('p', {class: 'note jobs-line'}, l)),
-      ...b.rows.map(row),
-      b.job === 'sound' && soundBody)));
+      ...b.rows.map(row))));
 }
 
 const goTo = ({onFamily = null, onRef = null}) => l =>
@@ -277,7 +267,7 @@ const count = n => `${n.toLocaleString('en-GB')} ${n === 1 ? 'character' : 'char
 
 // Where its sound branches (Decided 29): the parent, then each branch, the
 // one this page is about marked and not a link
-export function renderTree(m, cb = {}) {
+export function renderTree(m, cb = {}, {heading = true} = {}) {
   if (!m) return null;
   const go = goTo(cb), kindOf = cb.kindOf || null;
   const tile = (f, size, onTap, over = '') => glyphTile(f, kindOf ? kindOf(f) : null, {size, over, onTap});
@@ -308,7 +298,7 @@ export function renderTree(m, cb = {}) {
   const kids = (m.folds.length > 0 || m.branches.length > 0)
     && h('ul', {class: 'bt-kids'}, ...m.folds.map(x => node(x)), ...m.branches.map(x => node(x, true)));
   return h('section', {class: 'block branches'},
-    h('h3', {class: 'branches-h'}, 'How ', han(shownForm(m.of)), '’s shapes connect across its sound family'),
+    heading && h('h3', {class: 'branches-h'}, 'How ', han(shownForm(m.of)), '’s shapes connect across its sound family'),
     // the family it comes from above it, the line down to it dashed
     ...(m.up
       ? [head(m.up, 'bt-parent'), h('ul', {class: 'bt-kids'}, h('li', {class: 'bt-kid bt-shift'}, head(r, ''), kids))]
@@ -318,13 +308,5 @@ export function renderTree(m, cb = {}) {
 // a branch's first TREE_TILES members, and "+ N more" that opens the rest
 // in place (Mark, 2026-11-18: not a jump to its card)
 function branchTiles(b, tile) {
-  const box = h('div', {class: 'bt-tiles'}, ...b.tiles.slice(0, TREE_TILES).map(tile));
-  if (b.tiles.length > TREE_TILES) {
-    const more = h('button', {type: 'button', class: 'link sm', onclick: () => {
-      more.remove();
-      box.append(...b.tiles.slice(TREE_TILES).map(tile));
-    }}, `+ ${b.tiles.length - TREE_TILES} more`);
-    box.append(more);
-  }
-  return box;
+  return moreRow(b.tiles, tile, {cls: 'bt-tiles', shown: TREE_TILES});
 }

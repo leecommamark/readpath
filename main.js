@@ -50,7 +50,7 @@ import {allOver} from './views/facts.js';
 import {partsModel, renderParts, stepsView, stepsUrl} from './views/parts.js';
 import {treeModel, renderTree} from './views/tree.js';
 import {makeReport, addReport, unsent} from './reports.js';
-import {createOverlays, createCardStack, createLayer, LAYER, runTree} from './overlay.js';
+import {createOverlays, createCardStack, createLayer, LAYER, runTree, runFamily} from './overlay.js';
 import {glyphKind, tileProgress} from './views/glyph.js';
 import {needsWelcome, installContext, starterFocus, finishWelcome, sayNo} from './firstrun.js';
 import {renderWelcome, renderOffer, renderJpOffer, renderInstall, installFirst} from './views/welcome.js';
@@ -146,8 +146,6 @@ function showToday() {
     },
     onRead: id => showReader(id),
     date: dateLabel(),
-    version: app.version,
-    loadedMs: app.loadedMs,
     trouble: app.store.trouble(),
     onStart: () => startSession(),
     onKeepGoing: () => startSession({keepGoing: true}),
@@ -158,34 +156,19 @@ function showToday() {
       ? dayAudio(app.store, app.today) : null,
     onDayAudio: v => { setDayAudio(app.store, app.today, v); showToday(); },
     practiceCount: practiceItems(app.store, app.today).length,
-    onExport: () => exportProgress(),
-    onImport: () => $('importFile').click(),
     onSearch: () => openSearch(),
-    onRef: openRef,
-    kindOf,
-    progressOf: progressFrom(app.learner.states),
-    unsent: unsent(app.store),
-    build: BUILD,
     update: app.updateReady,
     onUpdate: () => app.applyUpdate && app.applyUpdate(),
-    install: installOffer(installContext(navigator, globalThis.matchMedia), !!app.installEvent),
-    onInstall: async () => {
-      const e = app.installEvent;
-      app.installEvent = null;
-      if (!e) return;
-      e.prompt();
-      try { await e.userChoice; } catch { /* dismissed */ }
-      showToday();
-    },
+    // the nudge, one line that opens Settings (brief 7.38 Q7)
     exportDue: exportReminder(app.store.load(KEYS.meta, {}), app.learner.states, app.today),
-    onFeedback: openFeedback,
-    onAbout: () => showAbout(),
     onSettings: () => showSettings(),
-    // the placement check's card (brief 7.8 decided 3), or, while a finished
-    // check waits for its review, the card that reopens it (7.13 decided 10)
+    // the placement check's card (brief 7.8 decided 3) until the first
+    // session is done (7.38 Q7), or, while a finished check waits for its
+    // review, the card that reopens it (7.13 decided 10)
     placementOffer: placementOffered({placement: app.store.load(KEYS.placement, null),
                                       meta: app.store.load(KEYS.meta, {}), firstRun: app.firstRun,
-                                      pending: app.store.load(KEYS.placementPending, null)}),
+                                      pending: app.store.load(KEYS.placementPending, null),
+                                      started: Object.keys(app.learner.states).length > 0}),
     // 'questions' or 'review' (Mark, after 7.13: a check left midway resumes)
     placementPending: !app.firstRun && stageOf(app.store.load(KEYS.placementPending, null)),
     onResume: () => resumePlacement(),
@@ -202,6 +185,9 @@ function showToday() {
       showToday();
     },
   });
+  // Settings holds the export, the reports waiting and Install (7.38 P6):
+  // whatever redraws Today redraws it too while it is open
+  if (app.drawSettings && !$('settings').hidden) app.drawSettings();
 }
 
 // ---- installed, offline, updated (patch plan 7B, Phase 2; pwa.js)
@@ -217,9 +203,9 @@ function updateReady() {
 }
 
 window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();               // offered on Today instead, as Install
+  e.preventDefault();               // offered in Settings instead, as Install
   app.installEvent = e;
-  if (app.store && !app.firstRun && !$('today').hidden) showToday();
+  if (app.store && !app.firstRun && app.drawSettings && !$('settings').hidden) app.drawSettings();
   if (app.firstRun && app.installScreen) showWelcome();   // its Install button
 });
 window.addEventListener('appinstalled', () => {
@@ -271,9 +257,10 @@ window.addEventListener('popstate', () => {
   // it retraces the trees opened from it and then shows the session (7.18)
   if (!app.run) route(st);
   else {
-    const tree = runTree(st);
+    const tree = runTree(st), family = runFamily(st);
     if (tree) showTree(tree, {push: false, state: st});
-    else if (app.tree) backToSession();
+    else if (family) showFamily(family, {push: false});
+    else if (app.tree || (app.family && app.family.inRun)) backToSession();
   }
   if (L) layer.restore(L);
 });
@@ -360,7 +347,7 @@ function drawRef() {
     // the card it was opened from: a step back, as the back gesture is
     onBack: prev ? () => history.back() : null,
     backTo: prev,
-    closeLabel: app.run && !(app.tree && app.tree.inRun) ? 'Back to the session' : null,
+    closeLabel: app.run && !(app.tree && app.tree.inRun) && !(app.family && app.family.inRun) ? 'Back to the session' : null,
     onRef: openRef,
     kindOf,
     progressOf: progressFrom(learner.states),
@@ -387,8 +374,9 @@ function drawRef() {
     // under Built from, mid-session too (brief 7.18 Decided 3)
     onTree: f => showTree(f),
     // its sound part's family, how it's read (brief 7.25 P1); its family's
-    // page and Study this family (7.26); neither mid-session (decided 2)
-    onFamily: app.run ? null : key => showFamily(key),
+    // page (7.26), over a session too, read-only (brief 7.38 Q10); Study
+    // this family never mid-session (7.26 decided 2)
+    onFamily: key => showFamily(key),
     onStudy: app.run ? null : key => { layer.leaveAll(); studyFamily(key); },
     // which sections are open: by where it was opened from, until the
     // learner opens or closes one, which sticks there (P3; per context since
@@ -535,7 +523,8 @@ function openFeedback() {
   });
 }
 
-// ---- Settings (brief 7.12): reached from Your progress, Back as About's
+// ---- Settings (brief 7.12): reached from Today's gear (7.38 P5), Back as
+// About's; the housekeeping since 7.38 P6
 function showSettings({push = true} = {}) {
   if (push) history.pushState({settings: true}, '', '#settings');
   app.reader = null;
@@ -552,7 +541,26 @@ function showSettings({push = true} = {}) {
     onAudio: mode => { setAudio(app.store, mode); draw(); },
     // Today composes from it when next shown (brief 7.31 D2)
     onPace: n => { app.store.save(KEYS.settings, {...app.store.load(KEYS.settings, {}), new_per_day: n}); draw(); },
+    onFeedback: openFeedback,
+    onExport: () => exportProgress(),
+    onImport: () => $('importFile').click(),
+    exportDue: exportReminder(app.store.load(KEYS.meta, {}), liveLearner().states, systemDay()),
+    unsent: unsent(app.store),
+    install: installOffer(installContext(navigator, globalThis.matchMedia), !!app.installEvent),
+    onInstall: async () => {
+      const e = app.installEvent;
+      app.installEvent = null;
+      if (!e) return;
+      e.prompt();
+      try { await e.userChoice; } catch { /* dismissed */ }
+      draw();
+    },
+    onAbout: () => showAbout(),
+    build: BUILD,
+    version: app.version,
+    loadedMs: app.loadedMs,
   });
+  app.drawSettings = draw;
   draw();
   window.scrollTo(0, 0);
 }
@@ -579,8 +587,8 @@ async function showAbout({push = true} = {}) {
   app.family = null;
   showScreen('about');
   markTab('today');
-  const draw = () => renderAbout($('about'), {about: app.about, build: BUILD, version: app.version}, {
-    onBack: () => (history.state && history.state.about ? history.back() : showTab('today')),
+  const draw = () => renderAbout($('about'), {about: app.about}, {
+    onBack: () => (history.state && history.state.about ? history.back() : showSettings()),
   });
   draw();
   window.scrollTo(0, 0);
@@ -819,7 +827,6 @@ function drawReader() {
 
 const textsActions = {
   onSearch: () => openSearch(),
-  onFeedback: () => openFeedback(),
   onOpen: id => showReader(id),
   preview: raw => previewOf(raw, app.library.list(), app.content),
   onPaste() { Object.assign(textsUi, {pasting: true, draft: freshDraft(), batch: null}); showTexts(); },
@@ -943,6 +950,7 @@ function startSession({keepGoing = false, practice = false} = {}) {
     ...audioNow(),
     onExit: () => { app.run = null; showToday(); showTab('today'); },
     onRef: openRef,
+    onFamily: key => showFamily(key),
     onReport: shown => openReport(shown, 'card'),
     tipOnce, keyUnseen, keySeen,
     lineOf: s => app.library.lineAt(s),
@@ -963,7 +971,6 @@ function showPath() {
     pending: !!app.store.load(KEYS.placementPending, null),
     onSearch: () => openSearch(),
     onDone: () => showDone(),
-    onFeedback: openFeedback,
   });
 }
 
@@ -1014,6 +1021,8 @@ function drawResults(q, host) {
   }, {
     // a row opens the card, on the reading it was found by (7A 6b)
     onRef: (form, id) => openRef(form, id, 'other'),
+    // a part's tag opens its card at As a part (brief 7.38 P11)
+    onPart: form => openRef(form, null, 'family'),
     onWord: w => openWord(w),
     onFamily: key => showFamily(key),
     kindOf,
@@ -1133,6 +1142,7 @@ function testMe(id) {
     },
     onRef: openRef,
     onTree: f => showTree(f),
+    onFamily: key => showFamily(key),
     onReport: shown => openReport(shown, 'card'),
     tipOnce, keyUnseen, keySeen,
     lineOf: l => app.library.lineAt(l),
@@ -1161,6 +1171,7 @@ function studyFamily(key) {
     },
     onRef: openRef,
     onTree: f => showTree(f),
+    onFamily: key => showFamily(key),
     onReport: shown => openReport(shown, 'card'),
     tipOnce, keyUnseen, keySeen,
     lineOf: l => app.library.lineAt(l),
@@ -1340,19 +1351,28 @@ function drawReview() {
 
 // A family's page is an entry in the history, as the Reader is, so back
 // leaves it (patch plan 7.5; it took over from step 6's block grid).
+//
+// Over a session (brief 7.38 Q10: from a sound part's Meet, a card or a
+// tree) it is read-only -- no Mark, Test me or Study -- its entry marked
+// `inRun`, the tabs hidden, and back retraces to the session, as a tree's.
 function showFamily(key, {push = true} = {}) {
   const url = `#path/family/${encodeURIComponent(key)}`;
+  const inRun = !!app.run;
   // from a card (7.25 P1) or the search, over the layer's entries, so back
   // comes to it again (brief 7.27)
   layer.leave();
-  if (push) history.pushState({family: key}, '', url);
-  app.reader = null;
-  app.tree = null;
-  // every family page opens in Read (brief 7.9, Mark): Mark is a tap away
-  app.family = {key, mode: 'read'};
-  if (!familyPage(app.content, {}, key)) return showTab(app.fromTab);
+  if (push) history.pushState({family: key, ...(inRun && {inRun})}, '', url);
+  if (!inRun) {
+    app.reader = null;
+    app.tree = null;
+  }
+  // every family page opens in Read (brief 7.9, Mark): Mark is a tap away;
+  // How it's read open, the other folds closed, until the learner says
+  app.family = {key, mode: 'read', inRun, opened: {}};
+  if (!familyPage(app.content, {}, key)) return inRun ? backToSession() : showTab(app.fromTab);
   showScreen('family');
-  markTab(app.fromTab);
+  if (inRun) $('tabs').hidden = true;
+  else markTab(null);           // a pushed screen lights no tab (brief 7.38 P13)
   drawFamily();
   window.scrollTo(0, 0);
 }
@@ -1361,13 +1381,18 @@ function drawFamily() {
   const f = app.family;
   const m = familyPage(app.content, app.store.load(KEYS.states, {}), f.key, f.mode);
   renderFamily($('family'), m, {
-    onBack: () => (history.state && history.state.family != null ? history.back() : showTab(app.fromTab)),
-    onMode(mode) { f.mode = mode; drawFamily(); },
+    onBack: () => (f.inRun ? (runFamily(history.state) ? history.back() : backToSession())
+      : history.state && history.state.family != null ? history.back() : showTab(app.fromTab)),
+    onMode: f.inRun ? null : mode => { f.mode = mode; drawFamily(); },
     onRef: openRef,                      // a tile opens its card (7.26 P4; its tree 7.7-7.25)
     onFamily: key => showFamily(key),    // a shape head's family, and back (brief 7.36 P8)
+    // How 尚 is used ›: its card at As a part (brief 7.38 Q5)
+    onUses: form => openRef(form, null, 'family'),
     kindOf,
-    onTestMe: id => testMe(id),
-    onStudy: key => studyFamily(key),
+    onTestMe: f.inRun ? null : id => testMe(id),
+    onStudy: f.inRun ? null : key => studyFamily(key),
+    opened: f.opened,
+    onToggle: (k, open) => { f.opened[k] = open; },
     // one character a tap, through transition() (actions.js), with an Undo
     // that puts back exactly the state there was (brief 6, decided 9)
     onTap(c) {
@@ -1399,7 +1424,7 @@ function drawFamily() {
 //
 // During a session (brief 7.18 Decided 3) a tree opens from a card or a Meet
 // and leaves the run alone: its entries are marked `inRun`, its trail starts
-// afresh, the tabs stay hidden, and Learn this family next isn't offered.
+// afresh, the tabs stay hidden, and Study this family isn’t offered.
 // Back from the first shows the session screen as it was, nothing redrawn.
 
 function showTree(form, {push = true, state = history.state} = {}) {
@@ -1423,7 +1448,7 @@ function showTree(form, {push = true, state = history.state} = {}) {
   app.tree = {trail: next, expanded: {}, inRun};
   showScreen('tree');
   if (inRun) $('tabs').hidden = true;
-  else markTab(app.fromTab);
+  else markTab(null);           // a pushed screen lights no tab (brief 7.38 P13)
   drawTree();
   window.scrollTo(0, 0);
 }
@@ -1442,15 +1467,16 @@ function drawTree() {
     onMore: L => { t.expanded[L] = (t.expanded[L] || 0) + 1; drawTree(); },
     // no run starts from a tree while one is going (7.18)
     onStudy: t.inRun ? null : key => studyFamily(key),
-    // its family's page (brief 7.26 P6); a page leaves the session, so not in one
-    onFamily: t.inRun ? null : key => showFamily(key),
+    // its family's page (brief 7.26 P6), over a session too (brief 7.38 Q10)
+    onFamily: key => showFamily(key),
     kindOf,
   });
 }
 
-// Back to the session from its trees: the card as it was left.
+// Back to the session from its trees and family pages: the card as it was left.
 function backToSession() {
   app.tree = null;
+  if (app.family && app.family.inRun) app.family = null;
   showScreen('session');
 }
 

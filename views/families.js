@@ -39,7 +39,7 @@ import {modalNote, renderRangeNote} from './range.js';
 import {h, han, clear, put, jpSpan} from './dom.js';
 import {shownForm} from '../core/shapehead.js';
 import {soundShapes, shapeLinks, renderShapes, renderLinks} from './shapes.js';
-import {jobsModel, treeModel, renderJobs, renderTree, soundHolds} from './jobs.js';
+import {jobsModel, treeModel, renderTree} from './jobs.js';
 import {isKnown} from '../core/state.js';
 import {soundId} from '../core/content.js';
 import {markInReader} from '../actions.js';
@@ -49,6 +49,8 @@ import {stepsSwitch} from './parts.js';
 import {familiesOf, familyPlan, reviewLoad, MIN_MEMBERS, OWN_SIZE} from '../core/family.js';
 import {soundFamily} from '../core/soundfamily.js';
 import {partFit} from '../core/soundfit.js';
+import {formGloss} from '../core/provenance.js';
+import {fold} from './fold.js';
 
 // the grouping is core/family.js's (the runner and the simulator use it too)
 export {familiesOf, MIN_MEMBERS, OWN_SIZE};
@@ -146,13 +148,17 @@ export function familyPage(content, states, key, mode = 'read') {
   return {key, type: card.type, head, sounds,
           shapes: head ? soundShapes(content, head) : null,
           links: head ? shapeLinks(content, head) : [],
-          // How 尚 is used, its sound branch a line alone (Decided 14), and
-          // where its sound branches (patch plan 7.37)
+          // How 尚 is used: its home is the card's As a part (brief 7.38 Q5);
+          // here, the one-job line or a link there. How its shapes connect
+          // (patch plan 7.37) is this page's.
           jobs: head ? jobsModel(content, head, {tiles: false}) : null,
           branch: head ? treeModel(content, head) : null,
           study: {toLearn: plan.length, load: reviewLoad(plan.length),
                   parts: plan.filter(id => content.kind(id) !== 'reading').length},
+          // the family's size, its head too where it is one (土 7; Q2)
+          members: card.members.length,
           reading: head ? readingOf(content, head) : null,
+          gloss: head ? formGloss(content, head) : null,
           modal: head ? modalNote(content, head) : null,   // brief 7.33 decision A
           part: partId && {id: partId, state: stateOf(states[partId]),
                            progress: progressOf(states[partId], 'sound'),
@@ -293,22 +299,31 @@ export function renderDone(el, cards, cb) {
 // Study this family (brief 7.5 decided 6): its own session, with no daily
 // limit; the note says what it adds to Today's reviews, so the load is no
 // surprise. Stopping halfway keeps what was answered, and the button then
-// offers what's left.
-export function studyBlock(m, cb) {
+// offers what's left. The one name for it, the card's and the tree's too
+// (brief 7.38 D6): studyButton. With Test me beside it where there is one.
+export function studyButton(n, onStudy, {head = true} = {}) {
+  return h('button', {type: 'button', class: 'btn primary', onclick: onStudy},
+    head ? 'Study this family' : 'Study these characters',
+    h('span', {class: 'study-n'}, ` · ${plural(n, 'to learn', 'to learn')}`));
+}
+export const NOTHING_LEFT = 'Nothing left to learn in this family: everything here is met.';
+
+export function studyBlock(m, cb, test = null) {
   const st = m.study;
-  if (!cb.onStudy) return null;
+  if (!cb.onStudy) return test && h('section', {class: 'block study'}, h('div', {class: 'btns'}, test));
   if (!st.toLearn) {
     return h('section', {class: 'block study'},
-      h('p', {class: 'note'}, m.head ? 'Nothing left to learn in this family: everything here is met.'
-                                     : 'Nothing left to learn here: everything is met.'));
+      test && h('div', {class: 'btns'}, test),
+      h('p', {class: 'note'}, m.head ? NOTHING_LEFT : 'Nothing left to learn here: everything is met.'));
   }
+  const chars = st.toLearn - st.parts;
   return h('section', {class: 'block study'},
-    h('button', {type: 'button', class: 'btn primary wide', onclick: () => cb.onStudy(m.key)},
-      m.head ? 'Study this family' : 'Study these characters',
-      h('span', {class: 'study-n'}, ` · ${plural(st.toLearn, 'to learn', 'to learn')}`)),
+    h('div', {class: 'btns'}, studyButton(st.toLearn, () => cb.onStudy(m.key), {head: !!m.head}), test),
     h('p', {class: 'note'},
-      `About ${plural(st.load, 'extra review')} in Today over the next 7 days. `
-      + (st.parts ? `Its ${st.parts === 1 ? 'part comes' : `${st.parts} parts come`} first. ` : '')
+      // what the count is (Q2): "28 characters and 17 parts, the parts first"
+      (st.parts ? `${plural(chars, 'character')} and ${plural(st.parts, 'part')}, the ${st.parts === 1 ? 'part' : 'parts'} first. `
+                : '')
+      + `About ${plural(st.load, 'extra review')} in Today over the next 7 days. `
       + 'Stop whenever you like: what you’ve answered is kept.'));
 }
 
@@ -335,11 +350,13 @@ export function roleWords(form, r) {
 }
 
 // the sentence, a three-colour bar and its key; null for a form no
-// character has a role row for
-export function roleBar(form, r) {
+// character has a role row for. `said`: a part with one job says so in its
+// own words ("尚 is always used for its sound (28 characters)."), the bar's
+// sentence said once (brief 7.38 P3)
+export function roleBar(form, r, {said = null} = {}) {
   if (!r || !r.total) return null;
   return h('div', {class: 'role-bar-block'},
-    h('p', {class: 'note'}, roleWords(form, r)),
+    h('p', {class: 'note'}, said || roleWords(form, r)),
     h('div', {class: 'role-bar', 'aria-hidden': 'true'},
       ...ROLE_SAID.filter(([k]) => r[k]).map(([k]) =>
         h('span', {class: `rb-${k}`, style: `width: ${(100 * r[k] / r.total).toFixed(2)}%`}))),
@@ -378,9 +395,6 @@ export const compactTile = (cb, kindOf) => x => glyphTile(x.form, kindOf ? kindO
   label: `${x.form}${x.jp ? ` ${x.jp}` : ''}${x.second ? ', a second reading' : ''}: open its card`,
   onTap: cb && cb.onRef ? f => cb.onRef(f) : null});
 
-export function soundsSection(m, tileOf) {
-  return soundsBlock(m.sounds, m.head, tileOf);
-}
 
 // The range over the boxes (7.32 Phase 2, as Mark revised it twice: "a
 // syllable grid, with no characters and no tone, with the share of each
@@ -408,11 +422,15 @@ function rangeTable(s, head) {
     g.rest >= 0.005 && h('p', {class: 'sm fam-range-rest'}, `Read otherwise: ${pct(g.rest)}`));
 }
 
-// soundsBlock(sounds, head, tileOf, {compact}) -> how a family is read: the
-// range as a syllable grid, then a box per ending, its rows the starts, then
-// Others. The family page and a card's Family section draw it whole; a sound
-// part's Meet compact (no heading, notes or share bars).
-export function soundsBlock(s, head, tileOf, {compact = false} = {}) {
+// soundsBlock(sounds, head, tileOf, {compact, heading, members, onFamily})
+// -> how a family is read: the range as a syllable grid, then a box per
+// ending, its rows the starts, then Others. Its home is the family page
+// (brief 7.38 D2), under the How it's read fold (`heading` false there). A
+// sound part's Meet draws it compact: its top box alone, no notes or bars,
+// and "How the other 3 are read ›" (onFamily; Q10).
+// `members`: the family's size, its head too where it is one (土 7; Q2),
+// where the grid's n leaves the head out (6).
+export function soundsBlock(s, head, tileOf, {compact = false, heading = true, members = null, onFamily = null} = {}) {
   if (!s) return null;
   const rowLabel = row => `${pct(row.share)} of characters using ${shownForm(head)} are read ${row.syl} `
     + `(${plural(row.count, 'character')})`;
@@ -431,8 +449,16 @@ export function soundsBlock(s, head, tileOf, {compact = false} = {}) {
     h('div', {class: 'fam-row-head'}, h('span', {class: 'fam-syl'}, said), h('span', {class: 'sm fam-pct'}, pct(g.share))),
     h('div', {class: 'fam-row-body'}, h('div', {class: 'tiles fam-row-tiles', lang: 'zh-Hant-HK'},
       ...g.rows.flatMap(r => r.tiles).map(tileOf))));
+  if (compact) {
+    const top = s.boxes[0];
+    if (!top) return null;
+    const other = s.n - top.rows.reduce((n, r) => n + r.count, 0);
+    return h('div', {class: 'fam-sounds compact'}, box(top),
+      onFamily && h('p', {class: 'family-link'},
+        h('button', {type: 'button', class: 'link', onclick: onFamily},
+          other > 0 ? `How the other ${other} are read ›` : `${shownForm(head)} family: how it’s read ›`)));
+  }
   const parts = [rangeTable(s, head), ...s.boxes.map(box), group('Others', s.others, 'fam-others')];
-  if (compact) return h('div', {class: 'fam-sounds compact'}, ...parts);
   const anySecond = [...s.boxes.flatMap(b => b.rows), ...(s.others ? s.others.rows : [])]
     .some(r => r.tiles.some(x => x.second));
   const anyOwn = s.boxes.some(b => b.rows.some(r => r.own));
@@ -440,55 +466,98 @@ export function soundsBlock(s, head, tileOf, {compact = false} = {}) {
                anyOwn && `${shownForm(head)}’s own sound is underlined`,
                anySecond && 'faded tiles are a second reading'].filter(Boolean);
   const said = key.length ? ` ${key.join('; ')}.`.replace(/^ (\S)/, (_, c) => ` ${c.toUpperCase()}`) : '';
+  const size = members || s.n;
+  // one line, and the rest a tap away (P2)
+  const how = h('p', {class: 'note fam-how', hidden: true},
+    `The % is how ${size === s.n ? 'many of them' : `the ${s.n} that take ${shownForm(head)}’s sound`} are read `
+    + `each way (tone ignored), so it’s a fair first guess for a character you haven’t met.${said}`);
+  const more = h('button', {type: 'button', class: 'link sm', onclick: () => {
+    how.hidden = false;
+    more.remove();
+  }}, 'How to read this ›');
   return h('section', {class: 'block fam-sounds'},
-    h('h2', {class: 'fam-sounds-h'}, `How characters with ${shownForm(head)} are read`),
+    heading && h('h2', {class: 'fam-sounds-h'}, `How characters with ${shownForm(head)} are read`),
     // "in 又's family", not "use 又 as their sound part": 授's is 受, 宥's 有
     // (brief 7.36, Decided 19)
-    h('p', {class: 'note'}, `${plural(s.n, 'character')} ${s.n === 1 ? 'is' : 'are'} in ${shownForm(head)}’s family. `
-      + `The % is how many of them are read each way (tone ignored), `
-      + `so it’s a fair first guess for a character you haven’t met.${said}`),
+    h('p', {class: 'note'}, `${plural(size, 'character')} ${size === 1 ? 'is' : 'are'} in ${shownForm(head)}’s family. `, more),
+    how,
     s.headOnly.length > 0 && h('p', {class: 'note'},
       `None of the ${s.n} ${s.n === 1 ? 'is' : 'are'} read ${s.headOnly.join(' or ')}, ${shownForm(head)}’s own reading.`),
     ...parts);
 }
 
+// a box's title, short for a closed line: 青's c/z–ing/eng
+export const boxShort = b => (b.title.kind === 'grid'
+  ? `${b.title.starts.map(x => x || '∅').join('/')}–${b.title.ends.join('/')}` : boxTitle(b));
+
 // renderFamily(el, model, cb)   cb: onBack, onMode(mode), onTap(cell),
-// onRef(form), onTestMe(id), kindOf(form), onStudy(key)
+// onRef(form), onUses(form) (the head's card at As a part), onTestMe(id),
+// kindOf(form), onStudy(key), onFamily(key), opened ({fold: bool}),
+// onToggle(fold, open). onMode, onTestMe and onStudy are null over a
+// session (brief 7.38 Q10): the page is read-only there.
+//
+// The page in the one order (brief 7.38 D1, P2): what it is (the head, its
+// reading, gloss, frequency and part line) -> what you can do (Study this
+// family and Test me) -> a summary (the role bar and its sentence, How 尚
+// is used ›) -> the details, folded as the card's sections are: How it's
+// read (open: the page's home block), How its shapes connect, How 尚 looks
+// in its characters.
 export function renderFamily(el, m, cb) {
   const c = m.counts;
+  const mode = cb.onMode ? m.mode : 'read';
   const tileOf = x => glyphTile(x.form, x.head ? headKind(cb, x.form) : cb.kindOf ? cb.kindOf(x.form) : null, {
     size: 'md', over: x.jp || '', progress: x.progress,
     dashed: !!x.second, cls: x.second ? 'fam-second' : '',
     label: `${x.form}${x.jp ? ` ${x.jp}` : ''}${x.second ? ', a second reading' : ''}`
       + (x.state ? `: ${STATE_SAID[x.state]}` : '') + '; '
-      + (m.mode === 'read' ? 'open its card' : !x.id ? 'nothing to mark' : x.state === 'known' ? 'tap if you’ve forgotten it' : 'mark known'),
+      + (mode === 'read' ? 'open its card' : !x.id ? 'nothing to mark' : x.state === 'known' ? 'tap if you’ve forgotten it' : 'mark known'),
     onTap: () => cb.onTap(x)});
-  const modes = h('div', {class: 'modes', role: 'group', 'aria-label': 'Mode'},
+  const modes = cb.onMode && h('div', {class: 'reader-controls'}, h('div', {class: 'modes', role: 'group', 'aria-label': 'Mode'},
     ...MODES.map(k => h('button', {
-      type: 'button', class: `mode-btn${m.mode === k ? ' on' : ''}`, 'aria-pressed': String(m.mode === k),
-      onclick: () => m.mode !== k && cb.onMode(k)}, k === 'read' ? 'Read' : 'Mark')));
+      type: 'button', class: `mode-btn${mode === k ? ' on' : ''}`, 'aria-pressed': String(mode === k),
+      onclick: () => mode !== k && cb.onMode(k)}, k === 'read' ? 'Read' : 'Mark'))));
   const head = m.head && h('section', {class: 'block first fam-head'},
     h('div', {class: 'fam-head-row'},
       glyphTile(m.head, headKind(cb, m.head),
                 {size: 'xl', progress: m.part ? m.part.progress : null, onTap: f => cb.onRef(f)}),
       h('div', {class: 'fam-head-text'},
         m.reading && h('p', {class: 'jp big-jp'}, m.reading),
+        m.gloss && m.gloss.text && h('p', {class: `gloss-line${m.gloss.weak ? ' weak' : ''}`}, m.gloss.text),
         m.modal && renderRangeNote(m.modal),
         h('p', {class: 'note'}, [tierOf(m.value), oneIn(m.value)].filter(Boolean).join(' · ')),
         m.part && h('p', {class: 'note'},
-          `Sound part · unlocks ${plural(m.part.unlocks, 'character')} · ${STATE_SAID[m.part.state]}`))),
-    m.part && m.part.canTest && h('div', {class: 'btns'},
-      h('button', {type: 'button', class: 'btn', onclick: () => cb.onTestMe(m.part.id)}, 'Test me')));
-  // how the members are read, with the switch that marks them, and how its
-  // shapes connect: the body of How 土 is used's sound branch (7.37 Decided
-  // 31, 34), else at the foot
-  const reading = h('div', {class: 'fam-reading'},
-    h('div', {class: 'reader-controls'}, modes),
-    h('p', {class: 'note mode-hint'}, FAMILY_HINT[m.mode]),
-    m.sounds ? soundsSection(m, tileOf)
-             : h('div', {class: 'tiles fam-members', lang: 'zh-Hant-HK'}, ...m.cells.map(tileOf)));
-  const inSound = !!m.sounds && soundHolds(m.jobs);
-  const tree = renderTree(m.branch, {onFamily: cb.onFamily, onRef: cb.onRef, kindOf: cb.kindOf});
+          `Sound part · unlocks ${plural(m.part.unlocks, 'character')} · ${STATE_SAID[m.part.state]}`))));
+  const test = m.part && m.part.canTest && cb.onTestMe
+    && h('button', {type: 'button', class: 'btn', onclick: () => cb.onTestMe(m.part.id)}, 'Test me');
+  // the summary: the bar, said once (a one-job part in its own words), and
+  // the way to How 尚 is used where there is more to it than the bar
+  const summary = m.head && m.sounds && h('section', {class: 'block fam-summary'},
+    roleBar(m.head, m.sounds.roles, {said: m.jobs && m.jobs.one}),
+    m.jobs && !m.jobs.one && cb.onUses && h('p', {class: 'family-link'},
+      h('button', {type: 'button', class: 'link', onclick: () => cb.onUses(m.head)}, 'How ', han(shownForm(m.head)), ' is used ›')));
+  const known = [c.known && `${c.known} known`, c.learning && `${c.learning} learning`].filter(Boolean);
+  const opened = cb.opened || {};
+  const folded = (key, label, summaryNodes, body, open = false) => fold({
+    key, label, summary: summaryNodes, body, open: key in opened ? !!opened[key] : open, onToggle: cb.onToggle});
+  const top = m.sounds && m.sounds.boxes[0];
+  const reading = m.sounds
+    ? folded('fam-read', 'How it’s read',
+             [top ? [jpSpan(boxShort(top)), ` ${pct(top.share)} · `] : '', plural(m.members, 'character'),
+              ...known.map(k => ` · ${k}`)],
+             [modes, modes && h('p', {class: 'note mode-hint'}, FAMILY_HINT[mode]),
+              soundsBlock(m.sounds, m.head, tileOf, {heading: false, members: m.members})], true)
+    : h('section', {class: 'block'}, modes, modes && h('p', {class: 'note mode-hint'}, FAMILY_HINT[mode]),
+        h('div', {class: 'tiles fam-members', lang: 'zh-Hant-HK'}, ...m.cells.map(tileOf)),
+        h('p', {class: 'note'}, [c.known && `${c.known} known`, c.learning && `${c.learning} learning`,
+                                 c.ahead && `${c.ahead} not met yet`].filter(Boolean).join(' · ')));
+  const b = m.branch;
+  const tree = b && folded('fam-tree', 'How its shapes connect',
+    [b.up ? ['from ', han(b.up.form), ' · '] : '',
+     ...[...b.folds, ...b.branches].flatMap((x, i) => [i ? ' ' : '', han(x.form)])],
+    [renderTree(b, {onFamily: cb.onFamily, onRef: cb.onRef, kindOf: cb.kindOf}, {heading: false})]);
+  const shapes = m.shapes && folded('fam-shapes', ['How ', han(shownForm(m.head)), ' looks in its characters'],
+    m.shapes.rows.flatMap((r, i) => [i ? ' · ' : '', han(r.tile)]),
+    [renderShapes(m.shapes, {onTap: f => cb.onRef(f), kindOf: cb.kindOf, heading: false})]);
   put(clear(el),
     h('div', {class: 'top'},
       h('button', {type: 'button', class: 'link back-btn', onclick: cb.onBack}, '‹ Back'),
@@ -498,16 +567,12 @@ export function renderFamily(el, m, cb) {
       `Characters ${m.from.toLocaleString('en-GB')}–${m.to.toLocaleString('en-GB')} on your path `
       + 'that share no sound part with another.'),
     head,
+    studyBlock(m, cb, test),
+    summary,
     ...renderLinks(m.links || [], {onFamily: cb.onFamily, onRef: cb.onRef}),
-    renderShapes(m.shapes, {onTap: f => cb.onRef(f), kindOf: cb.kindOf}),
-    m.sounds && roleBar(m.head, m.sounds.roles),
-    renderJobs(m.jobs, {onTap: f => cb.onRef(f), kindOf: cb.kindOf,
-                        soundBody: inSound ? [reading, tree] : null}),
-    !inSound && tree,
-    studyBlock(m, cb),
-    h('p', {class: 'note'}, [c.known && `${c.known} known`, c.learning && `${c.learning} learning`,
-                             c.ahead && `${c.ahead} not met yet`].filter(Boolean).join(' · ')),
-    !inSound && reading);
+    reading,
+    tree,
+    shapes);
 }
 
 // ---- Browse families (patch plan 7.7, Phase 4; brief 7.7 decided 2)
@@ -593,7 +658,7 @@ export function renderBrowse(el, m, cb) {
   const figure = r => (m.sort === 'left' ? textPct(r.left) : tierOf(r.value));
   const row = r => h('button', {type: 'button', class: 'browse-row',
                                 'aria-label': `${r.head} family: ${m.sort === 'left' ? `${figure(r)} of text to unlock` : figure(r)}, `
-                                  + (r.fit.n ? `its part gives ${r.fit.inn.length} of ${r.fit.n}, ` : '')
+                                  + (r.fit.n ? `${r.fit.inn.length} of ${r.fit.n} guessable from its part, ` : '')
                                   + `${r.known} of ${r.total} known. Open`,
                                 onclick: () => cb.onFamily(r.key)},
     glyphTile(r.head, headKind(cb, r.head), {size: 'md', progress: cb.progressOf ? cb.progressOf(r.head) : null}),
@@ -605,7 +670,7 @@ export function renderBrowse(el, m, cb) {
       // how many its part lets you guess (7.32 W9, decision C): every row
       r.fit.n > 0 && h('span', {class: 'sm browse-fit'},
         r.reading ? h('span', {class: 'jp', lang: 'en'}, r.reading) : '', r.reading ? ' · ' : '',
-        `${r.fit.inn.length} of ${r.fit.n}`),
+        `${r.fit.inn.length} of ${r.fit.n} guessable`),
       h('span', {class: 'sm'}, `${r.known}/${r.total} known`),
       h('span', {class: 'browse-meter', 'aria-hidden': 'true'},
         h('span', {style: `width:${(100 * r.known / r.total).toFixed(1)}%`}))));

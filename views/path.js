@@ -4,7 +4,7 @@
 // Top to bottom (brief 7.7 decided 1): where you are; the whole path as
 // one strip, the known share filled and a pin at Today's next item; "You are here", a short trail of path items on a rail (the
 // last few met, Next, then what's ahead); then a row each for Done, the
-// placement check (Mark, 7.7 Phase 0: a row now) and Send feedback. Browse
+// placement check (Mark, 7.7 Phase 0: a row now). Browse
 // families and Meaning parts are the Steps tab (Pavers, brief 7.8 decided 2; Steps since 7.12).
 // Every tile and stone here opens the character's card (brief 7.26 P4); its
 // search is the header's, as on every tab (P5).
@@ -198,8 +198,9 @@ function trailBlock(t, cb) {
     h('p', {class: 'trail-end sm'}, t.ahead ? `↓ ${n0(t.ahead)} more ahead` : 'The end of the path'));
 }
 
-// the rows: Done, the placement check and Send feedback (7.7 decided 1;
-// Browse families and Meaning parts moved to the Pavers (now Steps) tab in 7.8)
+// the rows: Done and the placement check (7.7 decided 1; Browse families
+// and Meaning parts moved to the Pavers (now Steps) tab in 7.8; Send
+// feedback to Settings in 7.38 P6)
 function rowsBlock(m, cb) {
   const row = (title, sub, onclick) => h('button', {type: 'button', class: 'jump', onclick},
     h('span', {class: 'jump-text'}, h('b', {}, title), h('span', {class: 'sm'}, sub)),
@@ -208,19 +209,17 @@ function rowsBlock(m, cb) {
   return h('section', {class: 'block jumps'},
     m.families.done > 0 && row('Done', plural(m.families.done, 'card'), cb.onDone),
     row('Placement check', cb.pending ? 'In progress: tap to finish it'
-      : last ? `Last check: about ${n0(last.n)}` : 'Already read some Chinese?', cb.onCheck),
-    cb.onFeedback && row('Send feedback', 'A note, and your reports, to Mark', cb.onFeedback));
+      : last ? `Last check: about ${n0(last.n)}` : 'Already read some Chinese?', cb.onCheck));
 }
 
 // renderPath(el, model, cb)   cb: onRef(form), onDone, onCheck, placement (the last check's record, or null),
-// onSearch, onFeedback, kindOf
+// onSearch, kindOf; every tile and stone opens its card (7.26 P4), so the
+// screen no longer says so (brief 7.38 P7)
 export function renderPath(el, m, cb) {
   const w = m.where;
   put(clear(el),
     h('div', {class: 'top'}, h('span', {}), searchButton(cb.onSearch)),
     h('h1', {id: 'path-h'}, 'Path'),
-    // every tile and stone here opens its card (7.26 P4; a tree until then)
-    h('p', {class: 'note'}, 'Tap a character for its card.'),
     h('section', {class: 'block first where'},
       h('p', {class: 'marker-head'}, h('b', {lang: 'zh-Hant-HK'}, w.marker.marker.name), ` · ${w.marker.marker.gloss}`),
       w.marker.next && h('p', {class: 'note'}, `${n0(w.marker.more)} more ${w.marker.more === 1 ? 'character' : 'characters'} to `,
